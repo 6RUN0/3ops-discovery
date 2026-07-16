@@ -1,0 +1,9 @@
+.omc/
+.serena/
+
+# Never commit telemetry secrets (manifest section 9)
+*.dsn
+*.snmp
+*.ipmi
+.env
+alloy-secrets/

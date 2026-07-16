@@ -1,0 +1,29 @@
+// Reference implementation of the X-Alloy Discovery manifest.
+// Not a complete production config; the *.alloy files in this directory
+// form one Alloy configuration: alloy run <directory>.
+// The numeric filename prefix fixes the reading order (pipeline flow)
+// only: Alloy merges every file into one component graph, so the load
+// order has no semantic effect.
+//
+// Environment overrides (XAD_ = X-Alloy Discovery):
+//   XAD_DOCKER_HOST              Docker daemon address
+//   XAD_DOCKER_REFRESH_INTERVAL  target list refresh interval
+
+// Metrics/database discovery: only containers that explicitly opt in
+// via the x-alloy-discovery.enabled label.
+discovery.docker "containers" {
+  host             = coalesce(sys.env("XAD_DOCKER_HOST"), "unix:///var/run/docker.sock")
+  refresh_interval = coalesce(sys.env("XAD_DOCKER_REFRESH_INTERVAL"), "30s")
+
+  filter {
+    name   = "label"
+    values = ["x-alloy-discovery.enabled=true"]
+  }
+}
+
+// Log discovery covers all containers: logs are collected by default,
+// x-alloy-discovery.logs.enabled=false is the explicit opt-out.
+discovery.docker "docker_logs" {
+  host             = coalesce(sys.env("XAD_DOCKER_HOST"), "unix:///var/run/docker.sock")
+  refresh_interval = coalesce(sys.env("XAD_DOCKER_REFRESH_INTERVAL"), "30s")
+}

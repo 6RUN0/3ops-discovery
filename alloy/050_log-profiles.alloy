@@ -1,0 +1,105 @@
+// Log profile dispatcher: routes streams by the log_profile label set
+// during discovery. Parsers run best-effort (drop_malformed = false), so
+// unparseable lines are kept raw instead of being dropped.
+// Fields parsed from log content go to structured metadata only, never
+// to stream labels: content is attacker-controlled, and promoting it to
+// labels would allow label spoofing and unbounded stream cardinality
+// (manifest section 6.2).
+
+loki.process "docker_profiles" {
+  forward_to = [
+    loki.write.default.receiver,
+  ]
+
+  stage.match {
+    selector      = `{log_profile="generic-json-v1"}`
+    pipeline_name = "generic-json-v1"
+
+    stage.json {
+      drop_malformed = false
+
+      expressions = {
+        level      = "level",
+        trace_id   = "trace_id",
+        request_id = "request_id",
+      }
+    }
+
+    stage.structured_metadata {
+      values = {
+        level      = "",
+        trace_id   = "",
+        request_id = "",
+      }
+    }
+  }
+
+  stage.match {
+    selector      = `{log_profile="generic-logfmt-v1"}`
+    pipeline_name = "generic-logfmt-v1"
+
+    stage.logfmt {
+      mapping = {
+        level      = "",
+        status     = "",
+        trace_id   = "",
+        request_id = "",
+      }
+    }
+
+    stage.structured_metadata {
+      values = {
+        level      = "",
+        status     = "",
+        trace_id   = "",
+        request_id = "",
+      }
+    }
+  }
+
+  stage.match {
+    selector = `{log_profile="mixed-v1"} |~ "^\\s*\\{"`
+
+    stage.json {
+      drop_malformed = false
+
+      expressions = {
+        level      = "level",
+        trace_id   = "trace_id",
+        request_id = "request_id",
+      }
+    }
+
+    stage.structured_metadata {
+      values = {
+        level      = "",
+        trace_id   = "",
+        request_id = "",
+      }
+    }
+  }
+
+  stage.match {
+    selector = `{log_profile="mixed-v1"} |~ "(^|\\s)(level|msg|status)="`
+
+    stage.logfmt {
+      mapping = {
+        level      = "",
+        status     = "",
+        trace_id   = "",
+        request_id = "",
+      }
+    }
+
+    stage.structured_metadata {
+      values = {
+        level      = "",
+        status     = "",
+        trace_id   = "",
+        request_id = "",
+      }
+    }
+  }
+
+  // raw-v1 and unrecognized lines pass through unchanged.
+}

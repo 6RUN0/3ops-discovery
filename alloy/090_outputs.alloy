@@ -1,0 +1,32 @@
+// Telemetry backends shared by all pipelines. This file is the single
+// integration point with storage: swap or extend it without touching
+// the discovery and pipeline files.
+//
+// prometheus.remote_write speaks the Prometheus remote_write protocol,
+// so any compatible backend works unchanged: Mimir, VictoriaMetrics,
+// Thanos, Grafana Cloud. loki.write speaks the Loki push API.
+// For OTLP backends (Tempo, vendor APM) convert the streams with
+// otelcol.receiver.prometheus / otelcol.receiver.loki and export via
+// otelcol.exporter.otlp, replacing the receivers referenced in
+// forward_to lists.
+//
+// Environment overrides (XAD_ = X-Alloy Discovery):
+//   XAD_REMOTE_WRITE_URL  metrics endpoint (Prometheus remote_write)
+//   XAD_LOKI_PUSH_URL     logs endpoint (Loki push API)
+//
+// Do not embed credentials in these URLs (https://user:pass@host): the
+// value is a plain string and can surface in the Alloy UI and logs. Use
+// a basic_auth or authorization block inside endpoint, with the secret
+// read via local.file (is_secret = true).
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = coalesce(sys.env("XAD_REMOTE_WRITE_URL"), "http://prometheus:9090/api/v1/write")
+  }
+}
+
+loki.write "default" {
+  endpoint {
+    url = coalesce(sys.env("XAD_LOKI_PUSH_URL"), "http://loki:3100/loki/api/v1/push")
+  }
+}

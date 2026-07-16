@@ -1,0 +1,93 @@
+// Database domain: postgres exporters driven by discovery. foreach
+// identifies child pipelines by secret id but does NOT deduplicate:
+// every discovered target yields its own exporter. The keepequal rule
+// below collapses the per-port target fan-out of discovery.docker; a
+// container attached to several Docker networks still produces
+// duplicate targets and therefore duplicate exporters (reference
+// limitation, see manifest section 14).
+// The DSN is read from a secret file via local.file; labels carry only
+// the logical secret id, never credentials.
+// The foreach block is experimental as of Alloy v1.17: run and validate
+// with --stability.level=experimental.
+//
+// Environment overrides (XAD_ = X-Alloy Discovery):
+//   XAD_SECRETS_DIR  directory with secret files (default /run/alloy-secrets)
+
+discovery.relabel "database_postgres" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = [
+      "__meta_docker_container_label_x_alloy_discovery_database_enabled",
+    ]
+    regex  = "true"
+    action = "keep"
+  }
+
+  rule {
+    source_labels = [
+      "__meta_docker_container_label_x_alloy_discovery_database_type",
+    ]
+    regex  = "postgres"
+    action = "keep"
+  }
+
+  // Reject secret ids that fail the allowlist regex before the secret
+  // file path is built (path traversal protection). Alloy anchors relabel
+  // regexes implicitly; the explicit ^...$ matches manifest section 9 and
+  // keeps the pattern safe if copied into a non-anchoring context.
+  rule {
+    source_labels = [
+      "__meta_docker_container_label_x_alloy_discovery_database_secret_id",
+    ]
+    regex  = "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$"
+    action = "keep"
+  }
+
+  // Collapse the per-port target fan-out: keep only the target whose
+  // private port matches the declared database port; the default is the
+  // standard port of the type (5432, manifest section 10.2.1).
+  rule {
+    target_label = "__tmp_database_port"
+    replacement  = "5432"
+  }
+
+  rule {
+    source_labels = [
+      "__meta_docker_container_label_x_alloy_discovery_database_port",
+    ]
+    regex        = "(.+)"
+    target_label = "__tmp_database_port"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_port_private"]
+    target_label  = "__tmp_database_port"
+    action        = "keepequal"
+  }
+}
+
+foreach "postgres" {
+  collection = discovery.relabel.database_postgres.output
+  var        = "each"
+  id         = "__meta_docker_container_label_x_alloy_discovery_database_secret_id"
+
+  template {
+    local.file "dsn" {
+      filename  = coalesce(sys.env("XAD_SECRETS_DIR"), "/run/alloy-secrets") + "/" + each["__meta_docker_container_label_x_alloy_discovery_database_secret_id"] + ".dsn"
+      is_secret = true
+    }
+
+    prometheus.exporter.postgres "db" {
+      data_source_names = [local.file.dsn.content]
+    }
+
+    prometheus.scrape "db" {
+      targets = prometheus.exporter.postgres.db.targets
+
+      forward_to = [
+        prometheus.remote_write.default.receiver,
+      ]
+    }
+  }
+}
