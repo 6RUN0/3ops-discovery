@@ -1,0 +1,9 @@
+# rumdl (Markdown linter) configuration.
+
+[global]
+# The Russian manifest is authored one paragraph per line (soft-wrapped
+# in the editor), with prose paragraphs well over any sane column limit.
+# MD013 (line length) fundamentally conflicts with that authored style,
+# so it is disabled rather than forcing hard wraps into a spec document;
+# every other structural rumdl rule stays active.
+disable = ["MD013"]

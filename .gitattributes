@@ -1,0 +1,20 @@
+# Linux-only repo, LF throughout.
+* text=auto eol=lf
+
+# Better hunk headers.
+*.py diff=python
+*.md diff=markdown
+
+# Lockfile is machine-written.
+uv.lock linguist-generated=true
+
+# Keep dev-infra out of `git archive` exports. Several paths are not
+# tracked today; listing them is fail-closed defense.
+docs/superpowers export-ignore
+.omc export-ignore
+.claude export-ignore
+CLAUDE.md export-ignore
+.mcp.json export-ignore
+scratch export-ignore
+notes export-ignore
+drafts export-ignore

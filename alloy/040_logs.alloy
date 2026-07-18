@@ -5,92 +5,92 @@
 // deduplicates targets by container ID and reads each container once.
 
 discovery.relabel "docker_logs" {
-  targets = discovery.docker.docker_logs.targets
+	targets = discovery.docker.docker_logs.targets
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_logs_enabled",
-    ]
-    regex  = "false"
-    action = "drop"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_logs_enabled",
+		]
+		regex  = "false"
+		action = "drop"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_name",
-    ]
-    regex        = "/(.*)"
-    replacement  = "$1"
-    target_label = "container"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_name",
+		]
+		regex        = "/(.*)"
+		replacement  = "$1"
+		target_label = "container"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_com_docker_compose_project",
-    ]
-    target_label = "compose_project"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_com_docker_compose_project",
+		]
+		target_label = "compose_project"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_com_docker_compose_service",
-    ]
-    target_label = "compose_service"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_com_docker_compose_service",
+		]
+		target_label = "compose_service"
+	}
 
-  // Profile allowlist (manifest sections 10.3.2, 10.3.4): raw-v1 is the
-  // default; a declared profile takes effect only when it is on the
-  // allowlist, so an unknown or empty profile degrades to raw-v1 and the
-  // container's logs are never lost.
-  rule {
-    target_label = "log_profile"
-    replacement  = "raw-v1"
-  }
+	// Profile allowlist (manifest sections 10.3.2, 10.3.4): raw-v1 is the
+	// default; a declared profile takes effect only when it is on the
+	// allowlist, so an unknown or empty profile degrades to raw-v1 and the
+	// container's logs are never lost.
+	rule {
+		target_label = "log_profile"
+		replacement  = "raw-v1"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_logs_profile",
-    ]
-    regex        = "(raw-v1|generic-json-v1|generic-logfmt-v1|mixed-v1)"
-    target_label = "log_profile"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_logs_profile",
+		]
+		regex        = "(raw-v1|generic-json-v1|generic-logfmt-v1|mixed-v1)"
+		target_label = "log_profile"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_environment",
-    ]
-    target_label = "environment"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_environment",
+		]
+		target_label = "environment"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_team",
-    ]
-    target_label = "team"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_team",
+		]
+		target_label = "team"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_logs_service",
-    ]
-    regex        = "(.+)"
-    replacement  = "$1"
-    target_label = "service_name"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_logs_service",
+		]
+		regex        = "(.+)"
+		replacement  = "$1"
+		target_label = "service_name"
+	}
 }
 
 loki.source.docker "containers" {
-  host          = coalesce(sys.env("XAD_DOCKER_HOST"), "unix:///var/run/docker.sock")
-  targets       = discovery.docker.docker_logs.targets
-  relabel_rules = discovery.relabel.docker_logs.rules
+	host          = coalesce(sys.env("XAD_DOCKER_HOST"), "unix:///var/run/docker.sock")
+	targets       = discovery.docker.docker_logs.targets
+	relabel_rules = discovery.relabel.docker_logs.rules
 
-  labels = {
-    source    = "docker",
-    collector = "alloy",
-    host      = constants.hostname,
-  }
+	labels = {
+		source    = "docker",
+		collector = "alloy",
+		host      = constants.hostname,
+	}
 
-  forward_to = [
-    loki.process.docker_profiles.receiver,
-  ]
+	forward_to = [
+		loki.process.docker_profiles.receiver,
+	]
 }

@@ -1,0 +1,8 @@
+# typos: source-code spell checker for the docs_lint session.
+
+[files]
+extend-exclude = ["uv.lock", ".secrets.baseline", "*.alloy"]
+
+[default]
+# The manifest is Russian prose with embedded English identifiers;
+# typos only checks the Latin tokens, which is exactly what we want.

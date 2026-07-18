@@ -1,5 +1,8 @@
+.codegraph/
+.mcp.json
 .omc/
 .serena/
+docs/superpowers/
 
 # Never commit telemetry secrets (manifest section 9)
 *.dsn
@@ -7,3 +10,14 @@
 *.ipmi
 .env
 alloy-secrets/
+
+# Python toolchain
+.venv/
+.nox/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# E2e failure artifacts (compose logs, component dumps)
+tests/e2e/_artifacts/

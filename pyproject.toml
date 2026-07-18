@@ -1,0 +1,123 @@
+[project]
+name = "x-alloy-discovery"
+version = "0.0.0"
+description = "Quality gates for the X-Alloy Discovery manifest and its reference Alloy configuration"
+requires-python = ">=3.13"
+
+# Virtual project: nothing is built or published, the repo ships a
+# manifest, a reference Alloy config and the gates that bind them.
+[tool.uv]
+package = false
+default-groups = ["dev", "lint", "test"]
+
+[dependency-groups]
+dev = [
+    "nox>=2026.7.11",
+    "pre-commit>=4.6.0",
+]
+lint = [
+    "mypy>=2.3.0",
+    "ruff>=0.15.22",
+    "types-requests>=2.33.0.20260712",
+]
+test = [
+    "prometheus-client>=0.25.0",
+    "pytest>=9.1.1",
+    "pytest-timeout>=2.4.0",
+    "requests>=2.34.2",
+    "structlog>=26.1.0",
+]
+
+[tool.ruff]
+line-length = 79
+target-version = "py313"
+src = ["tests", "tools"]
+
+[tool.ruff.lint]
+select = [
+  "E", "F", "W",   # pycodestyle + pyflakes
+  "I",             # isort
+  "N",             # pep8-naming
+  "D",             # pydocstyle
+  "UP",            # pyupgrade
+  "B",             # bugbear
+  "A",             # builtins shadowing
+  "C4",            # comprehensions
+  "SIM",           # simplify
+  "PTH",           # use pathlib
+  "RUF",           # ruff-specific
+  "PIE",           # misc lints
+  "RET",           # return consistency
+  "TID",           # tidy imports
+  "TRY",           # exception hygiene
+  "ARG",           # unused arguments
+  "PERF",          # performance anti-patterns
+  "BLE",           # blind except
+  "SLF",           # private-member access
+  "PGH",           # blanket noqa / type: ignore
+  "PL",            # pylint
+  "DTZ",           # naive datetime
+  "G", "LOG",      # logging hygiene
+  "PT",            # pytest style
+  "ERA",           # commented-out code
+  "ISC", "FLY",    # string hygiene
+]
+# D213 (summary on the second line) is the docstring shape; it is
+# mutually exclusive with D212 from the pep257 convention.
+extend-select = ["D213"]
+# D212: mutually exclusive with D213 (see above).
+# TRY003: the gates deliberately raise FileNotFoundError / AnchorError /
+# FileExistsError with contextual f-string messages that name the
+# offending file, section or anchor -- that provenance is the whole
+# point of the diagnostics, so descriptive messages stay inline rather
+# than exploding into one exception subclass per message.
+ignore = ["D212", "TRY003"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.lint.isort]
+known-first-party = ["tests", "tools"]
+
+[tool.ruff.lint.extend-per-file-ignores]
+# Test names document themselves (D); literal expected values are the
+# point of a test (PLR2004); probing helpers' internals is legitimate.
+"tests/*" = ["D1", "PLR2004", "SLF001"]
+# The noxfile imports the local `tools` package inside session bodies on
+# purpose: the import must run after sys.path is extended with the repo
+# root, so it cannot sit in the top-level import block.
+"noxfile.py" = ["PLC0415"]
+# The mini-app is a standalone container script, not a library:
+# module-level loop constants and a broad main() are its shape.
+"tests/e2e/stack/app/app.py" = ["D1"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["tests", "tools", "noxfile.py"]
+# The mini-app is imported by unit tests as a flat module (`import app`)
+# exactly like the container runs it; mypy resolves it as `app` via
+# mypy_path + explicit_package_bases (its dir has no __init__ chain, so
+# mypy would otherwise fail to name the module).
+mypy_path = ["tests/e2e/stack/app"]
+explicit_package_bases = true
+strict = true
+warn_unreachable = true
+extra_checks = true
+enable_error_code = [
+  "ignore-without-code",
+  "redundant-expr",
+  "truthy-bool",
+  "unused-awaitable",
+]
+
+[tool.pytest.ini_options]
+# The default run is the fast, docker-free set; tests/e2e is opt-in
+# via the `e2e` nox session.
+testpaths = ["tests/static", "tests/app"]
+addopts = "-ra --strict-config --strict-markers"
+xfail_strict = true
+filterwarnings = ["error"]
+# A hung static test must fail fast; the e2e session overrides this
+# budget on the command line (-o timeout=900).
+timeout = 60
+timeout_method = "thread"

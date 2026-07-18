@@ -1,0 +1,34 @@
+# https://editorconfig.org -- editor defaults matching the gates:
+# Python (ruff: 4 spaces, 79 columns), YAML/Alloy (2 spaces).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.py]
+max_line_length = 79
+
+[*.{yml,yaml}]
+indent_size = 2
+
+# alloy fmt output style; alloy_check (fmt -t) is the authority -- the
+# tool indents with tabs (gofmt-style), so this section follows it, not
+# vice versa. If a future Alloy release changes the style, update the
+# files with `alloy fmt -w` and this section together (spec section 7).
+[*.alloy]
+indent_style = tab
+
+[{Makefile,*.mk}]
+indent_style = tab
+
+# Markdown embeds code samples in several languages (2-space YAML, alloy,
+# text ladders), so no single indent width applies; unset lets
+# editorconfig-checker skip indentation here while other rules stay on.
+[*.md]
+trim_trailing_whitespace = false
+indent_size = unset

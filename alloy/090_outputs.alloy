@@ -20,13 +20,13 @@
 // read via local.file (is_secret = true).
 
 prometheus.remote_write "default" {
-  endpoint {
-    url = coalesce(sys.env("XAD_REMOTE_WRITE_URL"), "http://prometheus:9090/api/v1/write")
-  }
+	endpoint {
+		url = coalesce(sys.env("XAD_REMOTE_WRITE_URL"), "http://prometheus:9090/api/v1/write")
+	}
 }
 
 loki.write "default" {
-  endpoint {
-    url = coalesce(sys.env("XAD_LOKI_PUSH_URL"), "http://loki:3100/loki/api/v1/push")
-  }
+	endpoint {
+		url = coalesce(sys.env("XAD_LOKI_PUSH_URL"), "http://loki:3100/loki/api/v1/push")
+	}
 }

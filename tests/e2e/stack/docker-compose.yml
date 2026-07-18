@@ -1,0 +1,345 @@
+---
+# X-Alloy Discovery e2e stack. The compose project name is unique per
+# run (xad-e2e-<run-id>, passed by the fixture with -p); assertions
+# filter on the promoted compose_project label because a shared Docker
+# daemon exposes foreign containers to discovery too.
+#
+# One telemetry network for every service: a container attached to
+# several networks duplicates targets/exporters (manifest section 14).
+# The docker-socket network is internal: only Alloy reaches the proxy.
+
+networks:
+  telemetry:
+  docker-socket:
+    internal: true
+
+services:
+  docker-socket-proxy:
+    # GET-only filtered Docker API (manifest 13.3): allowlisted
+    # sections only, POST disabled. loki.source.docker reads container
+    # logs via GET /containers/<id>/logs, covered by CONTAINERS=1.
+    image: tecnativa/docker-socket-proxy:v0.4.2
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      CONTAINERS: 1
+      EVENTS: 1
+      PING: 1
+      VERSION: 1
+      INFO: 1
+      NETWORKS: 1
+      POST: 0
+    networks:
+      - docker-socket
+
+  alloy:
+    image: grafana/alloy:v1.17.1
+    command:
+      - run
+      - --stability.level=experimental
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy
+    environment:
+      # The contract env var is exercised for real: no socket mount in
+      # this container at all.
+      XAD_DOCKER_HOST: tcp://docker-socket-proxy:2375
+      # Contract intervals (normal-v1 30s) must not change; only the
+      # discovery refresh is accelerated for test budgets.
+      XAD_DOCKER_REFRESH_INTERVAL: 5s
+    volumes:
+      - ${XAD_E2E_CONFIG_DIR:?set by the pytest fixture}:/etc/alloy:ro
+      - ${XAD_E2E_SECRETS_DIR:?set by the pytest fixture}:/run/alloy-secrets:ro
+    networks:
+      - telemetry
+      - docker-socket
+    expose:
+      - "12345"
+    ports:
+      - "127.0.0.1:0:12345"
+    depends_on:
+      docker-socket-proxy:
+        condition: service_started
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
+    labels:
+      # Dogfooding: the collector monitors itself through its own
+      # discovery. The FULL mandatory metrics.* set, including
+      # type=prometheus (020 hard-keeps on it).
+      - "x-alloy-discovery.enabled=true"
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.environment=e2e"
+      - "x-alloy-discovery.team=platform"
+      - "x-alloy-discovery.metrics.enabled=true"
+      - "x-alloy-discovery.metrics.type=prometheus"
+      - "x-alloy-discovery.metrics.port=12345"
+      - "x-alloy-discovery.metrics.job=alloy"
+
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - telemetry
+    expose:
+      - "9090"
+    ports:
+      - "127.0.0.1:0:9090"
+    healthcheck:
+      # promtool ships in the image; `check ready` polls /-/ready.
+      test: ["CMD", "promtool", "check", "ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    labels:
+      - "x-alloy-discovery.enabled=true"
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.environment=e2e"
+      - "x-alloy-discovery.team=platform"
+      - "x-alloy-discovery.metrics.enabled=true"
+      - "x-alloy-discovery.metrics.type=prometheus"
+      - "x-alloy-discovery.metrics.port=9090"
+      - "x-alloy-discovery.metrics.job=prometheus"
+
+  loki:
+    # The grafana/loki image is distroless: no shell, wget or curl, so
+    # a container healthcheck cannot probe /ready. Readiness is gated
+    # instead by the pytest fixture, which polls /ready over HTTP after
+    # `up`; alloy therefore depends on loki with condition
+    # service_started and tolerates the backend not being ready yet
+    # (loki.write retries).
+    # Pinned to 3.6.x, not 3.7.x: grafana/loki:3.7.3 rejects every push
+    # with "Ingester is shutting down" even from a bare `docker run`
+    # (verified 3.6.12/3.5.5/3.4.6 all ingest, only 3.7.3 is broken).
+    image: grafana/loki:3.6.12
+    networks:
+      - telemetry
+    expose:
+      - "3100"
+    ports:
+      - "127.0.0.1:0:3100"
+    labels:
+      - "x-alloy-discovery.enabled=true"
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.environment=e2e"
+      - "x-alloy-discovery.team=platform"
+      - "x-alloy-discovery.metrics.enabled=true"
+      - "x-alloy-discovery.metrics.type=prometheus"
+      - "x-alloy-discovery.metrics.port=3100"
+      - "x-alloy-discovery.metrics.job=loki"
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${XAD_E2E_PG_USER:?set by the pytest fixture}
+      POSTGRES_PASSWORD: ${XAD_E2E_PG_PASSWORD:?set by the pytest fixture}
+    networks:
+      - telemetry
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    labels:
+      # database.port is DELIBERATELY absent: the "no port label means
+      # the type's standard port" path is under test.
+      - "x-alloy-discovery.enabled=true"
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.environment=e2e"
+      - "x-alloy-discovery.team=data"
+      - "x-alloy-discovery.database.enabled=true"
+      - "x-alloy-discovery.database.type=postgres"
+      - "x-alloy-discovery.database.secret-id=postgres-orders"
+
+  db-badsecret:
+    # Negative scenario: everything valid except the secret-id, which
+    # fails the manifest section 9 regex. The relabel chain must drop
+    # the target; no exporter appears.
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${XAD_E2E_PG_USER:?set by the pytest fixture}
+      POSTGRES_PASSWORD: ${XAD_E2E_PG_PASSWORD:?set by the pytest fixture}
+    networks:
+      - telemetry
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    labels:
+      - "x-alloy-discovery.enabled=true"
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.environment=e2e"
+      - "x-alloy-discovery.team=data"
+      - "x-alloy-discovery.database.enabled=true"
+      - "x-alloy-discovery.database.type=postgres"
+      - "x-alloy-discovery.database.secret-id=bad/../id"
+
+  rabbitmq:
+    # Native prometheus endpoint (manifest example 10.1.2), but with
+    # profile normal-v1: the example's fast-v1 is deliberately NOT
+    # implemented by the reference (manifest 14), so a copied fast-v1
+    # would never be scraped.
+    image: rabbitmq:4.3.2-management
+    volumes:
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    networks:
+      - telemetry
+    expose:
+      - "15692"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    labels:
+      - "x-alloy-discovery.enabled=true"
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.environment=e2e"
+      - "x-alloy-discovery.team=platform"
+      - "x-alloy-discovery.metrics.enabled=true"
+      - "x-alloy-discovery.metrics.type=prometheus"
+      - "x-alloy-discovery.metrics.port=15692"
+      - "x-alloy-discovery.metrics.path=/metrics"
+      - "x-alloy-discovery.metrics.job=rabbitmq"
+      - "x-alloy-discovery.metrics.profile=normal-v1"
+
+  app-metrics:
+    build: ./app
+    environment:
+      APP_METRICS_PORT: "8000"
+    networks:
+      - telemetry
+    expose:
+      - "8000"
+    labels:
+      - "x-alloy-discovery.enabled=true"
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.environment=e2e"
+      - "x-alloy-discovery.team=apps"
+      - "x-alloy-discovery.metrics.enabled=true"
+      - "x-alloy-discovery.metrics.type=prometheus"
+      - "x-alloy-discovery.metrics.port=8000"
+      - "x-alloy-discovery.metrics.job=app-metrics"
+      - "x-alloy-discovery.logs.service=app-metrics"
+
+  app-logs-json:
+    build: ./app
+    environment:
+      APP_LOG_FORMAT: json
+    networks:
+      - telemetry
+    labels:
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.environment=e2e"
+      - "x-alloy-discovery.team=apps"
+      - "x-alloy-discovery.logs.profile=generic-json-v1"
+      - "x-alloy-discovery.logs.service=app-logs-json"
+
+  app-logs-logfmt:
+    build: ./app
+    environment:
+      APP_LOG_FORMAT: logfmt
+    networks:
+      - telemetry
+    labels:
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.environment=e2e"
+      - "x-alloy-discovery.team=apps"
+      - "x-alloy-discovery.logs.profile=generic-logfmt-v1"
+      - "x-alloy-discovery.logs.service=app-logs-logfmt"
+
+  app-logs-mixed:
+    build: ./app
+    environment:
+      APP_LOG_FORMAT: mixed
+    networks:
+      - telemetry
+    labels:
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.environment=e2e"
+      - "x-alloy-discovery.team=apps"
+      - "x-alloy-discovery.logs.profile=mixed-v1"
+      - "x-alloy-discovery.logs.service=app-logs-mixed"
+
+  app-logs-raw:
+    # No manifest labels at all: the collect-by-default policy
+    # (manifest 10.3.1) must pick it up with log_profile="raw-v1".
+    build: ./app
+    environment:
+      APP_LOG_FORMAT: raw
+    networks:
+      - telemetry
+
+  app-logs-unknown:
+    # Unknown profile degrades to raw-v1 without losing logs
+    # (manifest 10.3.4).
+    build: ./app
+    environment:
+      APP_LOG_FORMAT: json
+    networks:
+      - telemetry
+    labels:
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.logs.profile=no-such-profile-v9"
+      - "x-alloy-discovery.logs.service=app-logs-unknown"
+
+  app-fuzz:
+    # Pipeline resilience to garbage: fuzz stdout under generic-json-v1
+    # (broken input must degrade to raw, not break the stage) plus
+    # fuzzed metrics.
+    build: ./app
+    environment:
+      APP_LOG_FORMAT: fuzz
+      APP_METRICS_PORT: "8000"
+      APP_FUZZ_TELEMETRY: "1"
+    networks:
+      - telemetry
+    expose:
+      - "8000"
+    labels:
+      - "x-alloy-discovery.enabled=true"
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.environment=e2e"
+      - "x-alloy-discovery.team=apps"
+      - "x-alloy-discovery.metrics.enabled=true"
+      - "x-alloy-discovery.metrics.type=prometheus"
+      - "x-alloy-discovery.metrics.port=8000"
+      - "x-alloy-discovery.metrics.job=app-fuzz"
+      - "x-alloy-discovery.logs.profile=generic-json-v1"
+      - "x-alloy-discovery.logs.service=app-fuzz"
+
+  app-burst:
+    # Burst smoke, not a benchmark: ~1000 numbered json lines/s for
+    # ~10s; the assertion is zero loss.
+    build: ./app
+    environment:
+      APP_LOG_FORMAT: json
+      APP_BURST: "1000:10"
+    networks:
+      - telemetry
+    labels:
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.logs.profile=generic-json-v1"
+      - "x-alloy-discovery.logs.service=app-burst"
+
+  app-silent:
+    # Explicit opt-out (manifest 10.3.7): stdout keeps flowing, Loki
+    # must receive nothing; the test proves the container DID write via
+    # docker logs first (positive control).
+    build: ./app
+    environment:
+      APP_LOG_FORMAT: json
+    networks:
+      - telemetry
+    labels:
+      - "x-alloy-discovery.version=0.2"
+      - "x-alloy-discovery.logs.enabled=false"

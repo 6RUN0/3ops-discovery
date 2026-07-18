@@ -1,0 +1,5 @@
+# lychee link-checker config for the docs_lint nox session.
+# Checks every markdown file it is pointed at; network required.
+
+# Relative links inside the repo are resolved from the file location.
+exclude_path = [".venv", ".nox", "docs/superpowers"]

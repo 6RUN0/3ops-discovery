@@ -1,0 +1,6 @@
+# Receiver-only Prometheus: series arrive via remote_write (the
+# --web.enable-remote-write-receiver flag in compose). No local
+# scrape_configs -- Prometheus's own /metrics is scraped by Alloy
+# through the labels contract (dogfooding, manifest 14).
+global:
+  scrape_interval: 1m

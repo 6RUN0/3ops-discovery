@@ -4,170 +4,170 @@
 // arbitrary interval/timeout values from labels.
 
 discovery.relabel "metrics" {
-  targets = discovery.docker.containers.targets
+	targets = discovery.docker.containers.targets
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_metrics_enabled",
-    ]
-    regex  = "true"
-    action = "keep"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_metrics_enabled",
+		]
+		regex  = "true"
+		action = "keep"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_metrics_type",
-    ]
-    regex  = "prometheus"
-    action = "keep"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_metrics_type",
+		]
+		regex  = "prometheus"
+		action = "keep"
+	}
 
-  // Profile allowlist: this pair serves normal-v1, the default when the
-  // label is unset. Targets declaring another profile are left to that
-  // profile's own relabel/scrape pair, so one endpoint is never scraped
-  // by two pairs at once.
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_metrics_profile",
-    ]
-    regex  = "(normal-v1)?"
-    action = "keep"
-  }
+	// Profile allowlist: this pair serves normal-v1, the default when the
+	// label is unset. Targets declaring another profile are left to that
+	// profile's own relabel/scrape pair, so one endpoint is never scraped
+	// by two pairs at once.
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_metrics_profile",
+		]
+		regex  = "(normal-v1)?"
+		action = "keep"
+	}
 
-  // Validation (manifest section 11): metrics.path must start with "/",
-  // metrics.scheme must be http or https. Empty means "use the default";
-  // targets with invalid values are dropped.
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_metrics_path",
-    ]
-    regex  = "(/.*)?"
-    action = "keep"
-  }
+	// Validation (manifest section 11): metrics.path must start with "/",
+	// metrics.scheme must be http or https. Empty means "use the default";
+	// targets with invalid values are dropped.
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_metrics_path",
+		]
+		regex  = "(/.*)?"
+		action = "keep"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_metrics_scheme",
-    ]
-    regex  = "(https?)?"
-    action = "keep"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_metrics_scheme",
+		]
+		regex  = "(https?)?"
+		action = "keep"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_metrics_port",
-    ]
-    target_label = "__tmp_metrics_port"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_metrics_port",
+		]
+		target_label = "__tmp_metrics_port"
+	}
 
-  // discovery.docker emits one target per container+network+port
-  // combination; keep only targets whose private port matches the
-  // declared metrics port (the network dimension is not collapsible in
-  // relabel, see manifest section 14).
-  rule {
-    source_labels = ["__meta_docker_port_private"]
-    target_label  = "__tmp_metrics_port"
-    action        = "keepequal"
-  }
+	// discovery.docker emits one target per container+network+port
+	// combination; keep only targets whose private port matches the
+	// declared metrics port (the network dimension is not collapsible in
+	// relabel, see manifest section 14).
+	rule {
+		source_labels = ["__meta_docker_port_private"]
+		target_label  = "__tmp_metrics_port"
+		action        = "keepequal"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_network_ip",
-      "__meta_docker_port_private",
-    ]
-    separator    = ":"
-    target_label = "__address__"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_network_ip",
+			"__meta_docker_port_private",
+		]
+		separator    = ":"
+		target_label = "__address__"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_metrics_path",
-    ]
-    regex         = "(.+)"
-    replacement   = "$1"
-    target_label  = "__metrics_path__"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_metrics_path",
+		]
+		regex        = "(.+)"
+		replacement  = "$1"
+		target_label = "__metrics_path__"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_metrics_scheme",
-    ]
-    regex         = "(.+)"
-    replacement   = "$1"
-    target_label  = "__scheme__"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_metrics_scheme",
+		]
+		regex        = "(.+)"
+		replacement  = "$1"
+		target_label = "__scheme__"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_metrics_job",
-    ]
-    target_label = "job"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_metrics_job",
+		]
+		target_label = "job"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_instance",
-    ]
-    target_label = "instance"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_instance",
+		]
+		target_label = "instance"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_environment",
-    ]
-    target_label = "environment"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_environment",
+		]
+		target_label = "environment"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_x_alloy_discovery_team",
-    ]
-    target_label = "team"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_x_alloy_discovery_team",
+		]
+		target_label = "team"
+	}
 
-  // Provenance labels (manifest sections 6.1, 13.5): container comes
-  // from Docker engine metadata and host from the Alloy collector's own
-  // hostname; neither can be set via container labels, so a container
-  // cannot claim another identity in them even though job, team and
-  // environment above are self-declared.
-  rule {
-    source_labels = ["__meta_docker_container_name"]
-    regex         = "/(.*)"
-    replacement   = "$1"
-    target_label  = "container"
-  }
+	// Provenance labels (manifest sections 6.1, 13.5): container comes
+	// from Docker engine metadata and host from the Alloy collector's own
+	// hostname; neither can be set via container labels, so a container
+	// cannot claim another identity in them even though job, team and
+	// environment above are self-declared.
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		replacement   = "$1"
+		target_label  = "container"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_com_docker_compose_project",
-    ]
-    target_label = "compose_project"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_com_docker_compose_project",
+		]
+		target_label = "compose_project"
+	}
 
-  rule {
-    source_labels = [
-      "__meta_docker_container_label_com_docker_compose_service",
-    ]
-    target_label = "compose_service"
-  }
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_com_docker_compose_service",
+		]
+		target_label = "compose_service"
+	}
 
-  rule {
-    target_label = "collector"
-    replacement  = "alloy"
-  }
+	rule {
+		target_label = "collector"
+		replacement  = "alloy"
+	}
 
-  rule {
-    target_label = "host"
-    replacement  = constants.hostname
-  }
+	rule {
+		target_label = "host"
+		replacement  = constants.hostname
+	}
 }
 
 prometheus.scrape "docker_metrics" {
-  targets         = discovery.relabel.metrics.output
-  scrape_interval = "30s"
-  scrape_timeout  = "10s"
+	targets         = discovery.relabel.metrics.output
+	scrape_interval = "30s"
+	scrape_timeout  = "10s"
 
-  forward_to = [
-    prometheus.remote_write.default.receiver,
-  ]
+	forward_to = [
+		prometheus.remote_write.default.receiver,
+	]
 }
