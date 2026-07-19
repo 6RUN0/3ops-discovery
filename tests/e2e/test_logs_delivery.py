@@ -121,7 +121,11 @@ def test_all_stream_labels_within_manifest_allowlist(
         desc="any stream for this project",
     )
     for labels in series:
-        extra = set(labels) - allowlist
+        # Loki injects internal book-keeping labels (e.g. __stream_shard__
+        # under stream auto-sharding); manifest 6.2 governs contract stream
+        # labels only, so ignore the __* ones (as promoted_stream_labels does).
+        contract_labels = {n for n in labels if not n.startswith("__")}
+        extra = contract_labels - allowlist
         assert not extra, (
             f"stream {labels} carries labels outside manifest 6.2: {extra}"
         )
