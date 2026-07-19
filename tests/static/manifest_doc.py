@@ -146,7 +146,7 @@ def loki_label_allowlist() -> set[str]:
 
 
 def env_defaults() -> dict[str, str]:
-    """Section 14.1: XAD_* variable -> literal default."""
+    """Section 14.1: RU_3OPS_DISCOVERY_* variable -> literal default."""
     return {
         _plain(row["Переменная"]): _plain(row["Default"])
         for row in table("14.1")

@@ -10,9 +10,9 @@
 // otelcol.exporter.otlp, replacing the receivers referenced in
 // forward_to lists.
 //
-// Environment overrides (XAD_ = X-Alloy Discovery):
-//   XAD_REMOTE_WRITE_URL  metrics endpoint (Prometheus remote_write)
-//   XAD_LOKI_PUSH_URL     logs endpoint (Loki push API)
+// Environment overrides (RU_3OPS_DISCOVERY_ = 3ops Discovery):
+//   RU_3OPS_DISCOVERY_REMOTE_WRITE_URL  metrics endpoint (Prometheus remote_write)
+//   RU_3OPS_DISCOVERY_LOKI_PUSH_URL     logs endpoint (Loki push API)
 //
 // Do not embed credentials in these URLs (https://user:pass@host): the
 // value is a plain string and can surface in the Alloy UI and logs. Use
@@ -21,12 +21,12 @@
 
 prometheus.remote_write "default" {
 	endpoint {
-		url = coalesce(sys.env("XAD_REMOTE_WRITE_URL"), "http://prometheus:9090/api/v1/write")
+		url = coalesce(sys.env("RU_3OPS_DISCOVERY_REMOTE_WRITE_URL"), "http://prometheus:9090/api/v1/write")
 	}
 }
 
 loki.write "default" {
 	endpoint {
-		url = coalesce(sys.env("XAD_LOKI_PUSH_URL"), "http://loki:3100/loki/api/v1/push")
+		url = coalesce(sys.env("RU_3OPS_DISCOVERY_LOKI_PUSH_URL"), "http://loki:3100/loki/api/v1/push")
 	}
 }

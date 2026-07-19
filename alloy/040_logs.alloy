@@ -1,5 +1,5 @@
 // Logs domain: stdout/stderr of all containers, opt-out via
-// x-alloy-discovery.logs.enabled=false.
+// ru.3ops.discovery.logs.enabled=false.
 // discovery.docker emits one target per container+network+port
 // combination; this does not duplicate logs because loki.source.docker
 // deduplicates targets by container ID and reads each container once.
@@ -9,7 +9,7 @@ discovery.relabel "docker_logs" {
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_logs_enabled",
+			"__meta_docker_container_label_ru_3ops_discovery_logs_enabled",
 		]
 		regex  = "false"
 		action = "drop"
@@ -49,7 +49,7 @@ discovery.relabel "docker_logs" {
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_logs_profile",
+			"__meta_docker_container_label_ru_3ops_discovery_logs_profile",
 		]
 		regex        = "(raw-v1|generic-json-v1|generic-logfmt-v1|mixed-v1)"
 		target_label = "log_profile"
@@ -57,21 +57,21 @@ discovery.relabel "docker_logs" {
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_environment",
+			"__meta_docker_container_label_ru_3ops_discovery_environment",
 		]
 		target_label = "environment"
 	}
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_team",
+			"__meta_docker_container_label_ru_3ops_discovery_team",
 		]
 		target_label = "team"
 	}
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_logs_service",
+			"__meta_docker_container_label_ru_3ops_discovery_logs_service",
 		]
 		regex        = "(.+)"
 		replacement  = "$1"
@@ -80,7 +80,7 @@ discovery.relabel "docker_logs" {
 }
 
 loki.source.docker "containers" {
-	host          = coalesce(sys.env("XAD_DOCKER_HOST"), "unix:///var/run/docker.sock")
+	host          = coalesce(sys.env("RU_3OPS_DISCOVERY_DOCKER_HOST"), "unix:///var/run/docker.sock")
 	targets       = discovery.docker.docker_logs.targets
 	relabel_rules = discovery.relabel.docker_logs.rules
 

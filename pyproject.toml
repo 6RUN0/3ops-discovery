@@ -1,7 +1,7 @@
 [project]
-name = "x-alloy-discovery"
+name = "3ops-discovery"
 version = "0.0.0"
-description = "Quality gates for the X-Alloy Discovery manifest and its reference Alloy configuration"
+description = "Quality gates for the 3ops Discovery manifest and its reference Alloy configuration"
 requires-python = ">=3.13"
 
 # Virtual project: nothing is built or published, the repo ships a

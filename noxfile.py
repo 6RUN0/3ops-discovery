@@ -1,5 +1,5 @@
 """
-Nox sessions for the X-Alloy Discovery quality gates.
+Nox sessions for the 3ops Discovery quality gates.
 
 ``default_venv_backend = "none"``: nox creates no environments of its
 own, every tool runs through ``uv run`` (single source of versions is
@@ -143,11 +143,9 @@ def e2e(session: nox.Session) -> None:
 
     Needs Docker and several minutes: ~20 services, database
     healthchecks, the mini-app image build, and a metrics budget of
-    XAD_DOCKER_REFRESH_INTERVAL + 30s scrape + flush.
+    RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL + 30s scrape + flush.
     """
-    _uv(
-        session, "pytest", "tests/e2e", "-o", "timeout=900", *session.posargs
-    )
+    _uv(session, "pytest", "tests/e2e", "-o", "timeout=900", *session.posargs)
 
 
 @nox.session

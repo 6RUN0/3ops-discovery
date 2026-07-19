@@ -10,8 +10,8 @@ def test_sources_lists_all_base_files() -> None:
 
 def test_env_defaults_extracts_coalesce_literals() -> None:
     env = ac.env_defaults()
-    assert env["XAD_DOCKER_REFRESH_INTERVAL"] == {"30s"}
-    assert env["XAD_SECRETS_DIR"] == {"/run/alloy-secrets"}
+    assert env["RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL"] == {"30s"}
+    assert env["RU_3OPS_DISCOVERY_SECRETS_DIR"] == {"/run/alloy-secrets"}
 
 
 def test_no_env_call_lacks_a_default() -> None:

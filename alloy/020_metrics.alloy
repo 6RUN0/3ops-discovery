@@ -8,7 +8,7 @@ discovery.relabel "metrics" {
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_metrics_enabled",
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_enabled",
 		]
 		regex  = "true"
 		action = "keep"
@@ -16,7 +16,7 @@ discovery.relabel "metrics" {
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_metrics_type",
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_type",
 		]
 		regex  = "prometheus"
 		action = "keep"
@@ -28,7 +28,7 @@ discovery.relabel "metrics" {
 	// by two pairs at once.
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_metrics_profile",
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_profile",
 		]
 		regex  = "(normal-v1)?"
 		action = "keep"
@@ -39,7 +39,7 @@ discovery.relabel "metrics" {
 	// targets with invalid values are dropped.
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_metrics_path",
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_path",
 		]
 		regex  = "(/.*)?"
 		action = "keep"
@@ -47,7 +47,7 @@ discovery.relabel "metrics" {
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_metrics_scheme",
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_scheme",
 		]
 		regex  = "(https?)?"
 		action = "keep"
@@ -55,7 +55,7 @@ discovery.relabel "metrics" {
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_metrics_port",
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_port",
 		]
 		target_label = "__tmp_metrics_port"
 	}
@@ -81,7 +81,7 @@ discovery.relabel "metrics" {
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_metrics_path",
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_path",
 		]
 		regex        = "(.+)"
 		replacement  = "$1"
@@ -90,7 +90,7 @@ discovery.relabel "metrics" {
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_metrics_scheme",
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_scheme",
 		]
 		regex        = "(.+)"
 		replacement  = "$1"
@@ -99,28 +99,28 @@ discovery.relabel "metrics" {
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_metrics_job",
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_job",
 		]
 		target_label = "job"
 	}
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_instance",
+			"__meta_docker_container_label_ru_3ops_discovery_instance",
 		]
 		target_label = "instance"
 	}
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_environment",
+			"__meta_docker_container_label_ru_3ops_discovery_environment",
 		]
 		target_label = "environment"
 	}
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_team",
+			"__meta_docker_container_label_ru_3ops_discovery_team",
 		]
 		target_label = "team"
 	}

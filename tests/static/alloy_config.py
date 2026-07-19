@@ -17,7 +17,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 ALLOY_DIR = REPO / "alloy"
 
-_LABEL = "__meta_docker_container_label_x_alloy_discovery"
+_LABEL = "__meta_docker_container_label_ru_3ops_discovery"
 
 
 @cache
@@ -37,9 +37,12 @@ def _all_text() -> str:
 
 
 def env_defaults() -> dict[str, set[str]]:
-    """XAD_* variable -> set of literal coalesce defaults found."""
+    """Env var -> set of its literal coalesce defaults found."""
     found: dict[str, set[str]] = {}
-    pattern = r'coalesce\(sys\.env\("(XAD_[A-Z_]+)"\),\s*"([^"]*)"\)'
+    pattern = (
+        r'coalesce\(sys\.env\("(RU_3OPS_DISCOVERY_[A-Z0-9_]+)"\),'
+        r'\s*"([^"]*)"\)'
+    )
     for name, default in re.findall(pattern, _all_text()):
         found.setdefault(name, set()).add(default)
     return found
@@ -47,7 +50,11 @@ def env_defaults() -> dict[str, set[str]]:
 
 def env_calls_without_default() -> set[str]:
     """sys.env calls that are not wrapped in coalesce(..., literal)."""
-    every = set(re.findall(r'sys\.env\("(XAD_[A-Z_]+)"\)', _all_text()))
+    every = set(
+        re.findall(
+            r'sys\.env\("(RU_3OPS_DISCOVERY_[A-Z0-9_]+)"\)', _all_text()
+        )
+    )
     return every - set(env_defaults())
 
 

@@ -1,13 +1,13 @@
-# X-Alloy Discovery Manifest
+# 3ops Discovery Manifest
 
 **Статус:** Draft  
 **Версия спецификации:** `0.2.0`  
-**Namespace:** `x-alloy-discovery.*`  
+**Namespace:** `ru.3ops.discovery.*`  
 **История изменений:** [CHANGELOG.ru.md](../CHANGELOG.ru.md)
 
 ## 1. Назначение
 
-`X-Alloy Discovery` — декларативный mini-framework для автоматического обнаружения и настройки telemetry targets в Grafana Alloy на основе Docker labels.
+`3ops Discovery` — декларативный mini-framework для автоматического обнаружения и настройки telemetry targets в Grafana Alloy на основе Docker labels.
 
 Контейнер описывает:
 
@@ -47,20 +47,20 @@ prometheus.remote_write / loki.write
 Все labels mini-framework начинаются с:
 
 ```text
-x-alloy-discovery.
+ru.3ops.discovery.
 ```
 
 Общий формат:
 
 ```text
-x-alloy-discovery.<domain>.<key>
+ru.3ops.discovery.<domain>.<key>
 ```
 
 Глобальные ключи могут не содержать `<domain>`:
 
 ```text
-x-alloy-discovery.enabled
-x-alloy-discovery.version
+ru.3ops.discovery.enabled
+ru.3ops.discovery.version
 ```
 
 ### 3.1. Правила именования
@@ -76,9 +76,9 @@ x-alloy-discovery.version
 
 ```yaml
 labels:
-  x-alloy-discovery.enabled: "true"
-  x-alloy-discovery.database.type: "postgres"
-  x-alloy-discovery.database.secret-id: "postgres-orders"
+  ru.3ops.discovery.enabled: "true"
+  ru.3ops.discovery.database.type: "postgres"
+  ru.3ops.discovery.database.secret-id: "postgres-orders"
 ```
 
 ## 4. Нормализация Docker labels в Alloy
@@ -86,13 +86,13 @@ labels:
 Docker label:
 
 ```text
-x-alloy-discovery.database.secret-id
+ru.3ops.discovery.database.secret-id
 ```
 
 появляется в `discovery.docker` как:
 
 ```text
-__meta_docker_container_label_x_alloy_discovery_database_secret_id
+__meta_docker_container_label_ru_3ops_discovery_database_secret_id
 ```
 
 Точки, дефисы и другие неподходящие символы преобразуются в `_`.
@@ -100,15 +100,15 @@ __meta_docker_container_label_x_alloy_discovery_database_secret_id
 Из-за этого следующие labels конфликтуют после нормализации:
 
 ```text
-x-alloy-discovery.database.secret-id
-x-alloy-discovery.database.secret.id
+ru.3ops.discovery.database.secret-id
+ru.3ops.discovery.database.secret.id
 ```
 
 Использовать нужно только первый вариант.
 
 ## 5. Глобальные labels
 
-### `x-alloy-discovery.enabled`
+### `ru.3ops.discovery.enabled`
 
 Обязательный флаг участия контейнера в discovery для доменов metrics, database, blackbox, otel, snmp и ipmi.
 
@@ -121,19 +121,19 @@ true
 false
 ```
 
-### `x-alloy-discovery.version`
+### `ru.3ops.discovery.version`
 
 Версия контракта labels.
 
 Пример:
 
 ```yaml
-x-alloy-discovery.version: "0.2"
+ru.3ops.discovery.version: "0.2"
 ```
 
 Если label отсутствует, применяется версия контракта, заданная Alloy-конфигурацией по умолчанию.
 
-### `x-alloy-discovery.instance`
+### `ru.3ops.discovery.instance`
 
 Логическое имя экземпляра.
 
@@ -142,10 +142,10 @@ x-alloy-discovery.version: "0.2"
 Пример:
 
 ```yaml
-x-alloy-discovery.instance: "orders-postgres"
+ru.3ops.discovery.instance: "orders-postgres"
 ```
 
-### `x-alloy-discovery.environment`
+### `ru.3ops.discovery.environment`
 
 Окружение:
 
@@ -156,14 +156,14 @@ testing
 development
 ```
 
-### `x-alloy-discovery.team`
+### `ru.3ops.discovery.team`
 
 Команда или владелец сервиса.
 
 Пример:
 
 ```yaml
-x-alloy-discovery.team: "payments"
+ru.3ops.discovery.team: "payments"
 ```
 
 ## 6. Common telemetry labels
@@ -250,7 +250,7 @@ Structured metadata не индексируется и не влияет на к
 Версия контракта передаётся через:
 
 ```yaml
-x-alloy-discovery.version: "0.2"
+ru.3ops.discovery.version: "0.2"
 ```
 
 Правила:
@@ -283,7 +283,7 @@ orders-api-v2
 Запрещённый вариант:
 
 ```yaml
-x-alloy-discovery.logs.profile: "json,logfmt,raw"
+ru.3ops.discovery.logs.profile: "json,logfmt,raw"
 ```
 
 ### 8.2. Scrape-профили
@@ -308,7 +308,7 @@ slow-v1:
   timeout: 15s
 ```
 
-Выбираются через labels `x-alloy-discovery.metrics.profile` и `x-alloy-discovery.blackbox.profile`; по умолчанию `normal-v1`.
+Выбираются через labels `ru.3ops.discovery.metrics.profile` и `ru.3ops.discovery.blackbox.profile`; по умолчанию `normal-v1`.
 
 ### 8.3. Log-профили
 
@@ -366,14 +366,14 @@ standard-v1
 extended-v1
 ```
 
-Профили позволяют контролировать нагрузку и не принимать произвольные настройки из labels. Выбираются через `x-alloy-discovery.database.profile`; по умолчанию `standard-v1`.
+Профили позволяют контролировать нагрузку и не принимать произвольные настройки из labels. Выбираются через `ru.3ops.discovery.database.profile`; по умолчанию `standard-v1`.
 
 ## 9. Secret contract
 
 Label содержит только логический идентификатор:
 
 ```yaml
-x-alloy-discovery.database.secret-id: "postgres-orders"
+ru.3ops.discovery.database.secret-id: "postgres-orders"
 ```
 
 Alloy строит путь:
@@ -438,13 +438,13 @@ ipmi
 
 | Label | Обязательный | Значение |
 |---|---:|---|
-| `x-alloy-discovery.metrics.enabled` | Да | `true` |
-| `x-alloy-discovery.metrics.type` | Да | `prometheus` |
-| `x-alloy-discovery.metrics.port` | Да | Порт metrics endpoint |
-| `x-alloy-discovery.metrics.path` | Нет | По умолчанию `/metrics` |
-| `x-alloy-discovery.metrics.scheme` | Нет | `http` или `https`, по умолчанию `http` |
-| `x-alloy-discovery.metrics.job` | Да | Значение `job` |
-| `x-alloy-discovery.metrics.profile` | Нет | Scrape-профиль из allowlist; по умолчанию `normal-v1` |
+| `ru.3ops.discovery.metrics.enabled` | Да | `true` |
+| `ru.3ops.discovery.metrics.type` | Да | `prometheus` |
+| `ru.3ops.discovery.metrics.port` | Да | Порт metrics endpoint |
+| `ru.3ops.discovery.metrics.path` | Нет | По умолчанию `/metrics` |
+| `ru.3ops.discovery.metrics.scheme` | Нет | `http` или `https`, по умолчанию `http` |
+| `ru.3ops.discovery.metrics.job` | Да | Значение `job` |
+| `ru.3ops.discovery.metrics.profile` | Нет | Scrape-профиль из allowlist; по умолчанию `normal-v1` |
 
 Произвольные значения interval/timeout в labels не поддерживаются: параметры scrape задаются только выбором профиля (см. раздел [8.2](#82-scrape-профили)).
 
@@ -458,17 +458,17 @@ services:
       - "15692"
 
     labels:
-      x-alloy-discovery.enabled: "true"
-      x-alloy-discovery.version: "0.2"
-      x-alloy-discovery.instance: "rabbitmq-main"
-      x-alloy-discovery.environment: "production"
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.instance: "rabbitmq-main"
+      ru.3ops.discovery.environment: "production"
 
-      x-alloy-discovery.metrics.enabled: "true"
-      x-alloy-discovery.metrics.type: "prometheus"
-      x-alloy-discovery.metrics.port: "15692"
-      x-alloy-discovery.metrics.path: "/metrics"
-      x-alloy-discovery.metrics.job: "rabbitmq"
-      x-alloy-discovery.metrics.profile: "fast-v1"
+      ru.3ops.discovery.metrics.enabled: "true"
+      ru.3ops.discovery.metrics.type: "prometheus"
+      ru.3ops.discovery.metrics.port: "15692"
+      ru.3ops.discovery.metrics.path: "/metrics"
+      ru.3ops.discovery.metrics.job: "rabbitmq"
+      ru.3ops.discovery.metrics.profile: "fast-v1"
 ```
 
 Профиль `fast-v1` требует соответствующей relabel/scrape-пары в конфигурации Alloy; референсная конфигурация включает только пару `normal-v1` (см. раздел [14](#14-reference-implementation)).
@@ -493,15 +493,15 @@ mongodb
 
 | Label | Обязательный | Значение |
 |---|---:|---|
-| `x-alloy-discovery.database.enabled` | Да | `true` |
-| `x-alloy-discovery.database.type` | Да | Тип СУБД |
-| `x-alloy-discovery.database.port` | Нет | Стандартный порт по типу |
-| `x-alloy-discovery.database.instance` | Нет | Логическое имя БД |
-| `x-alloy-discovery.database.name` | Нет | Имя базы для подключения |
-| `x-alloy-discovery.database.user` | Нет | Monitoring user |
-| `x-alloy-discovery.database.secret-id` | Да | Логический идентификатор секрета (раздел [9](#9-secret-contract)) |
-| `x-alloy-discovery.database.sslmode` | Нет | Настройка TLS/SSL |
-| `x-alloy-discovery.database.profile` | Нет | Профиль сбора из allowlist; по умолчанию `standard-v1` |
+| `ru.3ops.discovery.database.enabled` | Да | `true` |
+| `ru.3ops.discovery.database.type` | Да | Тип СУБД |
+| `ru.3ops.discovery.database.port` | Нет | Стандартный порт по типу |
+| `ru.3ops.discovery.database.instance` | Нет | Логическое имя БД |
+| `ru.3ops.discovery.database.name` | Нет | Имя базы для подключения |
+| `ru.3ops.discovery.database.user` | Нет | Monitoring user |
+| `ru.3ops.discovery.database.secret-id` | Да | Логический идентификатор секрета (раздел [9](#9-secret-contract)) |
+| `ru.3ops.discovery.database.sslmode` | Нет | Настройка TLS/SSL |
+| `ru.3ops.discovery.database.profile` | Нет | Профиль сбора из allowlist; по умолчанию `standard-v1` |
 
 #### 10.2.2. PostgreSQL example
 
@@ -513,20 +513,20 @@ services:
       - "5432"
 
     labels:
-      x-alloy-discovery.enabled: "true"
-      x-alloy-discovery.version: "0.2"
-      x-alloy-discovery.environment: "production"
-      x-alloy-discovery.team: "orders"
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "production"
+      ru.3ops.discovery.team: "orders"
 
-      x-alloy-discovery.database.enabled: "true"
-      x-alloy-discovery.database.type: "postgres"
-      x-alloy-discovery.database.port: "5432"
-      x-alloy-discovery.database.instance: "orders-db"
-      x-alloy-discovery.database.name: "postgres"
-      x-alloy-discovery.database.user: "alloy_monitor"
-      x-alloy-discovery.database.secret-id: "postgres-orders"
-      x-alloy-discovery.database.sslmode: "disable"
-      x-alloy-discovery.database.profile: "standard-v1"
+      ru.3ops.discovery.database.enabled: "true"
+      ru.3ops.discovery.database.type: "postgres"
+      ru.3ops.discovery.database.port: "5432"
+      ru.3ops.discovery.database.instance: "orders-db"
+      ru.3ops.discovery.database.name: "postgres"
+      ru.3ops.discovery.database.user: "alloy_monitor"
+      ru.3ops.discovery.database.secret-id: "postgres-orders"
+      ru.3ops.discovery.database.sslmode: "disable"
+      ru.3ops.discovery.database.profile: "standard-v1"
 ```
 
 #### 10.2.3. MariaDB example
@@ -539,16 +539,16 @@ services:
       - "3306"
 
     labels:
-      x-alloy-discovery.enabled: "true"
-      x-alloy-discovery.version: "0.2"
-      x-alloy-discovery.environment: "production"
-      x-alloy-discovery.team: "billing"
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "production"
+      ru.3ops.discovery.team: "billing"
 
-      x-alloy-discovery.database.enabled: "true"
-      x-alloy-discovery.database.type: "mariadb"
-      x-alloy-discovery.database.port: "3306"
-      x-alloy-discovery.database.instance: "billing-db"
-      x-alloy-discovery.database.secret-id: "mariadb-billing"
+      ru.3ops.discovery.database.enabled: "true"
+      ru.3ops.discovery.database.type: "mariadb"
+      ru.3ops.discovery.database.port: "3306"
+      ru.3ops.discovery.database.instance: "billing-db"
+      ru.3ops.discovery.database.secret-id: "mariadb-billing"
 ```
 
 ### 10.3. Domain: logs
@@ -563,14 +563,14 @@ services:
 label отсутствует:
   собирать stdout/stderr как raw
 
-x-alloy-discovery.logs.enabled=true:
+ru.3ops.discovery.logs.enabled=true:
   собирать stdout/stderr
 
-x-alloy-discovery.logs.enabled=false:
+ru.3ops.discovery.logs.enabled=false:
   явно исключить контейнер из сбора логов
 ```
 
-Для логов `x-alloy-discovery.enabled` не является обязательным условием. Это сделано специально, чтобы контейнер без manifest-labels всё равно был виден в Loki.
+Для логов `ru.3ops.discovery.enabled` не является обязательным условием. Это сделано специально, чтобы контейнер без manifest-labels всё равно был виден в Loki.
 
 Рекомендуемая цепочка:
 
@@ -588,12 +588,12 @@ Loki
 
 #### 10.3.2. `logs.profile`
 
-`x-alloy-discovery.logs.profile` — это имя заранее определённого pipeline-профиля из allowlist (см. разделы [8.1](#81-общие-правила) и [8.3](#83-log-профили)).
+`ru.3ops.discovery.logs.profile` — это имя заранее определённого pipeline-профиля из allowlist (см. разделы [8.1](#81-общие-правила) и [8.3](#83-log-профили)).
 
 Пример:
 
 ```yaml
-x-alloy-discovery.logs.profile: "app-type-1-v1"
+ru.3ops.discovery.logs.profile: "app-type-1-v1"
 ```
 
 Значение не должно быть произвольным списком стадий: Alloy выбирает профиль только из allowlist, определённого в конфигурации.
@@ -634,12 +634,12 @@ Pipeline не должен удалять нераспознанные стро�
 
 | Label | Обязательный | Значение |
 |---|---:|---|
-| `x-alloy-discovery.logs.enabled` | Нет | По умолчанию `true`; `false` отключает сбор |
-| `x-alloy-discovery.logs.profile` | Нет | По умолчанию `raw-v1` |
-| `x-alloy-discovery.logs.service` | Нет | Значение `service_name` |
-| `x-alloy-discovery.logs.stream-policy` | Нет | Профиль обработки stdout/stderr |
-| `x-alloy-discovery.logs.redaction-profile` | Нет | Идентификатор политики редактирования |
-| `x-alloy-discovery.logs.drop-profile` | Нет | Идентификатор политики фильтрации шума |
+| `ru.3ops.discovery.logs.enabled` | Нет | По умолчанию `true`; `false` отключает сбор |
+| `ru.3ops.discovery.logs.profile` | Нет | По умолчанию `raw-v1` |
+| `ru.3ops.discovery.logs.service` | Нет | Значение `service_name` |
+| `ru.3ops.discovery.logs.stream-policy` | Нет | Профиль обработки stdout/stderr |
+| `ru.3ops.discovery.logs.redaction-profile` | Нет | Идентификатор политики редактирования |
+| `ru.3ops.discovery.logs.drop-profile` | Нет | Идентификатор политики фильтрации шума |
 
 Для версии `0.2` рекомендуется использовать один composite profile. Дополнительные `redaction-profile` и `drop-profile` зарезервированы для расширения и не обязательны к реализации.
 
@@ -653,14 +653,14 @@ services:
     image: example/orders-api:latest
 
     labels:
-      x-alloy-discovery.enabled: "true"
-      x-alloy-discovery.version: "0.2"
-      x-alloy-discovery.instance: "orders-api"
-      x-alloy-discovery.environment: "production"
-      x-alloy-discovery.team: "orders"
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.instance: "orders-api"
+      ru.3ops.discovery.environment: "production"
+      ru.3ops.discovery.team: "orders"
 
-      x-alloy-discovery.logs.profile: "generic-logfmt-v1"
-      x-alloy-discovery.logs.service: "orders-api"
+      ru.3ops.discovery.logs.profile: "generic-logfmt-v1"
+      ru.3ops.discovery.logs.service: "orders-api"
 ```
 
 Смешанный поток:
@@ -671,8 +671,8 @@ services:
     image: example/legacy-worker:latest
 
     labels:
-      x-alloy-discovery.logs.profile: "mixed-v1"
-      x-alloy-discovery.logs.service: "legacy-worker"
+      ru.3ops.discovery.logs.profile: "mixed-v1"
+      ru.3ops.discovery.logs.service: "legacy-worker"
 ```
 
 Профиль `mixed-v1` может:
@@ -689,7 +689,7 @@ services:
 services:
   load-generator:
     labels:
-      x-alloy-discovery.logs.enabled: "false"
+      ru.3ops.discovery.logs.enabled: "false"
 ```
 
 Это рекомендуется только для:
@@ -709,13 +709,13 @@ services:
 
 | Label | Обязательный | Значение |
 |---|---:|---|
-| `x-alloy-discovery.blackbox.enabled` | Да | `true` |
-| `x-alloy-discovery.blackbox.module` | Да | Например `http_2xx`, `tcp_connect` |
-| `x-alloy-discovery.blackbox.scheme` | Нет | `http` или `https` |
-| `x-alloy-discovery.blackbox.address` | Нет | Адрес проверки; по умолчанию адрес контейнера |
-| `x-alloy-discovery.blackbox.port` | Да | Порт проверки |
-| `x-alloy-discovery.blackbox.path` | Нет | HTTP path |
-| `x-alloy-discovery.blackbox.profile` | Нет | Scrape-профиль из allowlist; по умолчанию `normal-v1` |
+| `ru.3ops.discovery.blackbox.enabled` | Да | `true` |
+| `ru.3ops.discovery.blackbox.module` | Да | Например `http_2xx`, `tcp_connect` |
+| `ru.3ops.discovery.blackbox.scheme` | Нет | `http` или `https` |
+| `ru.3ops.discovery.blackbox.address` | Нет | Адрес проверки; по умолчанию адрес контейнера |
+| `ru.3ops.discovery.blackbox.port` | Да | Порт проверки |
+| `ru.3ops.discovery.blackbox.path` | Нет | HTTP path |
+| `ru.3ops.discovery.blackbox.profile` | Нет | Scrape-профиль из allowlist; по умолчанию `normal-v1` |
 
 Значение `module` должно входить в allowlist модулей blackbox exporter, заданный конфигурацией Alloy. Произвольные модули из labels не принимаются.
 
@@ -723,14 +723,14 @@ services:
 
 ```yaml
 labels:
-  x-alloy-discovery.enabled: "true"
+  ru.3ops.discovery.enabled: "true"
 
-  x-alloy-discovery.blackbox.enabled: "true"
-  x-alloy-discovery.blackbox.module: "http_2xx"
-  x-alloy-discovery.blackbox.scheme: "http"
-  x-alloy-discovery.blackbox.port: "8080"
-  x-alloy-discovery.blackbox.path: "/health"
-  x-alloy-discovery.blackbox.profile: "fast-v1"
+  ru.3ops.discovery.blackbox.enabled: "true"
+  ru.3ops.discovery.blackbox.module: "http_2xx"
+  ru.3ops.discovery.blackbox.scheme: "http"
+  ru.3ops.discovery.blackbox.port: "8080"
+  ru.3ops.discovery.blackbox.path: "/health"
+  ru.3ops.discovery.blackbox.profile: "fast-v1"
 ```
 
 ### 10.5. Domain: otel
@@ -741,12 +741,12 @@ labels:
 
 | Label | Обязательный | Значение |
 |---|---:|---|
-| `x-alloy-discovery.otel.enabled` | Да | `true` |
-| `x-alloy-discovery.otel.protocol` | Да | `grpc` или `http` |
-| `x-alloy-discovery.otel.service` | Нет | Имя сервиса |
-| `x-alloy-discovery.otel.traces` | Нет | `true`/`false` |
-| `x-alloy-discovery.otel.metrics` | Нет | `true`/`false` |
-| `x-alloy-discovery.otel.logs` | Нет | `true`/`false` |
+| `ru.3ops.discovery.otel.enabled` | Да | `true` |
+| `ru.3ops.discovery.otel.protocol` | Да | `grpc` или `http` |
+| `ru.3ops.discovery.otel.service` | Нет | Имя сервиса |
+| `ru.3ops.discovery.otel.traces` | Нет | `true`/`false` |
+| `ru.3ops.discovery.otel.metrics` | Нет | `true`/`false` |
+| `ru.3ops.discovery.otel.logs` | Нет | `true`/`false` |
 
 Этот домен в основном документирует ожидаемое поведение приложения. Alloy обычно поднимает общий OTLP receiver, а не отдельный receiver на каждый контейнер.
 
@@ -759,11 +759,11 @@ labels:
 #### 10.6.1. Labels
 
 ```text
-x-alloy-discovery.snmp.enabled
-x-alloy-discovery.snmp.address
-x-alloy-discovery.snmp.module
-x-alloy-discovery.snmp.auth-id
-x-alloy-discovery.snmp.profile
+ru.3ops.discovery.snmp.enabled
+ru.3ops.discovery.snmp.address
+ru.3ops.discovery.snmp.module
+ru.3ops.discovery.snmp.auth-id
+ru.3ops.discovery.snmp.profile
 ```
 
 Секреты SNMP community/SNMPv3 хранятся вне labels и выбираются через `auth-id`. Файл секрета: `/run/alloy-secrets/<auth-id>.snmp` по общему контракту раздела [9](#9-secret-contract).
@@ -775,11 +775,11 @@ x-alloy-discovery.snmp.profile
 #### 10.7.1. Labels
 
 ```text
-x-alloy-discovery.ipmi.enabled
-x-alloy-discovery.ipmi.address
-x-alloy-discovery.ipmi.module
-x-alloy-discovery.ipmi.secret-id
-x-alloy-discovery.ipmi.profile
+ru.3ops.discovery.ipmi.enabled
+ru.3ops.discovery.ipmi.address
+ru.3ops.discovery.ipmi.module
+ru.3ops.discovery.ipmi.secret-id
+ru.3ops.discovery.ipmi.profile
 ```
 
 Файл секрета: `/run/alloy-secrets/<secret-id>.ipmi` по общему контракту раздела [9](#9-secret-contract).
@@ -808,7 +808,7 @@ Alloy не обязан напрямую реализовывать IPMI. Он �
 
 ### 12.1. Добавление target
 
-1. Контейнер запускается с `x-alloy-discovery.enabled=true`.
+1. Контейнер запускается с `ru.3ops.discovery.enabled=true`.
 2. `discovery.docker` обнаруживает контейнер.
 3. `discovery.relabel` проверяет domain labels.
 4. Alloy создаёт соответствующий pipeline.
@@ -928,15 +928,15 @@ docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.17.1 \
 
 ### 14.1. Параметры окружения
 
-Deployment-специфичные значения настраиваются переменными окружения через `coalesce(sys.env("..."), <default>)`; при отсутствии переменной действует значение по умолчанию. Префикс `XAD_` = X-Alloy Discovery.
+Deployment-специфичные значения настраиваются переменными окружения через `coalesce(sys.env("..."), <default>)`; при отсутствии переменной действует значение по умолчанию. Префикс `RU_3OPS_DISCOVERY_` = 3ops Discovery.
 
 | Переменная | Назначение | Default |
 |---|---|---|
-| `XAD_DOCKER_HOST` | Адрес Docker daemon | `unix:///var/run/docker.sock` |
-| `XAD_DOCKER_REFRESH_INTERVAL` | Интервал обновления списка targets | `30s` |
-| `XAD_SECRETS_DIR` | Каталог файлов секретов (см. [9](#9-secret-contract)) | `/run/alloy-secrets` |
-| `XAD_REMOTE_WRITE_URL` | Endpoint метрик (протокол Prometheus remote_write) | `http://prometheus:9090/api/v1/write` |
-| `XAD_LOKI_PUSH_URL` | Endpoint логов (Loki push API) | `http://loki:3100/loki/api/v1/push` |
+| `RU_3OPS_DISCOVERY_DOCKER_HOST` | Адрес Docker daemon | `unix:///var/run/docker.sock` |
+| `RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL` | Интервал обновления списка targets | `30s` |
+| `RU_3OPS_DISCOVERY_SECRETS_DIR` | Каталог файлов секретов (см. [9](#9-secret-contract)) | `/run/alloy-secrets` |
+| `RU_3OPS_DISCOVERY_REMOTE_WRITE_URL` | Endpoint метрик (протокол Prometheus remote_write) | `http://prometheus:9090/api/v1/write` |
+| `RU_3OPS_DISCOVERY_LOKI_PUSH_URL` | Endpoint логов (Loki push API) | `http://loki:3100/loki/api/v1/push` |
 
 Параметры scrape-профилей (interval/timeout) переменными окружения не настраиваются: они являются частью контракта (см. [8.2](#82-scrape-профили)), а не deployment-конфигурацией.
 
@@ -959,36 +959,36 @@ Deployment-специфичные значения настраиваются п
 Для уменьшения дублирования можно использовать YAML anchors:
 
 ```yaml
-x-alloy-discovery-common: &alloy-discovery-common
-  x-alloy-discovery.enabled: "true"
-  x-alloy-discovery.version: "0.2"
-  x-alloy-discovery.environment: "production"
+ru.3ops.discovery-common: &alloy-discovery-common
+  ru.3ops.discovery.enabled: "true"
+  ru.3ops.discovery.version: "0.2"
+  ru.3ops.discovery.environment: "production"
 
 services:
   rabbitmq:
     image: rabbitmq:4-management
     labels:
       <<: *alloy-discovery-common
-      x-alloy-discovery.instance: "rabbitmq-main"
-      x-alloy-discovery.team: "platform"
+      ru.3ops.discovery.instance: "rabbitmq-main"
+      ru.3ops.discovery.team: "platform"
 
-      x-alloy-discovery.metrics.enabled: "true"
-      x-alloy-discovery.metrics.type: "prometheus"
-      x-alloy-discovery.metrics.port: "15692"
-      x-alloy-discovery.metrics.path: "/metrics"
-      x-alloy-discovery.metrics.job: "rabbitmq"
+      ru.3ops.discovery.metrics.enabled: "true"
+      ru.3ops.discovery.metrics.type: "prometheus"
+      ru.3ops.discovery.metrics.port: "15692"
+      ru.3ops.discovery.metrics.path: "/metrics"
+      ru.3ops.discovery.metrics.job: "rabbitmq"
 
   postgres:
     image: postgres:18
     labels:
       <<: *alloy-discovery-common
-      x-alloy-discovery.instance: "orders-postgres"
-      x-alloy-discovery.team: "orders"
+      ru.3ops.discovery.instance: "orders-postgres"
+      ru.3ops.discovery.team: "orders"
 
-      x-alloy-discovery.database.enabled: "true"
-      x-alloy-discovery.database.type: "postgres"
-      x-alloy-discovery.database.port: "5432"
-      x-alloy-discovery.database.secret-id: "postgres-orders"
+      ru.3ops.discovery.database.enabled: "true"
+      ru.3ops.discovery.database.type: "postgres"
+      ru.3ops.discovery.database.port: "5432"
+      ru.3ops.discovery.database.secret-id: "postgres-orders"
 ```
 
 ### 15.2. Итоговый минимальный контракт
@@ -997,39 +997,39 @@ services:
 
 ```yaml
 labels:
-  x-alloy-discovery.enabled: "true"
-  x-alloy-discovery.version: "0.2"
-  x-alloy-discovery.instance: "rabbitmq-main"
+  ru.3ops.discovery.enabled: "true"
+  ru.3ops.discovery.version: "0.2"
+  ru.3ops.discovery.instance: "rabbitmq-main"
 
-  x-alloy-discovery.metrics.enabled: "true"
-  x-alloy-discovery.metrics.type: "prometheus"
-  x-alloy-discovery.metrics.port: "15692"
-  x-alloy-discovery.metrics.path: "/metrics"
-  x-alloy-discovery.metrics.job: "rabbitmq"
+  ru.3ops.discovery.metrics.enabled: "true"
+  ru.3ops.discovery.metrics.type: "prometheus"
+  ru.3ops.discovery.metrics.port: "15692"
+  ru.3ops.discovery.metrics.path: "/metrics"
+  ru.3ops.discovery.metrics.job: "rabbitmq"
 ```
 
 Для PostgreSQL:
 
 ```yaml
 labels:
-  x-alloy-discovery.enabled: "true"
-  x-alloy-discovery.version: "0.2"
-  x-alloy-discovery.instance: "orders-postgres"
+  ru.3ops.discovery.enabled: "true"
+  ru.3ops.discovery.version: "0.2"
+  ru.3ops.discovery.instance: "orders-postgres"
 
-  x-alloy-discovery.database.enabled: "true"
-  x-alloy-discovery.database.type: "postgres"
-  x-alloy-discovery.database.port: "5432"
-  x-alloy-discovery.database.secret-id: "postgres-orders"
+  ru.3ops.discovery.database.enabled: "true"
+  ru.3ops.discovery.database.type: "postgres"
+  ru.3ops.discovery.database.port: "5432"
+  ru.3ops.discovery.database.secret-id: "postgres-orders"
 ```
 
 Для логов:
 
 ```yaml
 labels:
-  x-alloy-discovery.version: "0.2"
+  ru.3ops.discovery.version: "0.2"
 
-  x-alloy-discovery.logs.profile: "generic-logfmt-v1"
-  x-alloy-discovery.logs.service: "orders-api"
+  ru.3ops.discovery.logs.profile: "generic-logfmt-v1"
+  ru.3ops.discovery.logs.service: "orders-api"
 ```
 
 Без labels контейнер всё равно собирается как `raw-v1`.
@@ -1038,7 +1038,7 @@ labels:
 
 ```yaml
 labels:
-  x-alloy-discovery.logs.enabled: "false"
+  ru.3ops.discovery.logs.enabled: "false"
 ```
 
 ## 16. Out of scope

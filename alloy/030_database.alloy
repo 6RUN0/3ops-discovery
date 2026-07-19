@@ -10,15 +10,15 @@
 // The foreach block is experimental as of Alloy v1.17: run and validate
 // with --stability.level=experimental.
 //
-// Environment overrides (XAD_ = X-Alloy Discovery):
-//   XAD_SECRETS_DIR  directory with secret files (default /run/alloy-secrets)
+// Environment overrides (RU_3OPS_DISCOVERY_ = 3ops Discovery):
+//   RU_3OPS_DISCOVERY_SECRETS_DIR  directory with secret files (default /run/alloy-secrets)
 
 discovery.relabel "database_postgres" {
 	targets = discovery.docker.containers.targets
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_database_enabled",
+			"__meta_docker_container_label_ru_3ops_discovery_database_enabled",
 		]
 		regex  = "true"
 		action = "keep"
@@ -26,7 +26,7 @@ discovery.relabel "database_postgres" {
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_database_type",
+			"__meta_docker_container_label_ru_3ops_discovery_database_type",
 		]
 		regex  = "postgres"
 		action = "keep"
@@ -38,7 +38,7 @@ discovery.relabel "database_postgres" {
 	// keeps the pattern safe if copied into a non-anchoring context.
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_database_secret_id",
+			"__meta_docker_container_label_ru_3ops_discovery_database_secret_id",
 		]
 		regex  = "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$"
 		action = "keep"
@@ -54,7 +54,7 @@ discovery.relabel "database_postgres" {
 
 	rule {
 		source_labels = [
-			"__meta_docker_container_label_x_alloy_discovery_database_port",
+			"__meta_docker_container_label_ru_3ops_discovery_database_port",
 		]
 		regex        = "(.+)"
 		target_label = "__tmp_database_port"
@@ -70,11 +70,11 @@ discovery.relabel "database_postgres" {
 foreach "postgres" {
 	collection = discovery.relabel.database_postgres.output
 	var        = "each"
-	id         = "__meta_docker_container_label_x_alloy_discovery_database_secret_id"
+	id         = "__meta_docker_container_label_ru_3ops_discovery_database_secret_id"
 
 	template {
 		local.file "dsn" {
-			filename  = coalesce(sys.env("XAD_SECRETS_DIR"), "/run/alloy-secrets") + "/" + each["__meta_docker_container_label_x_alloy_discovery_database_secret_id"] + ".dsn"
+			filename  = coalesce(sys.env("RU_3OPS_DISCOVERY_SECRETS_DIR"), "/run/alloy-secrets") + "/" + each["__meta_docker_container_label_ru_3ops_discovery_database_secret_id"] + ".dsn"
 			is_secret = true
 		}
 

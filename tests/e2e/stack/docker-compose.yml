@@ -1,5 +1,5 @@
 ---
-# X-Alloy Discovery e2e stack. The compose project name is unique per
+# 3ops Discovery e2e stack. The compose project name is unique per
 # run (xad-e2e-<run-id>, passed by the fixture with -p); assertions
 # filter on the promoted compose_project label because a shared Docker
 # daemon exposes foreign containers to discovery too.
@@ -42,13 +42,13 @@ services:
     environment:
       # The contract env var is exercised for real: no socket mount in
       # this container at all.
-      XAD_DOCKER_HOST: tcp://docker-socket-proxy:2375
+      RU_3OPS_DISCOVERY_DOCKER_HOST: tcp://docker-socket-proxy:2375
       # Contract intervals (normal-v1 30s) must not change; only the
       # discovery refresh is accelerated for test budgets.
-      XAD_DOCKER_REFRESH_INTERVAL: 5s
+      RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL: 5s
     volumes:
-      - ${XAD_E2E_CONFIG_DIR:?set by the pytest fixture}:/etc/alloy:ro
-      - ${XAD_E2E_SECRETS_DIR:?set by the pytest fixture}:/run/alloy-secrets:ro
+      - ${RU_3OPS_DISCOVERY_E2E_CONFIG_DIR:?set by the pytest fixture}:/etc/alloy:ro
+      - ${RU_3OPS_DISCOVERY_E2E_SECRETS_DIR:?set by the pytest fixture}:/run/alloy-secrets:ro
     networks:
       - telemetry
       - docker-socket
@@ -67,14 +67,14 @@ services:
       # Dogfooding: the collector monitors itself through its own
       # discovery. The FULL mandatory metrics.* set, including
       # type=prometheus (020 hard-keeps on it).
-      - "x-alloy-discovery.enabled=true"
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.environment=e2e"
-      - "x-alloy-discovery.team=platform"
-      - "x-alloy-discovery.metrics.enabled=true"
-      - "x-alloy-discovery.metrics.type=prometheus"
-      - "x-alloy-discovery.metrics.port=12345"
-      - "x-alloy-discovery.metrics.job=alloy"
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+      ru.3ops.discovery.metrics.enabled: "true"
+      ru.3ops.discovery.metrics.type: "prometheus"
+      ru.3ops.discovery.metrics.port: "12345"
+      ru.3ops.discovery.metrics.job: "alloy"
 
   prometheus:
     image: prom/prometheus:v3.13.1
@@ -96,14 +96,14 @@ services:
       timeout: 3s
       retries: 12
     labels:
-      - "x-alloy-discovery.enabled=true"
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.environment=e2e"
-      - "x-alloy-discovery.team=platform"
-      - "x-alloy-discovery.metrics.enabled=true"
-      - "x-alloy-discovery.metrics.type=prometheus"
-      - "x-alloy-discovery.metrics.port=9090"
-      - "x-alloy-discovery.metrics.job=prometheus"
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+      ru.3ops.discovery.metrics.enabled: "true"
+      ru.3ops.discovery.metrics.type: "prometheus"
+      ru.3ops.discovery.metrics.port: "9090"
+      ru.3ops.discovery.metrics.job: "prometheus"
 
   loki:
     # The grafana/loki image is distroless: no shell, wget or curl, so
@@ -123,20 +123,20 @@ services:
     ports:
       - "127.0.0.1:0:3100"
     labels:
-      - "x-alloy-discovery.enabled=true"
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.environment=e2e"
-      - "x-alloy-discovery.team=platform"
-      - "x-alloy-discovery.metrics.enabled=true"
-      - "x-alloy-discovery.metrics.type=prometheus"
-      - "x-alloy-discovery.metrics.port=3100"
-      - "x-alloy-discovery.metrics.job=loki"
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+      ru.3ops.discovery.metrics.enabled: "true"
+      ru.3ops.discovery.metrics.type: "prometheus"
+      ru.3ops.discovery.metrics.port: "3100"
+      ru.3ops.discovery.metrics.job: "loki"
 
   postgres:
     image: postgres:18
     environment:
-      POSTGRES_USER: ${XAD_E2E_PG_USER:?set by the pytest fixture}
-      POSTGRES_PASSWORD: ${XAD_E2E_PG_PASSWORD:?set by the pytest fixture}
+      POSTGRES_USER: ${RU_3OPS_DISCOVERY_E2E_PG_USER:?set by the pytest fixture}
+      POSTGRES_PASSWORD: ${RU_3OPS_DISCOVERY_E2E_PG_PASSWORD:?set by the pytest fixture}
     networks:
       - telemetry
     expose:
@@ -149,13 +149,13 @@ services:
     labels:
       # database.port is DELIBERATELY absent: the "no port label means
       # the type's standard port" path is under test.
-      - "x-alloy-discovery.enabled=true"
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.environment=e2e"
-      - "x-alloy-discovery.team=data"
-      - "x-alloy-discovery.database.enabled=true"
-      - "x-alloy-discovery.database.type=postgres"
-      - "x-alloy-discovery.database.secret-id=postgres-orders"
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "data"
+      ru.3ops.discovery.database.enabled: "true"
+      ru.3ops.discovery.database.type: "postgres"
+      ru.3ops.discovery.database.secret-id: "postgres-orders"
 
   db-badsecret:
     # Negative scenario: everything valid except the secret-id, which
@@ -163,8 +163,8 @@ services:
     # the target; no exporter appears.
     image: postgres:18
     environment:
-      POSTGRES_USER: ${XAD_E2E_PG_USER:?set by the pytest fixture}
-      POSTGRES_PASSWORD: ${XAD_E2E_PG_PASSWORD:?set by the pytest fixture}
+      POSTGRES_USER: ${RU_3OPS_DISCOVERY_E2E_PG_USER:?set by the pytest fixture}
+      POSTGRES_PASSWORD: ${RU_3OPS_DISCOVERY_E2E_PG_PASSWORD:?set by the pytest fixture}
     networks:
       - telemetry
     expose:
@@ -175,13 +175,13 @@ services:
       timeout: 3s
       retries: 12
     labels:
-      - "x-alloy-discovery.enabled=true"
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.environment=e2e"
-      - "x-alloy-discovery.team=data"
-      - "x-alloy-discovery.database.enabled=true"
-      - "x-alloy-discovery.database.type=postgres"
-      - "x-alloy-discovery.database.secret-id=bad/../id"
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "data"
+      ru.3ops.discovery.database.enabled: "true"
+      ru.3ops.discovery.database.type: "postgres"
+      ru.3ops.discovery.database.secret-id: "bad/../id"
 
   rabbitmq:
     # Native prometheus endpoint (manifest example 10.1.2), but with
@@ -201,16 +201,16 @@ services:
       timeout: 5s
       retries: 12
     labels:
-      - "x-alloy-discovery.enabled=true"
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.environment=e2e"
-      - "x-alloy-discovery.team=platform"
-      - "x-alloy-discovery.metrics.enabled=true"
-      - "x-alloy-discovery.metrics.type=prometheus"
-      - "x-alloy-discovery.metrics.port=15692"
-      - "x-alloy-discovery.metrics.path=/metrics"
-      - "x-alloy-discovery.metrics.job=rabbitmq"
-      - "x-alloy-discovery.metrics.profile=normal-v1"
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+      ru.3ops.discovery.metrics.enabled: "true"
+      ru.3ops.discovery.metrics.type: "prometheus"
+      ru.3ops.discovery.metrics.port: "15692"
+      ru.3ops.discovery.metrics.path: "/metrics"
+      ru.3ops.discovery.metrics.job: "rabbitmq"
+      ru.3ops.discovery.metrics.profile: "normal-v1"
 
   app-metrics:
     build: ./app
@@ -221,15 +221,15 @@ services:
     expose:
       - "8000"
     labels:
-      - "x-alloy-discovery.enabled=true"
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.environment=e2e"
-      - "x-alloy-discovery.team=apps"
-      - "x-alloy-discovery.metrics.enabled=true"
-      - "x-alloy-discovery.metrics.type=prometheus"
-      - "x-alloy-discovery.metrics.port=8000"
-      - "x-alloy-discovery.metrics.job=app-metrics"
-      - "x-alloy-discovery.logs.service=app-metrics"
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "apps"
+      ru.3ops.discovery.metrics.enabled: "true"
+      ru.3ops.discovery.metrics.type: "prometheus"
+      ru.3ops.discovery.metrics.port: "8000"
+      ru.3ops.discovery.metrics.job: "app-metrics"
+      ru.3ops.discovery.logs.service: "app-metrics"
 
   app-logs-json:
     build: ./app
@@ -238,11 +238,11 @@ services:
     networks:
       - telemetry
     labels:
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.environment=e2e"
-      - "x-alloy-discovery.team=apps"
-      - "x-alloy-discovery.logs.profile=generic-json-v1"
-      - "x-alloy-discovery.logs.service=app-logs-json"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "apps"
+      ru.3ops.discovery.logs.profile: "generic-json-v1"
+      ru.3ops.discovery.logs.service: "app-logs-json"
 
   app-logs-logfmt:
     build: ./app
@@ -251,11 +251,11 @@ services:
     networks:
       - telemetry
     labels:
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.environment=e2e"
-      - "x-alloy-discovery.team=apps"
-      - "x-alloy-discovery.logs.profile=generic-logfmt-v1"
-      - "x-alloy-discovery.logs.service=app-logs-logfmt"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "apps"
+      ru.3ops.discovery.logs.profile: "generic-logfmt-v1"
+      ru.3ops.discovery.logs.service: "app-logs-logfmt"
 
   app-logs-mixed:
     build: ./app
@@ -264,11 +264,11 @@ services:
     networks:
       - telemetry
     labels:
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.environment=e2e"
-      - "x-alloy-discovery.team=apps"
-      - "x-alloy-discovery.logs.profile=mixed-v1"
-      - "x-alloy-discovery.logs.service=app-logs-mixed"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "apps"
+      ru.3ops.discovery.logs.profile: "mixed-v1"
+      ru.3ops.discovery.logs.service: "app-logs-mixed"
 
   app-logs-raw:
     # No manifest labels at all: the collect-by-default policy
@@ -288,9 +288,9 @@ services:
     networks:
       - telemetry
     labels:
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.logs.profile=no-such-profile-v9"
-      - "x-alloy-discovery.logs.service=app-logs-unknown"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.logs.profile: "no-such-profile-v9"
+      ru.3ops.discovery.logs.service: "app-logs-unknown"
 
   app-fuzz:
     # Pipeline resilience to garbage: fuzz stdout under generic-json-v1
@@ -306,16 +306,16 @@ services:
     expose:
       - "8000"
     labels:
-      - "x-alloy-discovery.enabled=true"
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.environment=e2e"
-      - "x-alloy-discovery.team=apps"
-      - "x-alloy-discovery.metrics.enabled=true"
-      - "x-alloy-discovery.metrics.type=prometheus"
-      - "x-alloy-discovery.metrics.port=8000"
-      - "x-alloy-discovery.metrics.job=app-fuzz"
-      - "x-alloy-discovery.logs.profile=generic-json-v1"
-      - "x-alloy-discovery.logs.service=app-fuzz"
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "apps"
+      ru.3ops.discovery.metrics.enabled: "true"
+      ru.3ops.discovery.metrics.type: "prometheus"
+      ru.3ops.discovery.metrics.port: "8000"
+      ru.3ops.discovery.metrics.job: "app-fuzz"
+      ru.3ops.discovery.logs.profile: "generic-json-v1"
+      ru.3ops.discovery.logs.service: "app-fuzz"
 
   app-burst:
     # Burst smoke, not a benchmark: ~1000 numbered json lines/s for
@@ -327,9 +327,9 @@ services:
     networks:
       - telemetry
     labels:
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.logs.profile=generic-json-v1"
-      - "x-alloy-discovery.logs.service=app-burst"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.logs.profile: "generic-json-v1"
+      ru.3ops.discovery.logs.service: "app-burst"
 
   app-silent:
     # Explicit opt-out (manifest 10.3.7): stdout keeps flowing, Loki
@@ -341,5 +341,5 @@ services:
     networks:
       - telemetry
     labels:
-      - "x-alloy-discovery.version=0.2"
-      - "x-alloy-discovery.logs.enabled=false"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.logs.enabled: "false"

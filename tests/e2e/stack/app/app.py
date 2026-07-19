@@ -1,13 +1,13 @@
 """
-X-Alloy Discovery e2e mini-app.
+3ops Discovery e2e mini-app.
 
 One image, behaviour via env (manifest 10.3):
-  APP_LOG_FORMAT      json | logfmt | raw | mixed | fuzz  (default json)
-  APP_METRICS_PORT    serve prometheus_client /metrics on this port
-  APP_BURST           "<lines_per_sec>:<seconds>" burst of numbered
-                      json lines at startup, then the normal pace
-  APP_FUZZ_TELEMETRY  "1": garbage unicode labels + extreme gauge
-                      values (counters stay monotonic)
+    APP_LOG_FORMAT      json | logfmt | raw | mixed | fuzz  (default json)
+    APP_METRICS_PORT    serve prometheus_client /metrics on this port
+    APP_BURST           "<lines_per_sec>:<seconds>" burst of numbered
+                        json lines at startup, then the normal pace
+    APP_FUZZ_TELEMETRY  "1": garbage unicode labels + extreme gauge
+                        values (counters stay monotonic)
 
 Emission cadence: one log line and one counter increment at least every
 EMIT_PERIOD seconds, so e2e timeouts are computable.

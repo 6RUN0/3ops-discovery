@@ -49,8 +49,8 @@ def test_loki_allowlist_anchor() -> None:
 
 def test_env_defaults_anchor() -> None:
     env = md.env_defaults()
-    assert env["XAD_DOCKER_REFRESH_INTERVAL"] == "30s"
-    assert env["XAD_SECRETS_DIR"] == "/run/alloy-secrets"
+    assert env["RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL"] == "30s"
+    assert env["RU_3OPS_DISCOVERY_SECRETS_DIR"] == "/run/alloy-secrets"
     assert len(env) == 5
 
 

@@ -7,6 +7,49 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "3ops-discovery"
+version = "0.0.0"
+source = { virtual = "." }
+
+[package.dev-dependencies]
+dev = [
+    { name = "nox" },
+    { name = "pre-commit" },
+]
+lint = [
+    { name = "mypy" },
+    { name = "ruff" },
+    { name = "types-requests" },
+]
+test = [
+    { name = "prometheus-client" },
+    { name = "pytest" },
+    { name = "pytest-timeout" },
+    { name = "requests" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "nox", specifier = ">=2026.7.11" },
+    { name = "pre-commit", specifier = ">=4.6.0" },
+]
+lint = [
+    { name = "mypy", specifier = ">=2.3.0" },
+    { name = "ruff", specifier = ">=0.15.22" },
+    { name = "types-requests", specifier = ">=2.33.0.20260712" },
+]
+test = [
+    { name = "prometheus-client", specifier = ">=0.25.0" },
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-timeout", specifier = ">=2.4.0" },
+    { name = "requests", specifier = ">=2.34.2" },
+    { name = "structlog", specifier = ">=26.1.0" },
+]
+
+[[package]]
 name = "argcomplete"
 version = "3.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -580,47 +623,4 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/34/d9/b477fddb68840b570af8b22afe9b035cbc277b5fb7b33dea390617a8b10f/virtualenv-21.6.1.tar.gz", hash = "sha256:15f978b7cd329f24855ff4a0c4b4899cc7678589f49adbdcbbb4d3232e641128", size = 5526620, upload-time = "2026-07-10T19:33:53.312Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c1/7c/4e7225d46d634a0d8d534dd8a6ce0c319d09b4d0cf0337eb314ca4789d8c/virtualenv-21.6.1-py3-none-any.whl", hash = "sha256:afe991df855715a2b2f60edfcc0107ef95a79fdfd8cb4cdaa71603d1c12e463b", size = 5506392, upload-time = "2026-07-10T19:33:51.629Z" },
-]
-
-[[package]]
-name = "x-alloy-discovery"
-version = "0.0.0"
-source = { virtual = "." }
-
-[package.dev-dependencies]
-dev = [
-    { name = "nox" },
-    { name = "pre-commit" },
-]
-lint = [
-    { name = "mypy" },
-    { name = "ruff" },
-    { name = "types-requests" },
-]
-test = [
-    { name = "prometheus-client" },
-    { name = "pytest" },
-    { name = "pytest-timeout" },
-    { name = "requests" },
-    { name = "structlog" },
-]
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "nox", specifier = ">=2026.7.11" },
-    { name = "pre-commit", specifier = ">=4.6.0" },
-]
-lint = [
-    { name = "mypy", specifier = ">=2.3.0" },
-    { name = "ruff", specifier = ">=0.15.22" },
-    { name = "types-requests", specifier = ">=2.33.0.20260712" },
-]
-test = [
-    { name = "prometheus-client", specifier = ">=0.25.0" },
-    { name = "pytest", specifier = ">=9.1.1" },
-    { name = "pytest-timeout", specifier = ">=2.4.0" },
-    { name = "requests", specifier = ">=2.34.2" },
-    { name = "structlog", specifier = ">=26.1.0" },
 ]

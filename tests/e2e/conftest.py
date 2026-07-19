@@ -219,7 +219,10 @@ def _write_secrets(secrets_dir: Path) -> dict[str, str]:
         "?sslmode=disable"
     )
     (secrets_dir / "postgres-orders.dsn").write_text(dsn, encoding="ascii")
-    return {"XAD_E2E_PG_USER": user, "XAD_E2E_PG_PASSWORD": password}
+    return {
+        "RU_3OPS_DISCOVERY_E2E_PG_USER": user,
+        "RU_3OPS_DISCOVERY_E2E_PG_PASSWORD": password,
+    }
 
 
 def _collect_diagnostics(stack: Stack, out_dir: Path) -> None:
@@ -265,8 +268,8 @@ def stack(
     secrets_dir = tmp_path_factory.mktemp("alloy-secrets")
     env = {
         **os.environ,
-        "XAD_E2E_CONFIG_DIR": str(config_dir),
-        "XAD_E2E_SECRETS_DIR": str(secrets_dir),
+        "RU_3OPS_DISCOVERY_E2E_CONFIG_DIR": str(config_dir),
+        "RU_3OPS_DISCOVERY_E2E_SECRETS_DIR": str(secrets_dir),
         **_write_secrets(secrets_dir),
     }
     compose_cmd = (
