@@ -499,3 +499,49 @@ services:
       ru.3ops.discovery.otel.metrics: "true"
       ru.3ops.discovery.otel.logs: "true"
       ru.3ops.discovery.logs.enabled: "false"
+
+  blackbox-probe:
+    # Blackbox domain (manifest 10.4): this container is not scraped for its
+    # own metrics -- Alloy PROBES it over HTTP via prometheus.exporter.blackbox
+    # (module http_2xx) and emits probe_success. The app image already serves
+    # HTTP; the probe hits its metrics port.
+    build: ./app
+    environment:
+      APP_METRICS_PORT: "8080"
+    networks:
+      - telemetry
+    expose:
+      - "8080"
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+      ru.3ops.discovery.blackbox.enabled: "true"
+      ru.3ops.discovery.blackbox.module: "http_2xx"
+      ru.3ops.discovery.blackbox.port: "8080"
+      ru.3ops.discovery.blackbox.path: "/metrics"
+
+  blackbox-badscheme:
+    # Negative scenario (manifest 11, fail-closed): everything valid except
+    # scheme "ftp", which is neither http nor https. The discovery.relabel
+    # "blackbox" scheme keep-rule (regex "(https?)?") must DROP this target
+    # -- no probe URL is composed, no probe_success emitted. Proves the
+    # scheme allowlist is fail-closed, mirroring db-badsecret in 030.
+    build: ./app
+    environment:
+      APP_METRICS_PORT: "8080"
+    networks:
+      - telemetry
+    expose:
+      - "8080"
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+      ru.3ops.discovery.blackbox.enabled: "true"
+      ru.3ops.discovery.blackbox.module: "http_2xx"
+      ru.3ops.discovery.blackbox.port: "8080"
+      ru.3ops.discovery.blackbox.path: "/metrics"
+      ru.3ops.discovery.blackbox.scheme: "ftp"
