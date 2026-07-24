@@ -6,6 +6,7 @@ docs/superpowers/
 
 # Never commit telemetry secrets (manifest section 9)
 *.dsn
+*.redispass
 *.snmp
 *.ipmi
 .env

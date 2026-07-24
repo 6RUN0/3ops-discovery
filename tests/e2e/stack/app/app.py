@@ -2,12 +2,15 @@
 3ops Discovery e2e mini-app.
 
 One image, behaviour via env (manifest 10.3):
-    APP_LOG_FORMAT      json | logfmt | raw | mixed | fuzz  (default json)
+    APP_LOG_FORMAT      json | logfmt | raw | mixed | fuzz |
+                        python-traceback | java-traceback  (default json)
     APP_METRICS_PORT    serve prometheus_client /metrics on this port
     APP_BURST           "<lines_per_sec>:<seconds>" burst of numbered
                         json lines at startup, then the normal pace
     APP_FUZZ_TELEMETRY  "1": garbage unicode labels + extreme gauge
                         values (counters stay monotonic)
+    APP_OTLP_ENDPOINT   OTLP/HTTP base URL (e.g. http://alloy:4318):
+                        emit metrics and logs via OTLP instead of stdout
 
 Emission cadence: one log line and one counter increment at least every
 EMIT_PERIOD seconds, so e2e timeouts are computable.
@@ -15,11 +18,14 @@ EMIT_PERIOD seconds, so e2e timeouts are computable.
 
 from __future__ import annotations
 
+import datetime
 import itertools
 import json
+import logging
 import os
 import sys
 import time
+import traceback
 
 from prometheus_client import Counter, Gauge, start_http_server
 
@@ -97,11 +103,46 @@ def run_burst(rate: int, seconds: float) -> None:
     print(json.dumps({"event": "burst-done", "total": total}), flush=True)
 
 
+def _stamp(seq: int) -> str:
+    # Deterministic monotone-ish timestamp; UTC ISO, no random().
+    base = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
+    ts = base + datetime.timedelta(seconds=seq)
+    return ts.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def python_traceback_block(seq: int) -> str:
+    """Build a real Python traceback prefixed by one timestamped header."""
+    try:
+        raise ValueError(f"synthetic failure {seq}")  # noqa: TRY301
+    except ValueError:
+        tb = traceback.format_exc().rstrip("\n")
+    return f"{_stamp(seq)} ERROR request {seq} failed\n{tb}"
+
+
+def java_traceback_block(seq: int) -> str:
+    """Build a canonical Java-style stack trace with a timestamped header."""
+    frames = (
+        "\tat com.example.Service.handle(Service.java:42)\n"
+        "\tat com.example.Server.dispatch(Server.java:17)\n"
+        "\tat java.base/java.lang.Thread.run(Thread.java:840)"
+    )
+    return (
+        f'{_stamp(seq)} ERROR Exception in thread "main" '
+        f"java.lang.IllegalStateException: synthetic {seq}\n{frames}"
+    )
+
+
 def emit(fmt: str, seq: int) -> None:
     if fmt == "fuzz":
         for payload in fuzz_payloads(seq):
             sys.stdout.buffer.write(payload + b"\n")
         sys.stdout.buffer.flush()
+        return
+    if fmt == "python-traceback":
+        print(python_traceback_block(seq), flush=True)
+        return
+    if fmt == "java-traceback":
+        print(java_traceback_block(seq), flush=True)
         return
     renderers = {
         "json": json_line,
@@ -155,11 +196,75 @@ def fuzz_payloads(seq: int) -> list[bytes]:
     return payloads
 
 
+def otlp_resource_attributes(seq: int, *, fuzz: bool) -> dict[str, str]:
+    """
+    Build the resource attributes for the OTLP path.
+
+    service.name is the only allowlist-promoted attribute (060_otel hint).
+    Fuzz mode adds extra attributes with unicode values built from
+    codepoints (never literals) to prove the allowlist keeps them out of
+    labels, not merely that valid data flows.
+    """
+    attrs = {"service.name": "app-otel"}
+    if fuzz:
+        attrs["fuzz.unicode"] = FUZZ_VARIANTS[seq % len(FUZZ_VARIANTS)]
+        attrs["fuzz.seq"] = str(seq)
+    return attrs
+
+
+def run_otlp(endpoint: str, *, fuzz: bool) -> None:
+    """Emit OTLP metrics and logs to the collector endpoint, forever."""
+    from opentelemetry import metrics as otel_metrics
+    from opentelemetry._logs import get_logger_provider, set_logger_provider
+    from opentelemetry.exporter.otlp.proto.http._log_exporter import (
+        OTLPLogExporter,
+    )
+    from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
+        OTLPMetricExporter,
+    )
+    from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+    from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+    from opentelemetry.sdk.resources import Resource
+
+    resource = Resource.create(otlp_resource_attributes(0, fuzz=fuzz))
+    reader = PeriodicExportingMetricReader(
+        OTLPMetricExporter(endpoint=f"{endpoint}/v1/metrics")
+    )
+    otel_metrics.set_meter_provider(
+        MeterProvider(resource=resource, metric_readers=[reader])
+    )
+    counter = otel_metrics.get_meter("app").create_counter("app_otlp_events")
+
+    provider = LoggerProvider(resource=resource)
+    provider.add_log_record_processor(
+        BatchLogRecordProcessor(
+            OTLPLogExporter(endpoint=f"{endpoint}/v1/logs")
+        )
+    )
+    set_logger_provider(provider)
+    handler = LoggingHandler(logger_provider=get_logger_provider())
+    otlp_log = logging.getLogger("app.otlp")
+    otlp_log.addHandler(handler)
+    otlp_log.setLevel(logging.INFO)
+
+    for seq in itertools.count():
+        counter.add(1)
+        otlp_log.info("otlp tick %d", seq)
+        time.sleep(EMIT_PERIOD)
+
+
 def main() -> int:
     fmt = os.environ.get("APP_LOG_FORMAT", "json")
     metrics_port = os.environ.get("APP_METRICS_PORT")
     fuzz_telemetry = os.environ.get("APP_FUZZ_TELEMETRY") == "1"
     burst = os.environ.get("APP_BURST")
+
+    otlp_endpoint = os.environ.get("APP_OTLP_ENDPOINT")
+    if otlp_endpoint:
+        run_otlp(otlp_endpoint, fuzz=fuzz_telemetry)
+        return 0  # run_otlp loops forever
 
     if metrics_port:
         start_http_server(int(metrics_port))

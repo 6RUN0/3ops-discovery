@@ -388,6 +388,17 @@ Alloy строит путь:
 postgresql://alloy_monitor:secret@postgres-orders:5432/postgres?sslmode=disable
 ```
 
+Формат содержимого `.dsn` зависит от типа БД:
+
+| Тип | Формат |
+|---|---|
+| `postgres` | `postgresql://<user>:<password>@<host>:<port>/<db>?sslmode=...` |
+| `mysql`, `mariadb` | `<user>:<password>@(<host>:<port>)/` (go-sql-driver DSN) |
+| `redis` | `<host>:<port>` в `.dsn`; пароль — в отдельном файле `<secret-id>.redispass` |
+| `mongodb` | `mongodb://<user>:<password>@<host>:<port>` |
+
+Redis — исключение: аргумент `redis_addr` экспортёра принимает обычную строку, а не секрет, поэтому адрес (`host:port`, несекретный) хранится в `.dsn`, а пароль — в отдельном секрет-файле `<secret-id>.redispass`, читаемом через `redis_password`.
+
 Требования:
 
 - файл доступен только пользователю Alloy;
@@ -488,6 +499,18 @@ mongodb
 ```
 
 Конкретная поддержка зависит от наличия соответствующего `prometheus.exporter.*` в используемой версии Alloy.
+
+`type` обозначает wire-протокол и exporter, а не вендора СУБД. Протокол-совместимые сборки метятся базовым типом, отдельный тип для них не вводится: Percona Server for MySQL и Percona XtraDB Cluster — `type: mysql`; Percona Server for MongoDB — `type: mongodb` (так же, как managed-СУБД вида RDS/Aurora MySQL). MariaDB — исключение: это самостоятельный тип, разделяющий mysql-exporter, потому что операторы воспринимают её как отдельный продукт.
+
+Стандартные порты по типам (действуют, если `database.port` не задан):
+
+| Тип | Порт |
+|---|---|
+| `postgres` | 5432 |
+| `mysql` | 3306 |
+| `mariadb` | 3306 |
+| `redis` | 6379 |
+| `mongodb` | 27017 |
 
 #### 10.2.1. Labels
 
@@ -752,6 +775,8 @@ labels:
 
 Флаг `otel.enabled` поэтому носит декларативный характер: он не управляет приёмом OTLP (receiver общий и статичен), а фиксирует намерение сервиса и используется для инвентаризации.
 
+OTLP-путь — исключение из провенанса раздела [6.1](#61-labels-добавляемые-alloy): общий receiver статичен и не имеет Docker-метаданных, поэтому не производит provenance-labels `environment`/`team`/`container`. В Loki-stream продвигается только allowlist-набор resource-атрибутов OTLP (раздел [6.2](#62-loki-label-cardinality); в референсной конфигурации — только `service.name` → `service_name`); остальную идентификацию задаёт само отправляющее приложение через resource-атрибуты.
+
 ### 10.6. Domain: snmp
 
 Используется для внешних устройств или management interfaces.
@@ -951,6 +976,36 @@ Deployment-специфичные значения настраиваются п
 - Для OTLP-backends (Tempo, vendor APM) потоки конвертируются через `otelcol.receiver.prometheus` / `otelcol.receiver.loki` и экспортируются `otelcol.exporter.otlp`.
 
 Это не полный production-конфиг, а базовая структура реализации manifest. Пояснения к неочевидным местам (дедупликация targets по container ID, keep-правило для `secret-id`, соответствие scrape-профилям) находятся в комментариях самих файлов.
+
+### 14.3. Кастомизация референсной конфигурации
+
+Alloy сливает все `*.alloy`-файлы каталога в один граф компонентов (верхний уровень, нерекурсивно); имена компонентов уникальны глобально. Переопределить компонент базы нельзя: два объявления с одинаковым именем — ошибка загрузки, а не override. Кастомизация выполняется тремя способами:
+
+- **overlay-каталог** — дополнительные файлы, добавляемые к базовому каталогу при материализации (раздел [14.5](#145-опциональные-файлы)); базовый `alloy/` остаётся валидным и полным без них;
+- **extension points** — стабильные экспорты базы, на которые overlay вправе ссылаться (раздел [14.4](#144-extension-points));
+- **env-параметризация** — deployment-значения через `RU_3OPS_DISCOVERY_*` (раздел [14.1](#141-параметры-окружения)).
+
+Соглашения против коллизий: файлы репозитория используют числовые префиксы `0xx`, пользовательские overlay — `1xx` и выше; пользовательские имена компонентов — префикс `ext_`. Критерий границы base/optional: базовый `alloy/` содержит ровно то, что управляется discovery по Docker-labels; статичное, host-level или требующее deployment-привилегий выносится в optional.
+
+### 14.4. Extension points
+
+Публичный API базовой конфигурации: стабильные экспорты, на которые overlay-файл вправе ссылаться. Стабильны в пределах minor-версии контракта; переименование — ломающее изменение.
+
+| Экспорт | Компонент |
+|---|---|
+| `prometheus.remote_write.default.receiver` | `090_outputs.alloy` |
+| `loki.write.default.receiver` | `090_outputs.alloy` |
+| `loki.process.docker_profiles.receiver` | `050_log-profiles.alloy` |
+| `discovery.docker.containers.targets` | `010_discovery.alloy` |
+| `discovery.docker.docker_logs.targets` | `010_discovery.alloy` |
+
+### 14.5. Опциональные файлы
+
+Каталог [`alloy-optional/`](../alloy-optional/) — overlay-файлы, добавляемые к базовому каталогу при материализации. Базовый `alloy/` валиден без них.
+
+| Файл | Содержимое |
+|---|---|
+| [`060_otel.alloy`](../alloy-optional/060_otel.alloy) | Opt-in OTLP receiver: `otelcol.receiver.otlp` → метрики в `prometheus.remote_write`, логи в `loki.write` через allowlist-processor |
 
 ## 15. Использование
 

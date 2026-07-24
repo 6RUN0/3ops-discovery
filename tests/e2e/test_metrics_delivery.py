@@ -43,13 +43,18 @@ def test_app_counter_grows(stack: Stack) -> None:
 
 
 def test_postgres_exporter_authenticated(stack: Stack) -> None:
-    # pg_up == 1 is possible only after a successful connection and
-    # authentication -- not merely a running exporter.
-    # Phase 1 limitation: db exporter series carry no compose_project
-    # label until the provenance enrichment of phase 2, so the filter is
-    # the family name alone.
+    # pg_up == 1 requires a successful connection and authentication.
+    # Provenance enrichment (phase 2) attaches compose_project, so the
+    # assertion is scoped to this run.
     wait_until(
-        lambda: _first_value(stack, "pg_up") == 1.0,
+        lambda: (
+            (
+                r := stack.prom_query(
+                    f'pg_up{{compose_project="{stack.project}"}}'
+                )
+            )
+            and float(r[0]["value"][1]) == 1.0
+        ),
         timeout=METRICS_BUDGET,
         desc="pg_up == 1",
     )

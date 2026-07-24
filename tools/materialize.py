@@ -21,10 +21,12 @@ OPTIONAL_DIR = REPO / "alloy-optional"
 
 #: Directory combinations validated by the alloy_check session:
 #: base standalone, base + each optional, base + all.
-#: Phase 1 ships no optional files; phase 2 adds entries here together
-#: with the files themselves.
+#: otel and all coincide for now (the only optional file of phase 2);
+#: phase 3 adds host files and splits them.
 COMBOS: dict[str, tuple[str, ...]] = {
     "base": (),
+    "otel": ("060_otel.alloy",),
+    "all": ("060_otel.alloy",),
 }
 
 
@@ -40,14 +42,16 @@ def materialize(dest: Path, optional: Iterable[str] = ()) -> Path:
     base_files = sorted(BASE_DIR.glob("*.alloy"))
     if not base_files:
         raise FileNotFoundError(f"no *.alloy files in {BASE_DIR}")
+    base_names = {src.name for src in base_files}
     for src in base_files:
         shutil.copy(src, dest / src.name)
     for name in optional:
-        src = OPTIONAL_DIR / name
-        target = dest / src.name
-        if target.exists():
+        # Collision is a name shadowing a base file, not a leftover file in
+        # a reused dest (alloy_check materializes into nox's persistent tmp,
+        # so the check must be against the base set, not dest contents).
+        if name in base_names:
             raise FileExistsError(
                 f"optional file collides with a base file: {name}"
             )
-        shutil.copy(src, target)
+        shutil.copy(OPTIONAL_DIR / name, dest / name)
     return dest

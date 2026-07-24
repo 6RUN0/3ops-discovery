@@ -101,5 +101,33 @@ loki.process "docker_profiles" {
 		}
 	}
 
+	stage.match {
+		selector      = `{log_profile="python-stacktrace-v1"}`
+		pipeline_name = "python-stacktrace-v1"
+
+		// firstline matches a normal, timestamp-prefixed log line; the
+		// "Traceback (most recent call last):" header and the indented
+		// "  File ..." frames lack that prefix, so multiline folds them
+		// into the entry that opened with the preceding normal line
+		// (manifest 8.3). RE2 has no lookahead, so this is a plain anchor.
+		stage.multiline {
+			firstline     = "^\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}"
+			max_wait_time = "10s"
+		}
+	}
+
+	stage.match {
+		selector      = `{log_profile="java-stacktrace-v1"}`
+		pipeline_name = "java-stacktrace-v1"
+
+		// Same anchor: the exception header line is timestamp-prefixed and
+		// opens the block; the "\tat ...", "Caused by:" and "... N more"
+		// frames are not and get folded in.
+		stage.multiline {
+			firstline     = "^\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}"
+			max_wait_time = "10s"
+		}
+	}
+
 	// raw-v1 and unrecognized lines pass through unchanged.
 }

@@ -10,8 +10,8 @@ from tests.static import alloy_config as ac
 from tests.static import manifest_doc as md
 
 
-def test_docker_path_labels_within_allowlist() -> None:
-    promoted = ac.promoted_stream_labels()
+def test_all_paths_within_allowlist() -> None:
+    promoted = ac.promoted_stream_labels() | ac.otel_promoted_stream_labels()
     allowlist = md.loki_label_allowlist()
     assert promoted <= allowlist, (
         f"labels outside manifest 6.2 allowlist: {promoted - allowlist}"

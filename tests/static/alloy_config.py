@@ -16,8 +16,11 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 ALLOY_DIR = REPO / "alloy"
+OPTIONAL_DIR = REPO / "alloy-optional"
 
 _LABEL = "__meta_docker_container_label_ru_3ops_discovery"
+
+_COMPONENT_DECL = re.compile(r'(?m)^([a-z][\w.]+)\s+"([^"]+)"\s*\{')
 
 
 @cache
@@ -30,6 +33,58 @@ def sources() -> dict[str, str]:
     if not files:
         raise FileNotFoundError(f"no *.alloy files in {ALLOY_DIR}")
     return files
+
+
+@cache
+def optional_sources() -> dict[str, str]:
+    """Return {file name: text} for every optional overlay file."""
+    return {
+        path.name: path.read_text(encoding="utf-8")
+        for path in sorted(OPTIONAL_DIR.glob("*.alloy"))
+    }
+
+
+def _component_names(text: str) -> set[str]:
+    """Every "type.label" component declared in a config text."""
+    return {f"{typ}.{label}" for typ, label in _COMPONENT_DECL.findall(text)}
+
+
+def base_component_names() -> set[str]:
+    names: set[str] = set()
+    for text in sources().values():
+        names |= _component_names(text)
+    return names
+
+
+def optional_component_names() -> set[str]:
+    names: set[str] = set()
+    for text in optional_sources().values():
+        names |= _component_names(text)
+    return names
+
+
+def extension_point_targets() -> set[str]:
+    """
+    Return the base exports that optional files reference.
+
+    These are the forward_to/input targets an optional file names that are
+    NOT declared in an optional file itself.
+
+    A "type.label" is referenced when an optional file forwards into
+    "<type>.<label>.receiver" (or .input). References that resolve to an
+    optional-internal component (the file's own graph) are subtracted;
+    what remains MUST exist in base. Deliberately NOT intersected with
+    base: the anti-drift gate asserts referenced <= base, so a typo'd
+    base reference (absent from base AND optional) fails the fast static
+    gate instead of being silently filtered away.
+    """
+    referenced: set[str] = set()
+    for text in optional_sources().values():
+        for typ, label in re.findall(
+            r"([a-z][\w.]+)\.([\w]+)\.(?:receiver|input)", text
+        ):
+            referenced.add(f"{typ}.{label}")
+    return referenced - optional_component_names()
 
 
 def _all_text() -> str:
@@ -197,3 +252,26 @@ def db_default_ports() -> dict[str, str]:
     if not ports:
         raise AssertionError("no default database ports found in 030")
     return ports
+
+
+def otel_promoted_stream_labels() -> set[str]:
+    """
+    Labels 060_otel promotes to Loki streams via the resource-hint.
+
+    The loki.resource.labels / loki.attribute.labels hint values name OTLP
+    attributes; Alloy sanitizes them to Prometheus label form (dots and
+    dashes -> underscores). Empty if there is no optional otel file.
+    """
+    labels: set[str] = set()
+    text = optional_sources().get("060_otel.alloy", "")
+    for hint in re.findall(
+        r'key\s*=\s*"loki\.(?:resource|attribute)\.labels".*?'
+        r'value\s*=\s*"([^"]*)"',
+        text,
+        re.DOTALL,
+    ):
+        for attr in hint.split(","):
+            name = attr.strip()
+            if name:
+                labels.add(re.sub(r"[.-]", "_", name))
+    return labels

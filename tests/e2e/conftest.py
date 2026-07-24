@@ -206,22 +206,45 @@ def _compose_port(
 
 def _write_secrets(secrets_dir: Path) -> dict[str, str]:
     """
-    Generate one credential source for the postgres pipeline.
+    One credential source per database service.
 
-    The DSN file and the container env come from the same values; the
-    DSN host is the compose service name.
+    Each .dsn file and the matching container env come from the same
+    generated password. The DSN host is the compose service name. The
+    per-type content format is fixed by manifest section 9.
     """
-    user = "xad_e2e"
-    password = pysecrets.token_hex(16)
     secrets_dir.mkdir(parents=True, exist_ok=True)
-    dsn = (
-        f"postgresql://{user}:{password}@postgres:5432/postgres"
-        "?sslmode=disable"
+    pg_pw = pysecrets.token_hex(16)
+    my_pw = pysecrets.token_hex(16)
+    redis_pw = pysecrets.token_hex(16)
+    mongo_pw = pysecrets.token_hex(16)
+    user = "xad_e2e"
+
+    (secrets_dir / "postgres-orders.dsn").write_text(
+        f"postgresql://{user}:{pg_pw}@postgres:5432/postgres?sslmode=disable",
+        encoding="ascii",
     )
-    (secrets_dir / "postgres-orders.dsn").write_text(dsn, encoding="ascii")
+    # go-sql-driver DSN; root, no database (trailing slash).
+    (secrets_dir / "mariadb-billing.dsn").write_text(
+        f"root:{my_pw}@(mariadb:3306)/", encoding="ascii"
+    )
+    # redis_addr cannot take a Secret, so the address (host:port) lives in
+    # .dsn (non-secret) and the password in .redispass (manifest 9).
+    (secrets_dir / "redis-cache.dsn").write_text(
+        "redis:6379", encoding="ascii"
+    )
+    (secrets_dir / "redis-cache.redispass").write_text(
+        redis_pw, encoding="ascii"
+    )
+    (secrets_dir / "mongodb-docs.dsn").write_text(
+        f"mongodb://{user}:{mongo_pw}@mongodb:27017", encoding="ascii"
+    )
     return {
         "RU_3OPS_DISCOVERY_E2E_PG_USER": user,
-        "RU_3OPS_DISCOVERY_E2E_PG_PASSWORD": password,
+        "RU_3OPS_DISCOVERY_E2E_PG_PASSWORD": pg_pw,
+        "RU_3OPS_DISCOVERY_E2E_MARIADB_PASSWORD": my_pw,
+        "RU_3OPS_DISCOVERY_E2E_REDIS_PASSWORD": redis_pw,
+        "RU_3OPS_DISCOVERY_E2E_MONGO_USER": user,
+        "RU_3OPS_DISCOVERY_E2E_MONGO_PASSWORD": mongo_pw,
     }
 
 
@@ -264,7 +287,9 @@ def stack(
         pytest.skip("docker daemon is not available; e2e needs it")
 
     project = f"xad-e2e-{uuid.uuid4().hex[:8]}"
-    config_dir = materialize(tmp_path_factory.mktemp("alloy-config"))
+    config_dir = materialize(
+        tmp_path_factory.mktemp("alloy-config"), optional=["060_otel.alloy"]
+    )
     secrets_dir = tmp_path_factory.mktemp("alloy-secrets")
     env = {
         **os.environ,

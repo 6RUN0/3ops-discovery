@@ -111,6 +111,56 @@ def test_silent_optout_with_positive_control(stack: Stack) -> None:
     ), "opt-out container has a Loki stream"
 
 
+def test_python_traceback_is_one_entry(stack: Stack) -> None:
+    def _joined() -> list[tuple[str, str]] | None:
+        entries = stack.loki_entries(
+            f'{{service_name="app-logs-pytrace",'
+            f'compose_project="{stack.project}"}}',
+            since="30m",
+        )
+        joined = [
+            (ts, line)
+            for ts, line in entries
+            if "Traceback (most recent call last):" in line
+            and "ValueError" in line
+        ]
+        return joined or None
+
+    joined = wait_until(
+        _joined,
+        timeout=LOGS_BUDGET + 15,  # + stage.multiline max_wait_time (10s)
+        desc="python traceback folded into one entry",
+    )
+    # The header and the exception tail live in the SAME entry, proving
+    # the multiline stage joined the docker-split lines.
+    _ts, line = joined[0]
+    assert line.count("\n") >= 2
+    assert "  File " in line
+
+
+def test_java_traceback_is_one_entry(stack: Stack) -> None:
+    def _joined() -> list[tuple[str, str]] | None:
+        entries = stack.loki_entries(
+            f'{{service_name="app-logs-jtrace",'
+            f'compose_project="{stack.project}"}}',
+            since="30m",
+        )
+        joined = [
+            (ts, line)
+            for ts, line in entries
+            if "Exception in thread" in line and "\tat " in line
+        ]
+        return joined or None
+
+    joined = wait_until(
+        _joined,
+        timeout=LOGS_BUDGET + 15,
+        desc="java stack trace folded into one entry",
+    )
+    _ts, line = joined[0]
+    assert line.count("\tat ") >= 2
+
+
 def test_all_stream_labels_within_manifest_allowlist(
     stack: Stack,
 ) -> None:

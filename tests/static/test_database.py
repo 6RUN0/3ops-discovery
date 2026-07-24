@@ -17,9 +17,11 @@ def test_db_profiles_are_a_documented_asymmetry() -> None:
     assert md.db_profiles() == set(asymmetries.DB_PROFILES_UNHANDLED)
 
 
-def test_default_ports_are_the_type_standards() -> None:
-    # Config-internal invariant until the manifest gains a port table
-    # in 10.2 (phase 2): 10.2.1 says only "standard port of
-    # the type", so the numbers have no manifest anchor yet.
-    standard_ports = {"postgres": "5432"}
-    assert ac.db_default_ports() == standard_ports
+def test_default_ports_match_manifest_table() -> None:
+    config_ports = ac.db_default_ports()  # per-pipeline representative type
+    manifest_ports = md.db_default_ports()
+    for db_type, port in config_ports.items():
+        assert manifest_ports[db_type] == port
+    # mariadb shares the mysql pipeline, so it has no own config port but
+    # must appear in the manifest with the mysql port.
+    assert manifest_ports["mariadb"] == manifest_ports["mysql"]

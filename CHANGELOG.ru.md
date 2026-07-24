@@ -21,3 +21,10 @@
 - Пространство `secret-id` задокументировано как единый trust domain хоста; привязка секрета к identity контейнера объявлена out of scope.
 - Добавлен раздел 13.5 о границах доверия к labels.
 - В референсной конфигурации реализованы relabel-валидации `path`/`scheme`/`profile` и схлопывание port fan-out для metrics и database.
+- Домен database расширен на типы `mysql`/`mariadb`, `redis`, `mongodb`; серии всех exporter'ов несут provenance-labels (`environment`/`team`/`container`/`compose_*`/`collector`, синтезированные `job`/`instance`).
+- Для redis формат секрета — `host:port` в `.dsn` плюс пароль в отдельном файле `<secret-id>.redispass` (аргумент `redis_addr` не принимает секрет).
+- Добавлены multiline log-профили `python-stacktrace-v1` и `java-stacktrace-v1`: многострочные traceback склеиваются в одну запись.
+- Введён overlay-каталог `alloy-optional/` и первый opt-in файл `060_otel.alloy` (OTLP receiver: метрики в `prometheus.remote_write`, логи в `loki.write` через allowlist-processor).
+- Задокументирована модель кастомизации: extension points базы (раздел 14.4), опциональные файлы (14.5), соглашения против коллизий имён.
+- Добавлены таблицы стандартных портов БД (10.2) и форматов секрет-файла по типам (9); зафиксировано исключение провенанса для OTLP-пути.
+- Уточнено, что `database.type` обозначает wire-протокол, а не вендора: протокол-совместимые сборки (Percona Server for MySQL/MongoDB, XtraDB Cluster) метятся базовым типом `mysql`/`mongodb` без отдельного типа.

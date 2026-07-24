@@ -135,6 +135,40 @@ def db_types() -> set[str]:
     return set(code_block("10.2").split())
 
 
+def db_default_ports() -> dict[str, str]:
+    """Section 10.2 port table: database type -> default port."""
+    return {_plain(row["Тип"]): _plain(row["Порт"]) for row in table("10.2")}
+
+
+def secret_formats() -> dict[str, str]:
+    """
+    Section 9 per-type .dsn content-format table: type -> format.
+
+    Only the keys are normative (the set of documented types); the format
+    strings are illustrative and keep interior backticks/prose, since
+    _plain strips only the outer backtick pair of a cell.
+    """
+    formats: dict[str, str] = {}
+    for row in table("9"):
+        fmt = _plain(row["Формат"])
+        # Split BEFORE _plain: table() strips only the OUTER backtick pair
+        # of a grouped cell like `mysql`, `mariadb`, leaving interior
+        # backticks -- so _plain must run per token, not on the whole cell.
+        for typ in row["Тип"].split(","):
+            formats[_plain(typ.strip())] = fmt
+    return formats
+
+
+def optional_files() -> set[str]:
+    """Section 14.5: names of the optional overlay files."""
+    return {_plain(row["Файл"]) for row in table("14.5")}
+
+
+def extension_points() -> set[str]:
+    """Section 14.4: stable base exports overlays may reference."""
+    return {_plain(row["Экспорт"]) for row in table("14.4")}
+
+
 def secret_id_pattern() -> str:
     """Section 9: the secret-id validation regex."""
     return code_block("9", after="Допустимый шаблон:").strip()

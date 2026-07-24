@@ -21,16 +21,10 @@ LOG_PROFILES_UNIMPLEMENTED: dict[str, str] = {
     "shipped profile (manifest 8.3)",
     "nginx-json-v1": "specialized pipeline example, not shipped "
     "(manifest 8.3)",
-    "python-stacktrace-v1": "multiline profile lands in phase 2",
-    "java-stacktrace-v1": "multiline profile lands in phase 2",
 }
 
-DB_TYPES_UNIMPLEMENTED: dict[str, str] = {
-    "mysql": "exporter pipeline lands in phase 2",
-    "mariadb": "exporter pipeline lands in phase 2",
-    "redis": "exporter pipeline lands in phase 2",
-    "mongodb": "exporter pipeline lands in phase 2",
-}
+#: All manifest 10.2 database types are implemented as of phase 2.
+DB_TYPES_UNIMPLEMENTED: dict[str, str] = {}
 
 DB_PROFILES_UNHANDLED: dict[str, str] = {
     "basic-v1": "reference ignores database.profile; exporters run "

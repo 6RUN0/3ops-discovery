@@ -1,7 +1,7 @@
-// Database domain: postgres exporters driven by discovery. foreach
-// identifies child pipelines by secret id but does NOT deduplicate:
-// every discovered target yields its own exporter. The keepequal rule
-// below collapses the per-port target fan-out of discovery.docker; a
+// Database domain: exporters driven by discovery. foreach identifies
+// child pipelines by secret id but does NOT deduplicate: every
+// discovered target yields its own exporter. The keepequal rule below
+// collapses the per-port target fan-out of discovery.docker; a
 // container attached to several Docker networks still produces
 // duplicate targets and therefore duplicate exporters (reference
 // limitation, see manifest section 14).
@@ -9,6 +9,10 @@
 // the logical secret id, never credentials.
 // The foreach block is experimental as of Alloy v1.17: run and validate
 // with --stability.level=experimental.
+//
+// Every exporter's own targets carry only __address__, so the discovery
+// provenance (manifest 6.1) is re-attached inside each template by a
+// discovery.relabel "enrich_<type>" between exporter and scrape.
 //
 // Environment overrides (RU_3OPS_DISCOVERY_ = 3ops Discovery):
 //   RU_3OPS_DISCOVERY_SECRETS_DIR  directory with secret files (default /run/alloy-secrets)
@@ -82,8 +86,451 @@ foreach "postgres" {
 			data_source_names = [local.file.dsn.content]
 		}
 
-		prometheus.scrape "db" {
+		// Provenance enrichment (manifest 6.1): the exporter's own targets
+		// carry only __address__, so the discovery metadata is re-attached
+		// here from the foreach item. replacement reads the per-iteration
+		// each[...] at load time. Optional labels (environment/team, and
+		// compose_* which exist only under compose) are wrapped in
+		// coalesce(each[...], "") so an absent key resolves to "" -- which
+		// relabel then drops -- instead of relying on unverified missing-key
+		// semantics. job/instance/container derive from always-present
+		// metadata or required labels, so they stay bare.
+		discovery.relabel "enrich_postgres" {
 			targets = prometheus.exporter.postgres.db.targets
+
+			rule {
+				target_label = "environment"
+				replacement  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_environment"], "")
+			}
+
+			rule {
+				target_label = "team"
+				replacement  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_team"], "")
+			}
+
+			rule {
+				target_label = "compose_project"
+				replacement  = coalesce(each["__meta_docker_container_label_com_docker_compose_project"], "")
+			}
+
+			rule {
+				target_label = "compose_service"
+				replacement  = coalesce(each["__meta_docker_container_label_com_docker_compose_service"], "")
+			}
+			// container from Docker engine metadata, leading slash stripped.
+			rule {
+				target_label = "__tmp_container"
+				replacement  = each["__meta_docker_container_name"]
+			}
+
+			rule {
+				source_labels = ["__tmp_container"]
+				regex         = "/(.*)"
+				replacement   = "$1"
+				target_label  = "container"
+			}
+
+			rule {
+				target_label = "collector"
+				replacement  = "alloy"
+			}
+			// Synthesised series identity: job = type, instance = secret id
+			// (always present, passes the section 9 regex, unique per db).
+			rule {
+				target_label = "job"
+				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_type"]
+			}
+
+			rule {
+				target_label = "instance"
+				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_secret_id"]
+			}
+		}
+
+		prometheus.scrape "db" {
+			targets = discovery.relabel.enrich_postgres.output
+
+			forward_to = [
+				prometheus.remote_write.default.receiver,
+			]
+		}
+	}
+}
+
+discovery.relabel "database_mysql" {
+	targets = discovery.docker.containers.targets
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_enabled",
+		]
+		regex  = "true"
+		action = "keep"
+	}
+
+	// One pipeline serves both mysql and mariadb: identical wire protocol
+	// and exporter (manifest 10.2, prometheus.exporter.mysql).
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_type",
+		]
+		regex  = "mysql|mariadb"
+		action = "keep"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_secret_id",
+		]
+		regex  = "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$"
+		action = "keep"
+	}
+
+	rule {
+		target_label = "__tmp_database_port"
+		replacement  = "3306"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_port",
+		]
+		regex        = "(.+)"
+		target_label = "__tmp_database_port"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_port_private"]
+		target_label  = "__tmp_database_port"
+		action        = "keepequal"
+	}
+}
+
+foreach "mysql" {
+	collection = discovery.relabel.database_mysql.output
+	var        = "each"
+	id         = "__meta_docker_container_label_ru_3ops_discovery_database_secret_id"
+
+	template {
+		local.file "dsn" {
+			filename  = coalesce(sys.env("RU_3OPS_DISCOVERY_SECRETS_DIR"), "/run/alloy-secrets") + "/" + each["__meta_docker_container_label_ru_3ops_discovery_database_secret_id"] + ".dsn"
+			is_secret = true
+		}
+
+		prometheus.exporter.mysql "db" {
+			data_source_name = local.file.dsn.content
+		}
+
+		discovery.relabel "enrich_mysql" {
+			targets = prometheus.exporter.mysql.db.targets
+
+			rule {
+				target_label = "environment"
+				replacement  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_environment"], "")
+			}
+
+			rule {
+				target_label = "team"
+				replacement  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_team"], "")
+			}
+
+			rule {
+				target_label = "compose_project"
+				replacement  = coalesce(each["__meta_docker_container_label_com_docker_compose_project"], "")
+			}
+
+			rule {
+				target_label = "compose_service"
+				replacement  = coalesce(each["__meta_docker_container_label_com_docker_compose_service"], "")
+			}
+
+			rule {
+				target_label = "__tmp_container"
+				replacement  = each["__meta_docker_container_name"]
+			}
+
+			rule {
+				source_labels = ["__tmp_container"]
+				regex         = "/(.*)"
+				replacement   = "$1"
+				target_label  = "container"
+			}
+
+			rule {
+				target_label = "collector"
+				replacement  = "alloy"
+			}
+
+			rule {
+				target_label = "job"
+				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_type"]
+			}
+
+			rule {
+				target_label = "instance"
+				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_secret_id"]
+			}
+		}
+
+		prometheus.scrape "db" {
+			targets = discovery.relabel.enrich_mysql.output
+
+			forward_to = [
+				prometheus.remote_write.default.receiver,
+			]
+		}
+	}
+}
+
+discovery.relabel "database_redis" {
+	targets = discovery.docker.containers.targets
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_enabled",
+		]
+		regex  = "true"
+		action = "keep"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_type",
+		]
+		regex  = "redis"
+		action = "keep"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_secret_id",
+		]
+		regex  = "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$"
+		action = "keep"
+	}
+
+	rule {
+		target_label = "__tmp_database_port"
+		replacement  = "6379"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_port",
+		]
+		regex        = "(.+)"
+		target_label = "__tmp_database_port"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_port_private"]
+		target_label  = "__tmp_database_port"
+		action        = "keepequal"
+	}
+}
+
+foreach "redis" {
+	collection = discovery.relabel.database_redis.output
+	var        = "each"
+	id         = "__meta_docker_container_label_ru_3ops_discovery_database_secret_id"
+
+	template {
+		// redis_addr is a plain-string argument and cannot accept a Secret,
+		// so the address (host:port, not sensitive) is read as a non-secret
+		// file while the password comes from a separate secret file. The
+		// secret contract therefore uses two files for redis: <id>.dsn holds
+		// host:port and <id>.redispass holds the password (manifest 9).
+		local.file "addr" {
+			filename  = coalesce(sys.env("RU_3OPS_DISCOVERY_SECRETS_DIR"), "/run/alloy-secrets") + "/" + each["__meta_docker_container_label_ru_3ops_discovery_database_secret_id"] + ".dsn"
+			is_secret = false
+		}
+
+		local.file "password" {
+			filename  = coalesce(sys.env("RU_3OPS_DISCOVERY_SECRETS_DIR"), "/run/alloy-secrets") + "/" + each["__meta_docker_container_label_ru_3ops_discovery_database_secret_id"] + ".redispass"
+			is_secret = true
+		}
+
+		prometheus.exporter.redis "db" {
+			redis_addr     = local.file.addr.content
+			redis_password = local.file.password.content
+		}
+
+		discovery.relabel "enrich_redis" {
+			targets = prometheus.exporter.redis.db.targets
+
+			rule {
+				target_label = "environment"
+				replacement  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_environment"], "")
+			}
+
+			rule {
+				target_label = "team"
+				replacement  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_team"], "")
+			}
+
+			rule {
+				target_label = "compose_project"
+				replacement  = coalesce(each["__meta_docker_container_label_com_docker_compose_project"], "")
+			}
+
+			rule {
+				target_label = "compose_service"
+				replacement  = coalesce(each["__meta_docker_container_label_com_docker_compose_service"], "")
+			}
+
+			rule {
+				target_label = "__tmp_container"
+				replacement  = each["__meta_docker_container_name"]
+			}
+
+			rule {
+				source_labels = ["__tmp_container"]
+				regex         = "/(.*)"
+				replacement   = "$1"
+				target_label  = "container"
+			}
+
+			rule {
+				target_label = "collector"
+				replacement  = "alloy"
+			}
+
+			rule {
+				target_label = "job"
+				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_type"]
+			}
+
+			rule {
+				target_label = "instance"
+				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_secret_id"]
+			}
+		}
+
+		prometheus.scrape "db" {
+			targets = discovery.relabel.enrich_redis.output
+
+			forward_to = [
+				prometheus.remote_write.default.receiver,
+			]
+		}
+	}
+}
+
+discovery.relabel "database_mongodb" {
+	targets = discovery.docker.containers.targets
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_enabled",
+		]
+		regex  = "true"
+		action = "keep"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_type",
+		]
+		regex  = "mongodb"
+		action = "keep"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_secret_id",
+		]
+		regex  = "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$"
+		action = "keep"
+	}
+
+	rule {
+		target_label = "__tmp_database_port"
+		replacement  = "27017"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_port",
+		]
+		regex        = "(.+)"
+		target_label = "__tmp_database_port"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_port_private"]
+		target_label  = "__tmp_database_port"
+		action        = "keepequal"
+	}
+}
+
+foreach "mongodb" {
+	collection = discovery.relabel.database_mongodb.output
+	var        = "each"
+	id         = "__meta_docker_container_label_ru_3ops_discovery_database_secret_id"
+
+	template {
+		local.file "dsn" {
+			filename  = coalesce(sys.env("RU_3OPS_DISCOVERY_SECRETS_DIR"), "/run/alloy-secrets") + "/" + each["__meta_docker_container_label_ru_3ops_discovery_database_secret_id"] + ".dsn"
+			is_secret = true
+		}
+
+		prometheus.exporter.mongodb "db" {
+			mongodb_uri = local.file.dsn.content
+		}
+
+		discovery.relabel "enrich_mongodb" {
+			targets = prometheus.exporter.mongodb.db.targets
+
+			rule {
+				target_label = "environment"
+				replacement  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_environment"], "")
+			}
+
+			rule {
+				target_label = "team"
+				replacement  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_team"], "")
+			}
+
+			rule {
+				target_label = "compose_project"
+				replacement  = coalesce(each["__meta_docker_container_label_com_docker_compose_project"], "")
+			}
+
+			rule {
+				target_label = "compose_service"
+				replacement  = coalesce(each["__meta_docker_container_label_com_docker_compose_service"], "")
+			}
+
+			rule {
+				target_label = "__tmp_container"
+				replacement  = each["__meta_docker_container_name"]
+			}
+
+			rule {
+				source_labels = ["__tmp_container"]
+				regex         = "/(.*)"
+				replacement   = "$1"
+				target_label  = "container"
+			}
+
+			rule {
+				target_label = "collector"
+				replacement  = "alloy"
+			}
+
+			rule {
+				target_label = "job"
+				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_type"]
+			}
+
+			rule {
+				target_label = "instance"
+				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_secret_id"]
+			}
+		}
+
+		prometheus.scrape "db" {
+			targets = discovery.relabel.enrich_mongodb.output
 
 			forward_to = [
 				prometheus.remote_write.default.receiver,

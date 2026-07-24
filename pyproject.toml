@@ -21,6 +21,8 @@ lint = [
     "types-requests>=2.33.0.20260712",
 ]
 test = [
+    "opentelemetry-exporter-otlp>=1.44.0",
+    "opentelemetry-sdk>=1.44.0",
     "prometheus-client>=0.25.0",
     "pytest>=9.1.1",
     "pytest-timeout>=2.4.0",
@@ -88,8 +90,10 @@ known-first-party = ["tests", "tools"]
 # root, so it cannot sit in the top-level import block.
 "noxfile.py" = ["PLC0415"]
 # The mini-app is a standalone container script, not a library:
-# module-level loop constants and a broad main() are its shape.
-"tests/e2e/stack/app/app.py" = ["D1"]
+# module-level loop constants and a broad main() are its shape. The OTLP
+# SDK is imported lazily inside run_otlp so `import app` stays light for
+# the unit tests, which never enter OTLP mode (PLC0415).
+"tests/e2e/stack/app/app.py" = ["D1", "PLC0415"]
 
 [tool.mypy]
 python_version = "3.13"

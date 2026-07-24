@@ -1,0 +1,70 @@
+// Opt-in OTLP receiver (manifest 10.5). Lives in alloy-optional/, outside
+// the base alloy/: the base config is valid and complete without it, and
+// every reference points from this file INTO the base outputs (090), never
+// the other way. The e2e stack materializes base + this file, exercising
+// the opt-in composition itself.
+//
+// Label discipline (manifest 6.2): only allowlisted OTLP resource
+// attributes are promoted to Loki stream labels via the
+// loki.resource.labels hint; a defensive label_drop removes any default
+// label the exporter may add outside the allowlist. Provenance labels
+// (environment/team/container) are NOT produced here: the receiver is
+// static and has no docker metadata (manifest 6.1/10.5 exception).
+//
+// Traces are not accepted: their backend is out of scope for contract 0.2.
+
+otelcol.receiver.otlp "ingest" {
+	grpc {
+		endpoint = "0.0.0.0:4317"
+	}
+
+	http {
+		endpoint = "0.0.0.0:4318"
+	}
+
+	output {
+		metrics = [otelcol.exporter.prometheus.otel.input]
+		logs    = [otelcol.processor.attributes.otel_label_hints.input]
+	}
+}
+
+otelcol.exporter.prometheus "otel" {
+	// resource_to_telemetry_conversion stays at its default (false):
+	// resource attributes are not blanket-promoted to metric labels, so
+	// metric cardinality stays bounded (manifest 6.2).
+	forward_to = [prometheus.remote_write.default.receiver]
+}
+
+otelcol.processor.attributes "otel_label_hints" {
+	// Allowlist promotion: only these resource attributes become Loki
+	// stream labels. Each name sanitizes into the manifest 6.2 allowlist
+	// (service.name -> service_name).
+	action {
+		key    = "loki.resource.labels"
+		action = "insert"
+		value  = "service.name"
+	}
+
+	output {
+		logs = [otelcol.exporter.loki.otel.input]
+	}
+}
+
+otelcol.exporter.loki "otel" {
+	forward_to = [loki.process.otel_labels.receiver]
+}
+
+loki.process "otel_labels" {
+	// otelcol.exporter.loki promotes a default label set outside the
+	// manifest 6.2 allowlist: exporter, job (service.namespace/service.name),
+	// instance (service.instance.id) and level (severity). Drop them so only
+	// the allowlisted service_name (from the resource hint) survives as a
+	// stream label; the dropped fields stay available as structured content.
+	// Dropping an absent label is a no-op, so this is safe if a future
+	// exporter version emits fewer of them.
+	stage.label_drop {
+		values = ["exporter", "job", "instance", "level"]
+	}
+
+	forward_to = [loki.write.default.receiver]
+}

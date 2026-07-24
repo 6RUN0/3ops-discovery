@@ -30,6 +30,8 @@ def test_log_profile_allowlist() -> None:
         "generic-json-v1",
         "generic-logfmt-v1",
         "mixed-v1",
+        "python-stacktrace-v1",
+        "java-stacktrace-v1",
     }
 
 
@@ -38,6 +40,8 @@ def test_dispatcher_profiles() -> None:
         "generic-json-v1",
         "generic-logfmt-v1",
         "mixed-v1",
+        "python-stacktrace-v1",
+        "java-stacktrace-v1",
     }
 
 
@@ -48,14 +52,31 @@ def test_promoted_stream_labels() -> None:
 
 
 def test_db_types_implemented() -> None:
-    assert ac.db_types_implemented() == {"postgres"}
+    assert ac.db_types_implemented() == {
+        "postgres",
+        "mysql",
+        "mariadb",
+        "redis",
+        "mongodb",
+    }
 
 
 def test_secret_id_regexes() -> None:
-    assert ac.secret_id_regexes() == [
-        "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$",
-    ]
+    # One keep-rule per pipeline: postgres, mysql(+mariadb), redis, mongodb.
+    assert (
+        ac.secret_id_regexes()
+        == [
+            "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$",
+        ]
+        * 4
+    )
 
 
 def test_db_default_ports() -> None:
-    assert ac.db_default_ports() == {"postgres": "5432"}
+    # mariadb shares the mysql pipeline, so it has no own component/port.
+    assert ac.db_default_ports() == {
+        "postgres": "5432",
+        "mysql": "3306",
+        "redis": "6379",
+        "mongodb": "27017",
+    }

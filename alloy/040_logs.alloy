@@ -51,7 +51,7 @@ discovery.relabel "docker_logs" {
 		source_labels = [
 			"__meta_docker_container_label_ru_3ops_discovery_logs_profile",
 		]
-		regex        = "(raw-v1|generic-json-v1|generic-logfmt-v1|mixed-v1)"
+		regex        = "(raw-v1|generic-json-v1|generic-logfmt-v1|mixed-v1|python-stacktrace-v1|java-stacktrace-v1)"
 		target_label = "log_profile"
 	}
 

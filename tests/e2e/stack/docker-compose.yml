@@ -54,6 +54,8 @@ services:
       - docker-socket
     expose:
       - "12345"
+      - "4317"
+      - "4318"
     ports:
       - "127.0.0.1:0:12345"
     depends_on:
@@ -183,6 +185,74 @@ services:
       ru.3ops.discovery.database.type: "postgres"
       ru.3ops.discovery.database.secret-id: "bad/../id"
 
+  mariadb:
+    image: mariadb:12.3.2
+    environment:
+      MARIADB_ROOT_PASSWORD: ${RU_3OPS_DISCOVERY_E2E_MARIADB_PASSWORD:?set by the pytest fixture}
+    networks:
+      - telemetry
+    expose:
+      - "3306"
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-p$$MARIADB_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "data"
+      ru.3ops.discovery.database.enabled: "true"
+      ru.3ops.discovery.database.type: "mariadb"
+      ru.3ops.discovery.database.secret-id: "mariadb-billing"
+
+  redis:
+    image: redis:8.8.0
+    command: ["redis-server", "--requirepass", "${RU_3OPS_DISCOVERY_E2E_REDIS_PASSWORD:?set by the pytest fixture}"]
+    networks:
+      - telemetry
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "$$RU_3OPS_DISCOVERY_E2E_REDIS_PASSWORD", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    environment:
+      RU_3OPS_DISCOVERY_E2E_REDIS_PASSWORD: ${RU_3OPS_DISCOVERY_E2E_REDIS_PASSWORD:?set by the pytest fixture}
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "data"
+      ru.3ops.discovery.database.enabled: "true"
+      ru.3ops.discovery.database.type: "redis"
+      ru.3ops.discovery.database.secret-id: "redis-cache"
+
+  mongodb:
+    image: mongo:8.3.7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${RU_3OPS_DISCOVERY_E2E_MONGO_USER:?set by the pytest fixture}
+      MONGO_INITDB_ROOT_PASSWORD: ${RU_3OPS_DISCOVERY_E2E_MONGO_PASSWORD:?set by the pytest fixture}
+    networks:
+      - telemetry
+    expose:
+      - "27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      # environment/team INTENTIONALLY omitted: exercises the coalesce
+      # absent-optional-label path in the enrichment (see 030_database).
+      ru.3ops.discovery.database.enabled: "true"
+      ru.3ops.discovery.database.type: "mongodb"
+      ru.3ops.discovery.database.secret-id: "mongodb-docs"
+
   rabbitmq:
     # Native prometheus endpoint (manifest example 10.1.2), but with
     # profile normal-v1: the example's fast-v1 is deliberately NOT
@@ -270,6 +340,32 @@ services:
       ru.3ops.discovery.logs.profile: "mixed-v1"
       ru.3ops.discovery.logs.service: "app-logs-mixed"
 
+  app-logs-pytrace:
+    build: ./app
+    environment:
+      APP_LOG_FORMAT: python-traceback
+    networks:
+      - telemetry
+    labels:
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "apps"
+      ru.3ops.discovery.logs.profile: "python-stacktrace-v1"
+      ru.3ops.discovery.logs.service: "app-logs-pytrace"
+
+  app-logs-jtrace:
+    build: ./app
+    environment:
+      APP_LOG_FORMAT: java-traceback
+    networks:
+      - telemetry
+    labels:
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "apps"
+      ru.3ops.discovery.logs.profile: "java-stacktrace-v1"
+      ru.3ops.discovery.logs.service: "app-logs-jtrace"
+
   app-logs-raw:
     # No manifest labels at all: the collect-by-default policy
     # (manifest 10.3.1) must pick it up with log_profile="raw-v1".
@@ -342,4 +438,27 @@ services:
       - telemetry
     labels:
       ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.logs.enabled: "false"
+
+  app-otel:
+    # logs.enabled=false turns the docker log path off, so logs reach Loki
+    # ONLY through OTLP (proof of the path). The otel domain is declarative
+    # (manifest 10.5); the receiver is shared.
+    build: ./app
+    environment:
+      APP_OTLP_ENDPOINT: http://alloy:4318
+    networks:
+      - telemetry
+    depends_on:
+      alloy:
+        condition: service_started
+    labels:
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "apps"
+      ru.3ops.discovery.otel.enabled: "true"
+      ru.3ops.discovery.otel.protocol: "http"
+      ru.3ops.discovery.otel.service: "app-otel"
+      ru.3ops.discovery.otel.metrics: "true"
+      ru.3ops.discovery.otel.logs: "true"
       ru.3ops.discovery.logs.enabled: "false"
