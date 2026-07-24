@@ -13,8 +13,10 @@ def test_otlp_metrics_reach_prometheus(stack: Stack) -> None:
     # The counter is created via the OTLP path only; its presence proves
     # otelcol.receiver.otlp -> exporter.prometheus -> remote_write works.
     wait_until(
-        lambda: stack.prom_query("app_otlp_events_total")
-        or stack.prom_query("app_otlp_events"),
+        lambda: (
+            stack.prom_query("app_otlp_events_total")
+            or stack.prom_query("app_otlp_events")
+        ),
         timeout=METRICS_BUDGET,
         desc="otlp counter present in prometheus",
     )
@@ -24,8 +26,10 @@ def test_otlp_logs_reach_loki_only_via_otlp(stack: Stack) -> None:
     # app-otel sets logs.enabled=false, so the docker path is off; any
     # entry proves the OTLP logs path.
     wait_until(
-        lambda: stack.loki_entries('{service_name="app-otel"}', since="30m")
-        or None,
+        lambda: (
+            stack.loki_entries('{service_name="app-otel"}', since="30m")
+            or None
+        ),
         timeout=LOGS_BUDGET + 30,
         desc="otlp log entries in loki",
     )

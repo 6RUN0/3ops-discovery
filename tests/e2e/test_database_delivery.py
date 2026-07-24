@@ -6,9 +6,7 @@ from tests.e2e.conftest import METRICS_BUDGET, Stack, wait_until
 
 
 def _up_metric(stack: Stack, family: str) -> bool:
-    result = stack.prom_query(
-        f'{family}{{compose_project="{stack.project}"}}'
-    )
+    result = stack.prom_query(f'{family}{{compose_project="{stack.project}"}}')
     return bool(result) and float(result[0]["value"][1]) == 1.0
 
 
