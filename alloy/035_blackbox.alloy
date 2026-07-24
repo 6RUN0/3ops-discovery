@@ -1,0 +1,237 @@
+// Blackbox domain (manifest 10.4): containers that ask Alloy to probe them
+// over the network. Same shape as 020_metrics -- one discovery.relabel /
+// scrape pair per scrape profile -- but the target is a synthetic probe URL
+// handed to a shared blackbox exporter, not the container's own endpoint.
+//
+// The reference ships ONE module, http_2xx, and ONE profile, normal-v1.
+// A container declaring another module or profile is left for that module's
+// / profile's own pair to serve, so nothing is probed twice. Add a module by
+// extending the exporter `config` allowlist AND the relabel keep-rule regex
+// together (a static gate asserts the two stay equal); add a profile by
+// copying the relabel/scrape pair with a new regex, interval and timeout.
+//
+// prometheus.exporter.blackbox is GA in v1.17.1: no experimental flag.
+
+discovery.relabel "blackbox" {
+	targets = discovery.docker.containers.targets
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_blackbox_enabled",
+		]
+		regex  = "true"
+		action = "keep"
+	}
+
+	// Module allowlist (manifest 10.4.1): only modules defined in the
+	// exporter `config` below are accepted. Keep this regex and the config
+	// modules identical -- test_blackbox.py asserts it.
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_blackbox_module",
+		]
+		regex  = "(http_2xx)"
+		action = "keep"
+	}
+
+	// Profile allowlist: this pair serves normal-v1 (the default when unset).
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_blackbox_profile",
+		]
+		regex  = "(normal-v1)?"
+		action = "keep"
+	}
+
+	// Validation (manifest 11): scheme must be http or https when set; path
+	// must start with "/" when set. Empty means "use the default".
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_blackbox_scheme",
+		]
+		regex  = "(https?)?"
+		action = "keep"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_blackbox_path",
+		]
+		regex  = "(/.*)?"
+		action = "keep"
+	}
+
+	// Collapse the per-port target fan-out and validate the declared probe
+	// port against a real private port: keepequal drops the target when the
+	// port is non-numeric, out of range or absent on the container.
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_blackbox_port",
+		]
+		target_label = "__tmp_bb_port"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_port_private"]
+		target_label  = "__tmp_bb_port"
+		action        = "keepequal"
+	}
+
+	// Probe host: the blackbox.address label if set, else the container IP.
+	// Two rules, override-if-present (relabel has no coalesce): the default
+	// is written first, the label overwrites it only when non-empty.
+	rule {
+		source_labels = ["__meta_docker_network_ip"]
+		target_label  = "__tmp_bb_host"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_blackbox_address",
+		]
+		regex        = "(.+)"
+		target_label = "__tmp_bb_host"
+	}
+
+	// Scheme default http, overridden by the label when set.
+	rule {
+		target_label = "__tmp_bb_scheme"
+		replacement  = "http"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_blackbox_scheme",
+		]
+		regex        = "(.+)"
+		target_label = "__tmp_bb_scheme"
+	}
+
+	// Path default empty, overridden by the label when set.
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_blackbox_path",
+		]
+		target_label = "__tmp_bb_path"
+	}
+
+	// Compose the probe URL scheme://host:port/path in one pass: relabel
+	// joins the source labels with "|", the regex recaptures the four parts
+	// and replacement rebuilds the URL. __address__ here becomes the blackbox
+	// __param_target (the thing probed), NOT the scrape address -- the
+	// exporter overwrites __address__ with its own in-memory address and
+	// moves this value into __param_target.
+	rule {
+		source_labels = [
+			"__tmp_bb_scheme",
+			"__tmp_bb_host",
+			"__tmp_bb_port",
+			"__tmp_bb_path",
+		]
+		separator    = "|"
+		regex        = "(.*)\\|(.*)\\|(.*)\\|(.*)"
+		replacement  = "${1}://${2}:${3}${4}"
+		target_label = "__address__"
+	}
+
+	// The module name is required on every blackbox target; it becomes
+	// __param_module on export.
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_blackbox_module",
+		]
+		target_label = "module"
+	}
+
+	// Target name (required by prometheus.exporter.blackbox): the container
+	// name, leading slash stripped. Also the human-facing series identity.
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		replacement   = "$1"
+		target_label  = "name"
+	}
+
+	// Provenance (manifest 6.1, 13.5): set as ordinary target labels here so
+	// they survive the exporter (blackbox carries non-reserved target labels
+	// through, then overwrites only its own base labels). environment/team
+	// are optional; a missing docker label yields "" which relabel drops.
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_environment",
+		]
+		target_label = "environment"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_team",
+		]
+		target_label = "team"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_com_docker_compose_project",
+		]
+		target_label = "compose_project"
+	}
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_com_docker_compose_service",
+		]
+		target_label = "compose_service"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		replacement   = "$1"
+		target_label  = "container"
+	}
+
+	rule {
+		target_label = "collector"
+		replacement  = "alloy"
+	}
+
+	rule {
+		target_label = "host"
+		replacement  = constants.hostname
+	}
+}
+
+prometheus.exporter.blackbox "http" {
+	// Inline module allowlist (manifest 10.4.1): a module absent here cannot
+	// be probed even if a container names it, because the relabel keep-rule
+	// above already rejects unknown modules. Keep the two in sync.
+	config  = "{ modules: { http_2xx: { prober: http, timeout: \"5s\" } } }"
+	targets = discovery.relabel.blackbox.output
+}
+
+// The exporter sets instance to its own in-memory address; recover the
+// probed URL from __param_target so series identify the target, not Alloy.
+discovery.relabel "enrich_blackbox" {
+	targets = prometheus.exporter.blackbox.http.targets
+
+	rule {
+		source_labels = ["__param_target"]
+		target_label  = "instance"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "blackbox"
+	}
+}
+
+prometheus.scrape "blackbox_normal" {
+	targets         = discovery.relabel.enrich_blackbox.output
+	scrape_interval = "30s"
+	scrape_timeout  = "10s"
+
+	forward_to = [
+		prometheus.remote_write.default.receiver,
+	]
+}

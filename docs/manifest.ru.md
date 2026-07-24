@@ -943,6 +943,7 @@ docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.17.1 \
 | [`010_discovery.alloy`](../alloy/010_discovery.alloy) | `discovery.docker`: opt-in discovery для metrics/database и discovery всех контейнеров для логов |
 | [`020_metrics.alloy`](../alloy/020_metrics.alloy) | Домен metrics: relabel-правила и `prometheus.scrape` (профиль `normal-v1`) |
 | [`030_database.alloy`](../alloy/030_database.alloy) | Домен database: `foreach`-pipeline для postgres, DSN из файла секрета |
+| [`035_blackbox.alloy`](../alloy/035_blackbox.alloy) | Домен blackbox: `discovery.relabel` + `prometheus.exporter.blackbox` (модуль `http_2xx`, профиль `normal-v1`) |
 | [`040_logs.alloy`](../alloy/040_logs.alloy) | Домен logs: relabel-правила и `loki.source.docker` |
 | [`050_log-profiles.alloy`](../alloy/050_log-profiles.alloy) | Profile dispatcher: `loki.process` с базовыми log-профилями |
 | [`090_outputs.alloy`](../alloy/090_outputs.alloy) | Выходы: `prometheus.remote_write` и `loki.write` |

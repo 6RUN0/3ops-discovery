@@ -302,3 +302,47 @@ def host_log_stream_labels() -> set[str]:
     if block is None:
         return set()
     return set(re.findall(r"^\s*(\w+)\s*=", block.group(1), re.MULTILINE))
+
+
+def blackbox_config_modules() -> set[str]:
+    """Return modules defined in the blackbox exporter `config` YAML."""
+    text = sources()["035_blackbox.alloy"]
+    m = re.search(r"modules:\s*\{(.*?)\}\s*\}", text)
+    if m is None:
+        raise AssertionError("blackbox exporter config modules not found")
+    return set(re.findall(r"(\w+):\s*\{", m.group(1)))
+
+
+def blackbox_relabel_modules() -> set[str]:
+    """Return modules accepted by the blackbox module keep-rule in 035."""
+    text = sources()["035_blackbox.alloy"]
+    for rule in _rules(text):
+        if f"{_LABEL}_blackbox_module" in rule and re.search(
+            r'action\s*=\s*"keep"', rule
+        ):
+            m = re.search(r'regex\s*=\s*"\(([\w|]+)\)"', rule)
+            if m:
+                return set(m.group(1).split("|"))
+    raise AssertionError("blackbox module keep-rule not found in 035")
+
+
+def blackbox_scrape_pairs() -> dict[str, dict[str, str]]:
+    """Return implemented blackbox scrape profiles (name -> params)."""
+    text = sources()["035_blackbox.alloy"]
+    profiles = []
+    for rule in _rules(text):
+        regex = _keep_regex(rule, "blackbox_profile")
+        if regex is not None:
+            profiles.append(regex.strip("()?"))
+    intervals = re.findall(r'scrape_interval\s*=\s*"(\S+?)"', text)
+    timeouts = re.findall(r'scrape_timeout\s*=\s*"(\S+?)"', text)
+    if not (len(profiles) == len(intervals) == len(timeouts)):
+        raise AssertionError(
+            "profile keep-rules and scrape blocks in 035 do not pair up"
+        )
+    return {
+        name: {"interval": interval, "timeout": timeout}
+        for name, interval, timeout in zip(
+            profiles, intervals, timeouts, strict=True
+        )
+    }

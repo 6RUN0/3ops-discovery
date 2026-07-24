@@ -30,3 +30,4 @@
 - Уточнено, что `database.type` обозначает wire-протокол, а не вендора: протокол-совместимые сборки (Percona Server for MySQL/MongoDB, XtraDB Cluster) метятся базовым типом `mysql`/`mongodb` без отдельного типа.
 - Добавлен опциональный файл host-метрик `070_host-metrics.alloy` (`prometheus.exporter.unix`, серии `node_*`); rootfs/procfs/sysfs-пути параметризуются `RU_3OPS_DISCOVERY_HOST_ROOTFS_PATH`/`_PROCFS_PATH`/`_SYSFS_PATH`.
 - Добавлен опциональный файл host-логов `080_host-logs.alloy` (`loki.source.journal` из systemd journal → `loki.write`) со статическими labels `host`/`collector`/`source`.
+- Реализован домен blackbox (`035_blackbox.alloy`): HTTP-пробы по Docker-labels `ru.3ops.discovery.blackbox.*` через `prometheus.exporter.blackbox` (референс-модуль `http_2xx`, профиль `normal-v1`).

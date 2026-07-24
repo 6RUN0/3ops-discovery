@@ -4,8 +4,22 @@ from tests.static import alloy_config as ac
 
 
 def test_sources_lists_all_base_files() -> None:
-    assert len(ac.sources()) == 6
+    assert len(ac.sources()) == 7
     assert "020_metrics.alloy" in ac.sources()
+
+
+def test_blackbox_module_allowlist_is_consistent() -> None:
+    # The relabel keep-rule and the exporter config must define the same
+    # module set: a module the relabel accepts but the exporter cannot probe
+    # (or vice versa) is a silent hole.
+    assert ac.blackbox_config_modules() == {"http_2xx"}
+    assert ac.blackbox_relabel_modules() == {"http_2xx"}
+
+
+def test_blackbox_scrape_pairs() -> None:
+    assert ac.blackbox_scrape_pairs() == {
+        "normal-v1": {"interval": "30s", "timeout": "10s"},
+    }
 
 
 def test_env_defaults_extracts_coalesce_literals() -> None:
