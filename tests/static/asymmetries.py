@@ -32,3 +32,17 @@ DB_PROFILES_UNHANDLED: dict[str, str] = {
     "standard-v1": "reference ignores database.profile",
     "extended-v1": "reference ignores database.profile",
 }
+
+BLACKBOX_SCRAPE_PROFILES_UNIMPLEMENTED: dict[str, str] = {
+    "fast-v1": "reference ships only the normal-v1 blackbox pair (manifest "
+    "14)",
+    "slow-v1": "reference ships only the normal-v1 blackbox pair (manifest "
+    "14)",
+}
+
+#: Modules the manifest 10.4 examples mention but the reference config does
+#: not ship in its exporter allowlist; adding one is an overlay/extension.
+BLACKBOX_MODULES_UNIMPLEMENTED: dict[str, str] = {
+    "tcp_connect": "reference ships only the http_2xx module (manifest 10.4)",
+    "icmp": "reference ships only the http_2xx module (manifest 10.4)",
+}
