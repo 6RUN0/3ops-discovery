@@ -1,0 +1,20 @@
+// Opt-in host metrics (spec 5.4). Lives in alloy-optional/, outside the
+// base alloy/: the base config is valid without it, and the only
+// reference points INTO a base output (090). The exporter reads the host
+// procfs/sysfs/rootfs mounted into the collector container at the paths
+// below; deployments relocate the mounts via the RU_3OPS_DISCOVERY_HOST_*
+// env vars (manifest 14.1). Series are the standard node_* set.
+//
+// Boundary rule (manifest 14.3): host-level, deployment-privileged
+// telemetry is optional, never part of the discovery-driven base.
+
+prometheus.exporter.unix "host" {
+	rootfs_path = coalesce(sys.env("RU_3OPS_DISCOVERY_HOST_ROOTFS_PATH"), "/rootfs")
+	procfs_path = coalesce(sys.env("RU_3OPS_DISCOVERY_HOST_PROCFS_PATH"), "/host/proc")
+	sysfs_path  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOST_SYSFS_PATH"), "/host/sys")
+}
+
+prometheus.scrape "host" {
+	targets    = prometheus.exporter.unix.host.targets
+	forward_to = [prometheus.remote_write.default.receiver]
+}

@@ -88,11 +88,17 @@ def extension_point_targets() -> set[str]:
 
 
 def _all_text() -> str:
-    return "\n".join(sources().values())
+    """Return base plus optional config text (env scan spans overlays too)."""
+    return "\n".join([*sources().values(), *optional_sources().values()])
 
 
 def env_defaults() -> dict[str, set[str]]:
-    """Env var -> set of its literal coalesce defaults found."""
+    """
+    Env var -> set of its literal coalesce defaults found.
+
+    Scans base and optional files (an optional overlay may parameterise its
+    own values).
+    """
     found: dict[str, set[str]] = {}
     pattern = (
         r'coalesce\(sys\.env\("(RU_3OPS_DISCOVERY_[A-Z0-9_]+)"\),'
@@ -104,7 +110,12 @@ def env_defaults() -> dict[str, set[str]]:
 
 
 def env_calls_without_default() -> set[str]:
-    """sys.env calls that are not wrapped in coalesce(..., literal)."""
+    """
+    sys.env calls that are not wrapped in coalesce(..., literal).
+
+    Scans base and optional files (an optional overlay may parameterise its
+    own values).
+    """
     every = set(
         re.findall(
             r'sys\.env\("(RU_3OPS_DISCOVERY_[A-Z0-9_]+)"\)', _all_text()
@@ -275,3 +286,19 @@ def otel_promoted_stream_labels() -> set[str]:
             if name:
                 labels.add(re.sub(r"[.-]", "_", name))
     return labels
+
+
+def host_log_stream_labels() -> set[str]:
+    """
+    Return the static stream labels 080_host-logs attaches to journal streams.
+
+    loki.source.journal promotes only its static ``labels`` map to stream
+    labels; the manifest 6.2 allowlist gate unions these so no write path
+    into loki.write bypasses the cardinality discipline. Empty if there is
+    no optional host-logs file.
+    """
+    text = optional_sources().get("080_host-logs.alloy", "")
+    block = re.search(r"(?ms)labels\s*=\s*\{\n(.*?)^\s*\}", text)
+    if block is None:
+        return set()
+    return set(re.findall(r"^\s*(\w+)\s*=", block.group(1), re.MULTILINE))

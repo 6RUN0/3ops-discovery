@@ -49,6 +49,17 @@ services:
     volumes:
       - ${RU_3OPS_DISCOVERY_E2E_CONFIG_DIR:?set by the pytest fixture}:/etc/alloy:ro
       - ${RU_3OPS_DISCOVERY_E2E_SECRETS_DIR:?set by the pytest fixture}:/run/alloy-secrets:ro
+      # Host telemetry (070_host-metrics): procfs/sysfs/rootfs for
+      # prometheus.exporter.unix. The rootfs mount would expose the host
+      # docker.sock at /rootfs/var/run/docker.sock; a /dev/null overlay
+      # masks it so the real socket never surfaces even read-only (this
+      # container reaches Docker ONLY via docker-socket-proxy). On a shared
+      # runner node_* reflect the runner host: acceptable, the stack is
+      # ephemeral and torn down with `down -v`.
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+      - /dev/null:/rootfs/var/run/docker.sock:ro
     networks:
       - telemetry
       - docker-socket
@@ -133,6 +144,32 @@ services:
       ru.3ops.discovery.metrics.type: "prometheus"
       ru.3ops.discovery.metrics.port: "3100"
       ru.3ops.discovery.metrics.job: "loki"
+
+  grafana:
+    # Demo only: gated behind the compose profile "demo", so the e2e
+    # fixture (which never passes --profile demo) never starts it. Anonymous
+    # admin, no login form; datasources pre-wired to prometheus/loki over
+    # the telemetry network. Self-monitoring dashboards work out of the box
+    # because alloy/prometheus/loki already carry the contract metrics.*
+    # labels (dogfooding).
+    image: grafana/grafana:13.1.1
+    profiles: ["demo"]
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_AUTH_BASIC_ENABLED=false
+    volumes:
+      - ./grafana/provisioning/datasources/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+    networks:
+      - telemetry
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
 
   postgres:
     image: postgres:18

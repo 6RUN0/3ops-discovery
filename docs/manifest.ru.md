@@ -962,6 +962,9 @@ Deployment-специфичные значения настраиваются п
 | `RU_3OPS_DISCOVERY_SECRETS_DIR` | Каталог файлов секретов (см. [9](#9-secret-contract)) | `/run/alloy-secrets` |
 | `RU_3OPS_DISCOVERY_REMOTE_WRITE_URL` | Endpoint метрик (протокол Prometheus remote_write) | `http://prometheus:9090/api/v1/write` |
 | `RU_3OPS_DISCOVERY_LOKI_PUSH_URL` | Endpoint логов (Loki push API) | `http://loki:3100/loki/api/v1/push` |
+| `RU_3OPS_DISCOVERY_HOST_ROOTFS_PATH` | Точка маунта host root FS для `prometheus.exporter.unix` (опциональный файл 070) | `/rootfs` |
+| `RU_3OPS_DISCOVERY_HOST_PROCFS_PATH` | Точка маунта procfs для host-exporter | `/host/proc` |
+| `RU_3OPS_DISCOVERY_HOST_SYSFS_PATH` | Точка маунта sysfs для host-exporter | `/host/sys` |
 
 Параметры scrape-профилей (interval/timeout) переменными окружения не настраиваются: они являются частью контракта (см. [8.2](#82-scrape-профили)), а не deployment-конфигурацией.
 
@@ -1006,6 +1009,8 @@ Alloy сливает все `*.alloy`-файлы каталога в один г
 | Файл | Содержимое |
 |---|---|
 | [`060_otel.alloy`](../alloy-optional/060_otel.alloy) | Opt-in OTLP receiver: `otelcol.receiver.otlp` → метрики в `prometheus.remote_write`, логи в `loki.write` через allowlist-processor |
+| [`070_host-metrics.alloy`](../alloy-optional/070_host-metrics.alloy) | Opt-in host-метрики: `prometheus.exporter.unix` (серии `node_*`) → `prometheus.remote_write`; rootfs/procfs/sysfs через `RU_3OPS_DISCOVERY_HOST_*` |
+| [`080_host-logs.alloy`](../alloy-optional/080_host-logs.alloy) | Opt-in host-логи: `loki.source.journal` (systemd journal) → `loki.write`; статические labels `host`/`collector`/`source` (в §6.2 allowlist) |
 
 ## 15. Использование
 

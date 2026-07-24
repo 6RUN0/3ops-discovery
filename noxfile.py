@@ -17,6 +17,7 @@ fails loudly without them -- the fully offline set is
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -153,3 +154,84 @@ def preflight(session: nox.Session) -> None:
     """Queue every gate except interactive ones."""
     for name in ("lint", "docs_lint", "alloy_check", "tests", "e2e"):
         session.notify(name)
+
+
+COMPOSE_FILE = REPO / "tests" / "e2e" / "stack" / "docker-compose.yml"
+
+
+def _materialize_demo(dest: Path) -> Path:
+    """Materialize base + every optional file for the demo (all overlays)."""
+    from tools.materialize import COMBOS, materialize
+
+    if dest.exists():
+        shutil.rmtree(dest)
+    return materialize(dest, COMBOS["all"])
+
+
+@nox.session
+def demo(session: nox.Session) -> None:
+    """
+    Interactive demo sandbox: full stack + Grafana (manual, not a gate).
+
+    `uv run nox -s demo`         build + up -d --wait, print URLs, follow logs
+    `uv run nox -s demo -- down`  tear the sandbox down (down -v)
+
+    Not queued by preflight: interactive. Grafana opens anonymously with
+    Prometheus + Loki pre-wired; the contract's self-metrics give it
+    self-monitoring series without extra configuration.
+    """
+    from tools.stack_secrets import write_secrets
+
+    if shutil.which("docker") is None:
+        session.error("docker is required for the demo sandbox")
+
+    project = "xad-demo"
+    compose = (
+        "docker",
+        "compose",
+        "-p",
+        project,
+        "--profile",
+        "demo",
+        "-f",
+        str(COMPOSE_FILE),
+    )
+    demo_dir = REPO / ".demo"
+    secrets_dir = demo_dir / "secrets"
+
+    # `docker compose down` still interpolates the file, so the mandatory
+    # ${...:?} vars must be present even for teardown (conftest passes env to
+    # every compose call, including down). write_secrets is idempotent and
+    # cheap; build the env before branching so `down` gets it too.
+    env = {
+        **os.environ,
+        "RU_3OPS_DISCOVERY_E2E_CONFIG_DIR": str(demo_dir / "config"),
+        "RU_3OPS_DISCOVERY_E2E_SECRETS_DIR": str(secrets_dir),
+        **write_secrets(secrets_dir),
+    }
+    if session.posargs == ["down"]:
+        session.run(*compose, "down", "-v", external=True, env=env)
+        return
+
+    _materialize_demo(demo_dir / "config")
+    session.run(
+        *compose, "up", "--build", "-d", "--wait", external=True, env=env
+    )
+    for service, port in (
+        ("grafana", 3000),
+        ("alloy", 12345),
+        ("prometheus", 9090),
+        ("loki", 3100),
+    ):
+        out = subprocess.run(
+            [*compose, "port", service, str(port)],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+        if out:
+            session.log(f"{service:12} http://{out}")
+    session.log("Ctrl+C detaches (stack keeps running).")
+    session.log("Stop it with: uv run nox -s demo -- down")
+    session.run(*compose, "logs", "-f", external=True, env=env)

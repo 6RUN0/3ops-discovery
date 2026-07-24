@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import os
-import secrets as pysecrets
 import shutil
 import subprocess
 import time
@@ -27,6 +26,7 @@ import pytest
 import requests
 
 from tools.materialize import materialize
+from tools.stack_secrets import write_secrets
 
 STACK_DIR = Path(__file__).parent / "stack"
 ARTIFACTS_DIR = Path(__file__).parent / "_artifacts"
@@ -89,6 +89,7 @@ class Stack:
     prometheus_url: str
     loki_url: str
     alloy_url: str
+    host_journal: bool
 
     def prom_query(self, expr: str) -> list[dict[str, Any]]:
         """Instant query; returns data.result (possibly empty)."""
@@ -204,50 +205,6 @@ def _compose_port(
     return f"http://{out}"
 
 
-def _write_secrets(secrets_dir: Path) -> dict[str, str]:
-    """
-    One credential source per database service.
-
-    Each .dsn file and the matching container env come from the same
-    generated password. The DSN host is the compose service name. The
-    per-type content format is fixed by manifest section 9.
-    """
-    secrets_dir.mkdir(parents=True, exist_ok=True)
-    pg_pw = pysecrets.token_hex(16)
-    my_pw = pysecrets.token_hex(16)
-    redis_pw = pysecrets.token_hex(16)
-    mongo_pw = pysecrets.token_hex(16)
-    user = "xad_e2e"
-
-    (secrets_dir / "postgres-orders.dsn").write_text(
-        f"postgresql://{user}:{pg_pw}@postgres:5432/postgres?sslmode=disable",
-        encoding="ascii",
-    )
-    # go-sql-driver DSN; root, no database (trailing slash).
-    (secrets_dir / "mariadb-billing.dsn").write_text(
-        f"root:{my_pw}@(mariadb:3306)/", encoding="ascii"
-    )
-    # redis_addr cannot take a Secret, so the address (host:port) lives in
-    # .dsn (non-secret) and the password in .redispass (manifest 9).
-    (secrets_dir / "redis-cache.dsn").write_text(
-        "redis:6379", encoding="ascii"
-    )
-    (secrets_dir / "redis-cache.redispass").write_text(
-        redis_pw, encoding="ascii"
-    )
-    (secrets_dir / "mongodb-docs.dsn").write_text(
-        f"mongodb://{user}:{mongo_pw}@mongodb:27017", encoding="ascii"
-    )
-    return {
-        "RU_3OPS_DISCOVERY_E2E_PG_USER": user,
-        "RU_3OPS_DISCOVERY_E2E_PG_PASSWORD": pg_pw,
-        "RU_3OPS_DISCOVERY_E2E_MARIADB_PASSWORD": my_pw,
-        "RU_3OPS_DISCOVERY_E2E_REDIS_PASSWORD": redis_pw,
-        "RU_3OPS_DISCOVERY_E2E_MONGO_USER": user,
-        "RU_3OPS_DISCOVERY_E2E_MONGO_PASSWORD": mongo_pw,
-    }
-
-
 def _collect_diagnostics(stack: Stack, out_dir: Path) -> None:
     """Failure artifacts: files, not just stdout."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -287,24 +244,27 @@ def stack(
         pytest.skip("docker daemon is not available; e2e needs it")
 
     project = f"xad-e2e-{uuid.uuid4().hex[:8]}"
+    host_journal = Path("/var/log/journal").is_dir()
+    optional = ["060_otel.alloy", "070_host-metrics.alloy"]
+    if host_journal:
+        optional.append("080_host-logs.alloy")
     config_dir = materialize(
-        tmp_path_factory.mktemp("alloy-config"), optional=["060_otel.alloy"]
+        tmp_path_factory.mktemp("alloy-config"), optional=optional
     )
     secrets_dir = tmp_path_factory.mktemp("alloy-secrets")
     env = {
         **os.environ,
         "RU_3OPS_DISCOVERY_E2E_CONFIG_DIR": str(config_dir),
         "RU_3OPS_DISCOVERY_E2E_SECRETS_DIR": str(secrets_dir),
-        **_write_secrets(secrets_dir),
+        **write_secrets(secrets_dir),
     }
-    compose_cmd = (
-        "docker",
-        "compose",
-        "-p",
-        project,
-        "-f",
-        str(STACK_DIR / "docker-compose.yml"),
-    )
+    compose_files = ["-f", str(STACK_DIR / "docker-compose.yml")]
+    if host_journal:
+        compose_files += [
+            "-f",
+            str(STACK_DIR / "docker-compose.host-logs.yml"),
+        ]
+    compose_cmd = ("docker", "compose", "-p", project, *compose_files)
     # Pre-clean leftovers of a crashed previous run.
     subprocess.run(
         [*compose_cmd, "down", "-v", "--remove-orphans"],
@@ -338,6 +298,7 @@ def stack(
         prometheus_url=_compose_port(compose_cmd, env, "prometheus", 9090),
         loki_url=_compose_port(compose_cmd, env, "loki", 3100),
         alloy_url=_compose_port(compose_cmd, env, "alloy", 12345),
+        host_journal=host_journal,
     )
     for name, url in (
         ("prometheus", f"{instance.prometheus_url}/-/ready"),

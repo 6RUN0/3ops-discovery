@@ -21,12 +21,16 @@ OPTIONAL_DIR = REPO / "alloy-optional"
 
 #: Directory combinations validated by the alloy_check session:
 #: base standalone, base + each optional, base + all.
-#: otel and all coincide for now (the only optional file of phase 2);
-#: phase 3 adds host files and splits them.
 COMBOS: dict[str, tuple[str, ...]] = {
     "base": (),
     "otel": ("060_otel.alloy",),
-    "all": ("060_otel.alloy",),
+    "host-metrics": ("070_host-metrics.alloy",),
+    "host-logs": ("080_host-logs.alloy",),
+    "all": (
+        "060_otel.alloy",
+        "070_host-metrics.alloy",
+        "080_host-logs.alloy",
+    ),
 }
 
 

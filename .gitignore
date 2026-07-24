@@ -22,3 +22,6 @@ __pycache__/
 
 # E2e failure artifacts (compose logs, component dumps)
 tests/e2e/_artifacts/
+
+# Interactive demo sandbox scratch (config + generated secrets)
+.demo/

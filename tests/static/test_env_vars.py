@@ -27,3 +27,12 @@ def test_defaults_agree_and_are_consistent_across_files() -> None:
         assert defaults == {manifest[name]}, (
             f"{name}: config default {defaults} != manifest {manifest[name]!r}"
         )
+
+
+def test_env_scanner_includes_optional_files() -> None:
+    # Host-exporter env vars live in an optional file; the both-ways gate
+    # relies on the scanner seeing them.
+    env = ac.env_defaults()
+    assert env["RU_3OPS_DISCOVERY_HOST_ROOTFS_PATH"] == {"/rootfs"}
+    assert env["RU_3OPS_DISCOVERY_HOST_PROCFS_PATH"] == {"/host/proc"}
+    assert env["RU_3OPS_DISCOVERY_HOST_SYSFS_PATH"] == {"/host/sys"}

@@ -80,3 +80,7 @@ def test_db_default_ports() -> None:
         "redis": "6379",
         "mongodb": "27017",
     }
+
+
+def test_host_log_stream_labels() -> None:
+    assert ac.host_log_stream_labels() == {"host", "collector", "source"}

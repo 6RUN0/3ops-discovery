@@ -1,0 +1,18 @@
+// Opt-in host logs (spec 5.4). Reads the systemd journal mounted at
+// /var/log/journal and forwards to the base loki.write (090). The static
+// labels are within the manifest 6.2 allowlist (host/collector/source);
+// journal fields stay in the line, not in stream labels. Requires a
+// persistent journal on the host (/var/log/journal) plus /etc/machine-id;
+// the e2e stack mounts them conditionally (docker-compose.host-logs.yml).
+
+loki.source.journal "host" {
+	path           = "/var/log/journal"
+	format_as_json = false
+	max_age        = "12h"
+	forward_to     = [loki.write.default.receiver]
+	labels         = {
+		host      = constants.hostname,
+		collector = "alloy",
+		source    = "journal",
+	}
+}

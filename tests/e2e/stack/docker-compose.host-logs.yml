@@ -1,0 +1,11 @@
+---
+# Conditional overlay: adds the systemd journal mounts the 080_host-logs
+# overlay needs. The fixture includes this file (-f) only when the host has
+# a persistent journal (/var/log/journal), so a journal-less CI runner does
+# not fail `up` on a missing bind source.
+
+services:
+  alloy:
+    volumes:
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro

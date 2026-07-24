@@ -19,6 +19,11 @@ them together.
 - `uv run nox -s e2e` — docker compose delivery checks (opt-in, takes
   minutes). Subset: `uv run nox -s e2e -- tests/e2e/test_logs_delivery.py`.
 - `uv run nox -s preflight` — everything.
+- `uv run nox -s demo` — interactive sandbox: full stack + Grafana
+  (`--profile demo`, anonymous access at `http://127.0.0.1:3000`,
+  Prometheus + Loki datasources provisioned). Prints URLs, follows logs;
+  Ctrl+C detaches, `uv run nox -s demo -- down` tears it down. Not part of
+  `preflight` (interactive).
 
 ## Architecture
 
@@ -29,6 +34,12 @@ them together.
   extracted.
 - `alloy/*.alloy` — reference config; one directory = one merged
   component graph, unique component names, no overrides possible.
+- `alloy-optional/*.alloy` — opt-in overlay files (manifest §14.5):
+  `060_otel` (OTLP receiver), `070_host-metrics`
+  (`prometheus.exporter.unix`, `node_*` series), `080_host-logs`
+  (`loki.source.journal`). Composed via `tools.materialize.COMBOS`
+  (alloy_check validates every combination) and the e2e fixture; 080 only
+  when the host has a persistent journal.
 - `tests/static/` — manifest vs config consistency; allowed gaps live
   in `asymmetries.py` as one explicit table.
 - `tests/e2e/stack/` — compose stack: Alloy reaches the Docker API

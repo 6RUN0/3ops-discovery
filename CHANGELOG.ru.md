@@ -28,3 +28,5 @@
 - Задокументирована модель кастомизации: extension points базы (раздел 14.4), опциональные файлы (14.5), соглашения против коллизий имён.
 - Добавлены таблицы стандартных портов БД (10.2) и форматов секрет-файла по типам (9); зафиксировано исключение провенанса для OTLP-пути.
 - Уточнено, что `database.type` обозначает wire-протокол, а не вендора: протокол-совместимые сборки (Percona Server for MySQL/MongoDB, XtraDB Cluster) метятся базовым типом `mysql`/`mongodb` без отдельного типа.
+- Добавлен опциональный файл host-метрик `070_host-metrics.alloy` (`prometheus.exporter.unix`, серии `node_*`); rootfs/procfs/sysfs-пути параметризуются `RU_3OPS_DISCOVERY_HOST_ROOTFS_PATH`/`_PROCFS_PATH`/`_SYSFS_PATH`.
+- Добавлен опциональный файл host-логов `080_host-logs.alloy` (`loki.source.journal` из systemd journal → `loki.write`) со статическими labels `host`/`collector`/`source`.
