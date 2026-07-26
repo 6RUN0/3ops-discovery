@@ -112,6 +112,24 @@ def scrape_profiles() -> dict[str, dict[str, str]]:
     return profiles
 
 
+def snmp_scrape_profiles() -> dict[str, dict[str, str]]:
+    """Section 8.5: snmp profile name -> {interval, timeout}."""
+    block = code_block("8.5", after="SNMP-профили:")
+    profiles: dict[str, dict[str, str]] = {}
+    current = ""
+    for line in block.splitlines():
+        name = re.fullmatch(r"([a-z0-9-]+):", line.strip())
+        pair = re.fullmatch(r"(interval|timeout): (\S+)", line.strip())
+        if name and not line.startswith(" "):
+            current = name.group(1)
+            profiles[current] = {}
+        elif pair and current:
+            profiles[current][pair.group(1)] = pair.group(2)
+    if not profiles:
+        raise AnchorError("no snmp scrape profiles parsed from section 8.5")
+    return profiles
+
+
 def log_profiles() -> set[str]:
     """Section 8.3: the base log profile names."""
     block = code_block("8.3", after="Базовые профили:")

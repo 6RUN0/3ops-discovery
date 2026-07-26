@@ -70,3 +70,10 @@ def test_counterexamples_not_extracted() -> None:
     # only their own sections, so nothing to assert beyond exactness
     # already pinned; this test documents the property.
     assert "fast-v1" in md.scrape_profiles()  # normative, from 8.2
+
+
+def test_snmp_scrape_profiles_anchor() -> None:
+    profiles = md.snmp_scrape_profiles()
+    assert profiles == {
+        "snmp-standard-v1": {"interval": "60s", "timeout": "30s"}
+    }
