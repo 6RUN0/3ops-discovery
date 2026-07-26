@@ -812,17 +812,22 @@ OTLP-путь — исключение из провенанса раздела 
 
 Домен [10.7](#107-domain-ipmi) (ipmi) структурно похож, но в этой фазе остаётся доменом на Docker-labels (Out of scope для файлового провайдера).
 
-#### 10.6.1. Labels
+#### 10.6.1. SNMP-auth
 
-```text
-ru.3ops.discovery.snmp.enabled
-ru.3ops.discovery.snmp.address
-ru.3ops.discovery.snmp.module
-ru.3ops.discovery.snmp.auth-id
-ru.3ops.discovery.snmp.profile
-```
+Auth-модель домена: именованные профили в `snmp_auths.yaml`, на которые устройство ссылается по имени через поле `auth`.
 
-Секреты SNMP community/SNMPv3 хранятся вне labels и выбираются через `auth-id`. Файл секрета: `/run/alloy-secrets/<auth-id>.snmp` по общему контракту раздела [9](#9-secret-contract).
+**Allowlist версий:** `v2c`, `v3`. Проверка только advisory: версия живёт в секрет-файле, который парсит экспортёр; Alloy-конфигурация её не инспектирует. Единственная точка контроля в репозитории — статический валидатор auth-фикстуры: `version ∈ {2, 3}` (НЕ диапазон экспортёра 1..3 — SNMPv1 запрещён контрактом).
+
+**Поля профиля по версии:**
+
+- `v2c`: `community`.
+- `v3`: `username`, `security_level`, `password`, `auth_protocol`, `priv_protocol`, `priv_password` (полный список и enum-ы — в разделе «Схема файлов» дизайна).
+
+**Размещение секрета:** файл устройств хранит только ИМЯ профиля; credentials лежат только в `snmp_auths.yaml`, подаваемом как inline `config` из `local.file` с `is_secret = true`, — никогда в labels и не в списке устройств. Усиливает [13.1](#131-запрещено-хранить-в-docker-labels) (SNMP communities запрещены в labels); раздел [9](#9-secret-contract) трактует это как исключение из соглашения «один файл на `<auth-id>`». Relabel проверяет только ПРИСУТСТВИЕ `auth` (`keep auth != ""`) — формат имени не навязывается.
+
+**Известное ограничение:** `merge` сохраняет встроенные defaults, включая небезопасный `public_v2` (community `public`, v2c) и `public_v1` (v1, вне allowlist `{v2c, v3}`); `auth: "public_v2"` резолвится успешно, потому что relabel проверяет присутствие, а не членство. Контроль по имени в референсе невозможен (имена auth зависят от деплоя) — задокументированный риск, как и односторонний module-гейт.
+
+**Неизвестное имя auth** (опечатка, отсутствует в слитом `auths:`) → ошибка на стороне экспортёра во время scrape, а НЕ drop на этапе discovery (relabel не может свериться с секрет-файлом). Задокументировано; отдельный e2e не добавляется.
 
 ### 10.7. Domain: ipmi
 
