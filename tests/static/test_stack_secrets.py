@@ -14,6 +14,7 @@ def test_write_secrets_creates_all_dsn_files(tmp_path: Path) -> None:
         "redis-cache.dsn",
         "redis-cache.redispass",
         "mongodb-docs.dsn",
+        "snmp_auths.yaml",
     }
     # DSN hosts are compose service names; env keys drive the containers.
     assert "@postgres:5432" in (tmp_path / "postgres-orders.dsn").read_text()

@@ -12,6 +12,8 @@ from __future__ import annotations
 import secrets as pysecrets
 from pathlib import Path
 
+import yaml
+
 
 def write_secrets(secrets_dir: Path) -> dict[str, str]:
     """Generate DB secret files under ``secrets_dir``; return the env map."""
@@ -40,6 +42,30 @@ def write_secrets(secrets_dir: Path) -> dict[str, str]:
     )
     (secrets_dir / "mongodb-docs.dsn").write_text(
         f"mongodb://{user}:{mongo_pw}@mongodb:27017", encoding="ascii"
+    )
+    # SNMP auth secret for the file-provider domain (overlay 037). Not a .dsn:
+    # the exporter reads it as inline `config` via local.file is_secret. The
+    # netmon-v3 creds MUST equal the snmp-agent snmpd.conf (v3 authPriv,
+    # SHA/AES). Path is fixed by convention (RU_3OPS_DISCOVERY_SECRETS_DIR),
+    # so no env var is returned for it.
+    (secrets_dir / "snmp_auths.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "auths": {
+                    "netmon-v3": {
+                        "version": 3,
+                        "username": "netmon",
+                        "security_level": "authPriv",
+                        "password": "netmon-auth-pass",
+                        "auth_protocol": "SHA",
+                        "priv_protocol": "AES",
+                        "priv_password": "netmon-priv-pass",
+                    }
+                }
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
     )
     return {
         "RU_3OPS_DISCOVERY_E2E_PG_USER": user,
