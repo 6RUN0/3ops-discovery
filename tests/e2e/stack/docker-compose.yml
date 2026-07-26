@@ -46,9 +46,15 @@ services:
       # Contract intervals (normal-v1 30s) must not change; only the
       # discovery refresh is accelerated for test budgets.
       RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL: 5s
+      # File-provider domain (037_snmp): the device file lives in a SECOND,
+      # writable mount (the /etc/alloy mount is :ro and holds only *.alloy).
+      # Only snmp_stack sets E2E_SNMP_DIR to a real dir; other runs get the
+      # /dev/null default below and never load 037, so nothing reads this.
+      RU_3OPS_DISCOVERY_SNMP_TARGETS_FILE: /etc/alloy-snmp/snmp_targets.yaml
     volumes:
       - ${RU_3OPS_DISCOVERY_E2E_CONFIG_DIR:?set by the pytest fixture}:/etc/alloy:ro
       - ${RU_3OPS_DISCOVERY_E2E_SECRETS_DIR:?set by the pytest fixture}:/run/alloy-secrets:ro
+      - ${RU_3OPS_DISCOVERY_E2E_SNMP_DIR:-/dev/null}:/etc/alloy-snmp:ro
       # Host telemetry (070_host-metrics): procfs/sysfs/rootfs for
       # prometheus.exporter.unix. The rootfs mount would expose the host
       # docker.sock at /rootfs/var/run/docker.sock; a /dev/null overlay
