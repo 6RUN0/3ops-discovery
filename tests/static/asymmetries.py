@@ -46,3 +46,18 @@ BLACKBOX_MODULES_UNIMPLEMENTED: dict[str, str] = {
     "tcp_connect": "reference ships only the http_2xx module (manifest 10.4)",
     "icmp": "reference ships only the http_2xx module (manifest 10.4)",
 }
+
+#: The reference ships exactly one snmp profile (snmp-standard-v1); the
+#: manifest 8.5 declares no others, so this is empty. It exists so the
+#: both-ways gate has a symmetric partner and widening 8.5 later is a visible
+#: diff.
+SNMP_SCRAPE_PROFILES_UNIMPLEMENTED: dict[str, str] = {}
+
+#: Modules the manifest 10.6 example list mentions but the reference relabel
+#: keep-rule does not accept; adding one is an overlay/extension. The snmp
+#: allowlist is one-sided (modules live in the exporter's built-in snmp.yml,
+#: no in-repo source of truth), so this only guards disjointness.
+SNMP_MODULES_UNIMPLEMENTED: dict[str, str] = {
+    "system": "reference ships only the if_mib module (manifest 10.6)",
+    "cisco_device": "reference ships only the if_mib module (manifest 10.6)",
+}
