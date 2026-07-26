@@ -31,3 +31,4 @@
 - Добавлен опциональный файл host-метрик `070_host-metrics.alloy` (`prometheus.exporter.unix`, серии `node_*`); rootfs/procfs/sysfs-пути параметризуются `RU_3OPS_DISCOVERY_HOST_ROOTFS_PATH`/`_PROCFS_PATH`/`_SYSFS_PATH`.
 - Добавлен опциональный файл host-логов `080_host-logs.alloy` (`loki.source.journal` из systemd journal → `loki.write`) со статическими labels `host`/`collector`/`source`.
 - Реализован домен blackbox (`035_blackbox.alloy`): HTTP-пробы по Docker-labels `ru.3ops.discovery.blackbox.*` через `prometheus.exporter.blackbox` (референс-модуль `http_2xx`, профиль `normal-v1`).
+- Домен snmp (§8.5/§10.6/§10.6.1/§14.5): файловый провайдер устройств, auth-модель v2c/v3 (authPriv), opt-in overlay `037_snmp.alloy`, static-гейты и e2e с живым Net-SNMP агентом.
