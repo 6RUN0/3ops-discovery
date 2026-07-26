@@ -427,11 +427,11 @@ Redis — исключение: аргумент `redis_addr` экспортёр
 ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$
 ```
 
-Контракт общий для всех доменов с секретами; различается только доменный суффикс файла:
+Контракт общий для доменов на Docker-labels; различается только доменный суффикс файла (snmp — файловый провайдер — исключение, см. §10.6.1):
 
 ```text
 database  /run/alloy-secrets/<secret-id>.dsn
-snmp      /run/alloy-secrets/<auth-id>.snmp
+snmp      /run/alloy-secrets/snmp_auths.yaml  (исключение, единый файл — см. §10.6.1)
 ipmi      /run/alloy-secrets/<secret-id>.ipmi
 ```
 
