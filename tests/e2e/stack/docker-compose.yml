@@ -545,3 +545,15 @@ services:
       ru.3ops.discovery.blackbox.port: "8080"
       ru.3ops.discovery.blackbox.path: "/metrics"
       ru.3ops.discovery.blackbox.scheme: "ftp"
+
+  snmp-agent:
+    # File-provider domain target (manifest 10.6): external SNMP hardware has
+    # no container, so 037_snmp.alloy finds it via a device file, NOT Docker
+    # discovery. Hence NO ru.3ops.discovery.* labels here. Net-SNMP snmpd
+    # serves IF-MIB over SNMPv3 authPriv (user netmon, SHA/AES); the creds
+    # match the snmp_auths.yaml fixture. Unprofiled so it runs in e2e + demo.
+    build: ./snmp-agent
+    networks:
+      - telemetry
+    expose:
+      - "161/udp"
