@@ -171,12 +171,12 @@ COMPOSE_FILE = REPO / "tests" / "e2e" / "stack" / "docker-compose.yml"
 
 
 def _materialize_demo(dest: Path) -> Path:
-    """Materialize base + every optional file for the demo (all overlays)."""
+    """Materialize base + every optional file + snmp for the demo."""
     from tools.materialize import COMBOS, materialize
 
     if dest.exists():
         shutil.rmtree(dest)
-    return materialize(dest, COMBOS["all"])
+    return materialize(dest, (*COMBOS["all"], "037_snmp.alloy"))
 
 
 @nox.session
@@ -191,6 +191,7 @@ def demo(session: nox.Session) -> None:
     Prometheus + Loki pre-wired; the contract's self-metrics give it
     self-monitoring series without extra configuration.
     """
+    from tools.snmp_fixtures import write_snmp_fixtures
     from tools.stack_secrets import write_secrets
 
     if shutil.which("docker") is None:
@@ -209,6 +210,27 @@ def demo(session: nox.Session) -> None:
     )
     demo_dir = REPO / ".demo"
     secrets_dir = demo_dir / "secrets"
+    snmp_dir = demo_dir / "snmp"
+
+    # Provision the snmp device file BEFORE the env dict: write_snmp_fixtures
+    # writes an empty auth here, then write_secrets in the env spread below
+    # overwrites snmp_auths.yaml with the real netmon-v3 creds (Task 8). The
+    # snmp-agent compose service is unprofiled, so it runs in the demo too.
+    write_snmp_fixtures(
+        snmp_dir,
+        secrets_dir,
+        devices=[
+            {
+                "name": "snmp-agent",
+                "address": "snmp-agent:161",
+                "module": "if_mib",
+                "auth": "netmon-v3",
+                "environment": "demo",
+                "team": "platform",
+            }
+        ],
+        auths={},
+    )
 
     # `docker compose down` still interpolates the file, so the mandatory
     # ${...:?} vars must be present even for teardown (conftest passes env to
@@ -218,6 +240,7 @@ def demo(session: nox.Session) -> None:
         **os.environ,
         "RU_3OPS_DISCOVERY_E2E_CONFIG_DIR": str(demo_dir / "config"),
         "RU_3OPS_DISCOVERY_E2E_SECRETS_DIR": str(secrets_dir),
+        "RU_3OPS_DISCOVERY_E2E_SNMP_DIR": str(snmp_dir),
         **write_secrets(secrets_dir),
     }
     if session.posargs == ["down"]:
