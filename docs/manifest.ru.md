@@ -425,6 +425,8 @@ ipmi      /run/alloy-secrets/<secret-id>.ipmi
 
 Пространство `secret-id` — единый trust domain в пределах хоста: контракт не привязывает контейнер к конкретному секрету, и любой контейнер с валидным label может сослаться на любой существующий файл секрета. В каталог секретов хоста следует выкладывать только секреты, предназначенные контейнерам этого хоста; для разграничения команд используйте соглашение о префиксах `secret-id`. Префиксы — только соглашение для операторов: конфигурация их не проверяет, и технически каждый файл секрета на хосте доступен каждому контейнеру этого хоста. Следствие той же модели доверия: контейнер может определить существование файла секрета, объявив соответствующий `secret-id` и наблюдая появление exporter; содержимое секрета при этом не раскрывается. Привязка `secret-id` к identity контейнера — вне рамок версии `0.2` (раздел [16](#16-out-of-scope)).
 
+Домен snmp — единственное задокументированное исключение из соглашения «один файл на `<auth-id>`»: его секрет — единый файл `snmp_auths.yaml` с именованными профилями внутри YAML (map `auths:`), а не отдельный файл на каждый `auth-id`. Регулярное выражение `secret-id` выше нормирует имена секрет-файлов доменов на Docker-labels и НЕ ограничивает ссылку-имя профиля `auth` файлового провайдера (раздел [10.6.1](#1061-snmp-auth)).
+
 ## 10. Домены
 
 Определены следующие базовые домены:
@@ -779,7 +781,22 @@ OTLP-путь — исключение из провенанса раздела 
 
 ### 10.6. Domain: snmp
 
-Используется для внешних устройств или management interfaces.
+Единственный домен, не управляемый Docker-labels: внешнее сетевое оборудование (коммутаторы, роутеры) не имеет контейнера, поэтому targets перечисляются в файле, а не открываются через discovery. Домен поставляется opt-in overlay-файлом [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) (раздел [14.5](#145-опциональные-файлы)), а не базовым доменом: его top-level `local.file` без файла на диске становится unhealthy и каскадно роняет граф, поэтому он загружается только вместе с device- и auth-файлами.
+
+Файл устройств (`snmp_targets.yaml`) — список записей; каждое значение хранится строкой (`encoding.from_yaml` декодирует список в `list(map(string))`):
+
+| Поле | Обязательный | Значение |
+|---|---|---|
+| `name` | нет | Человекочитаемое имя устройства (провенанс) |
+| `address` | да | `host:port` SNMP-агента (presence-проверка в relabel) |
+| `module` | да | Модуль snmp_exporter из allowlist; в референсе — `if_mib` (открытый пример-список, как в blackbox [10.4](#104-domain-blackbox)) |
+| `auth` | да | Имя auth-профиля из [10.6.1](#1061-snmp-auth) (presence-проверка; резолвится экспортёром) |
+| `environment` | нет | Provenance-label (пропускается как non-reserved) |
+| `team` | нет | Provenance-label (пропускается как non-reserved) |
+
+Поле устройства называется `auth` — имя профиля, а НЕ discovery-label `auth-id` раздела [13.2](#132-разрешено-хранить) (он относится к доменам на Docker-labels). Секрет (SNMP community / SNMPv3 credentials) живёт только в `snmp_auths.yaml` (раздел [10.6.1](#1061-snmp-auth)), никогда в файле устройств.
+
+Домен [10.7](#107-domain-ipmi) (ipmi) структурно похож, но в этой фазе остаётся доменом на Docker-labels (Out of scope для файлового провайдера).
 
 #### 10.6.1. Labels
 
@@ -828,6 +845,8 @@ Alloy не обязан напрямую реализовывать IPMI. Он �
 Неизвестный тип должен быть проигнорирован и отражён в логах Alloy.
 
 Референсная конфигурация реализует проверки `path`, `scheme`, `profile` и `secret-id` relabel-правилами. Проверка `port` выполняется неявно и fail-closed: `keepequal` сопоставляет объявленный порт с реальными приватными портами контейнера, поэтому нечисловое, выходящее за диапазон или несуществующее значение приводит к отбрасыванию target.
+
+Файловый провайдер snmp (overlay 037) проверяет свои аналоги теми же fail-closed keep-правилами `discovery.relabel` поверх `from_yaml`-списка: allowlist `module`, presence `auth` и presence `address` — семантически невалидная запись отбрасывается построчно. Проверка `port` через `keepequal` не применяется (контейнера нет). Отдельно действует режим **fail-STALE**: синтаксически сломанный ВЕСЬ файл устройств ломает `from_yaml`, и Alloy удерживает последние валидные аргументы (targets не меняются — это не fail-closed/пустой список). На холодном старте последнего валидного значения нет, поэтому `discovery.relabel` unhealthy, а набор targets пуст (экспортёр стартует на нуле устройств, healthy-idle). Построчный drop (семантика) и fail-STALE всего файла (синтаксис) — два разных режима.
 
 ## 12. Lifecycle
 
@@ -966,6 +985,7 @@ Deployment-специфичные значения настраиваются п
 | `RU_3OPS_DISCOVERY_HOST_ROOTFS_PATH` | Точка маунта host root FS для `prometheus.exporter.unix` (опциональный файл 070) | `/rootfs` |
 | `RU_3OPS_DISCOVERY_HOST_PROCFS_PATH` | Точка маунта procfs для host-exporter | `/host/proc` |
 | `RU_3OPS_DISCOVERY_HOST_SYSFS_PATH` | Точка маунта sysfs для host-exporter | `/host/sys` |
+| `RU_3OPS_DISCOVERY_SNMP_TARGETS_FILE` | Путь к файлу устройств snmp (не секрет; overlay 037) | `/etc/alloy/snmp_targets.yaml` |
 
 Параметры scrape-профилей (interval/timeout) переменными окружения не настраиваются: они являются частью контракта (см. [8.2](#82-scrape-профили)), а не deployment-конфигурацией.
 
@@ -1012,6 +1032,7 @@ Alloy сливает все `*.alloy`-файлы каталога в один г
 | [`060_otel.alloy`](../alloy-optional/060_otel.alloy) | Opt-in OTLP receiver: `otelcol.receiver.otlp` → метрики в `prometheus.remote_write`, логи в `loki.write` через allowlist-processor |
 | [`070_host-metrics.alloy`](../alloy-optional/070_host-metrics.alloy) | Opt-in host-метрики: `prometheus.exporter.unix` (серии `node_*`) → `prometheus.remote_write`; rootfs/procfs/sysfs через `RU_3OPS_DISCOVERY_HOST_*` |
 | [`080_host-logs.alloy`](../alloy-optional/080_host-logs.alloy) | Opt-in host-логи: `loki.source.journal` (systemd journal) → `loki.write`; статические labels `host`/`collector`/`source` (в §6.2 allowlist) |
+| [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) | Домен snmp (opt-in overlay): файловый провайдер (`local.file` + `encoding.from_yaml`), `prometheus.exporter.snmp` (модуль `if_mib`, профиль `snmp-standard-v1`), auth из inline `config`-секрета (`local.file` `is_secret`) через merge. Включается только вместе с device/auth-файлами (top-level `local.file` без файла unhealthy). |
 
 ## 15. Использование
 
