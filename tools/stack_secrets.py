@@ -14,6 +14,13 @@ from pathlib import Path
 
 import yaml
 
+#: Fixed SNMPv3 passphrases for the ephemeral e2e/demo snmp-agent. Unlike the
+#: DB credentials (randomised per run), these MUST equal the static
+#: snmp-agent/snmpd.conf createUser line, so they are constants, not
+#: token_hex. Throwaway test values for a local agent, never real secrets.
+_SNMP_AUTH_PASS = "netmon-auth-pass"  # pragma: allowlist secret
+_SNMP_PRIV_PASS = "netmon-priv-pass"  # pragma: allowlist secret
+
 
 def write_secrets(secrets_dir: Path) -> dict[str, str]:
     """Generate DB secret files under ``secrets_dir``; return the env map."""
@@ -56,10 +63,10 @@ def write_secrets(secrets_dir: Path) -> dict[str, str]:
                         "version": 3,
                         "username": "netmon",
                         "security_level": "authPriv",
-                        "password": "netmon-auth-pass",
+                        "password": _SNMP_AUTH_PASS,
                         "auth_protocol": "SHA",
                         "priv_protocol": "AES",
-                        "priv_password": "netmon-priv-pass",
+                        "priv_password": _SNMP_PRIV_PASS,
                     }
                 }
             },

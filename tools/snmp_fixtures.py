@@ -24,10 +24,11 @@ def write_snmp_fixtures(
     auths: dict[str, Any],
 ) -> None:
     """
-    Write the device file into ``config_dir`` and the auth secret into
-    ``secrets_dir``.
+    Write the device file and the auth secret to disk.
 
-    ``devices`` values must all be strings (the device file is decoded by
+    The device file lands in ``config_dir``, the auth secret in
+    ``secrets_dir``. ``devices`` values must all be strings (the device file
+    is decoded by
     ``encoding.from_yaml``, which would otherwise produce non-string scalars).
     ``auths`` is the ``auths:`` map body; it is parsed by the exporter's typed
     loader, so native ints (``version: 3``) are correct there.

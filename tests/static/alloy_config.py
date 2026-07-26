@@ -163,7 +163,8 @@ def scrape_pairs() -> dict[str, dict[str, str]]:
 
 
 def snmp_relabel_modules() -> set[str]:
-    """Return modules accepted by the snmp module keep-rule in 037.
+    """
+    Return modules accepted by the snmp module keep-rule in 037.
 
     The source label is the plain ``module`` key from the device YAML (a
     file-provider domain), not a docker-label prefix -- so this cannot reuse
@@ -181,7 +182,8 @@ def snmp_relabel_modules() -> set[str]:
 
 
 def snmp_scrape_pairs() -> dict[str, dict[str, str]]:
-    """Return implemented snmp scrape profiles (name -> params).
+    """
+    Return implemented snmp scrape profiles (name -> params).
 
     The domain is domain-wide: the profile name is set on the config side via
     a ``snmp_profile`` set-rule in ``discovery.relabel.snmp`` (there is no
@@ -203,9 +205,7 @@ def snmp_scrape_pairs() -> dict[str, dict[str, str]]:
     timeout = re.search(r'scrape_timeout\s*=\s*"(\S+?)"', text)
     if interval is None or timeout is None:
         raise AssertionError("snmp scrape block not found in 037")
-    return {
-        name: {"interval": interval.group(1), "timeout": timeout.group(1)}
-    }
+    return {name: {"interval": interval.group(1), "timeout": timeout.group(1)}}
 
 
 def log_profile_allowlist() -> set[str]:

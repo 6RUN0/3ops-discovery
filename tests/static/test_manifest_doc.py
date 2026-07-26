@@ -51,7 +51,7 @@ def test_env_defaults_anchor() -> None:
     env = md.env_defaults()
     assert env["RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL"] == "30s"
     assert env["RU_3OPS_DISCOVERY_SECRETS_DIR"] == "/run/alloy-secrets"
-    assert len(env) == 9  # было 8: +1 snmp targets-file env (037)  # было 5: +3 host-exporter env (070)
+    assert len(env) == 9  # 8 (base + host) + 1 snmp targets-file env (037)
 
 
 def test_base_files_anchor() -> None:
