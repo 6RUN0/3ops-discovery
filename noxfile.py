@@ -109,7 +109,7 @@ def alloy_check(session: nox.Session) -> None:
     for combo, optional in COMBOS.items():
         config_dir = materialize(Path(session.create_tmp()) / combo, optional)
         docker_env: list[str] = []
-        if combo == "snmp":
+        if "037_snmp.alloy" in optional:
             # 037's top-level local.file components need the device + auth
             # files present even to `validate`. Empty stubs are enough: an
             # empty device list is 0 targets (healthy-idle) and `auths: {}`
@@ -176,7 +176,7 @@ def _materialize_demo(dest: Path) -> Path:
 
     if dest.exists():
         shutil.rmtree(dest)
-    return materialize(dest, (*COMBOS["all"], "037_snmp.alloy"))
+    return materialize(dest, COMBOS["all-snmp"])
 
 
 @nox.session

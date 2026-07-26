@@ -20,18 +20,22 @@ BASE_DIR = REPO / "alloy"
 OPTIONAL_DIR = REPO / "alloy-optional"
 
 #: Directory combinations validated by the alloy_check session:
-#: base standalone, base + each optional, base + all.
+#: base standalone, base + each optional, base + all, and base + all +
+#: snmp (the exact merged graph the demo sandbox materializes, so the
+#: gate proves 037 composes with every overlay, not just standalone).
+_ALL_OVERLAYS = (
+    "060_otel.alloy",
+    "070_host-metrics.alloy",
+    "080_host-logs.alloy",
+)
 COMBOS: dict[str, tuple[str, ...]] = {
     "base": (),
     "otel": ("060_otel.alloy",),
     "host-metrics": ("070_host-metrics.alloy",),
     "host-logs": ("080_host-logs.alloy",),
     "snmp": ("037_snmp.alloy",),
-    "all": (
-        "060_otel.alloy",
-        "070_host-metrics.alloy",
-        "080_host-logs.alloy",
-    ),
+    "all": _ALL_OVERLAYS,
+    "all-snmp": (*_ALL_OVERLAYS, "037_snmp.alloy"),
 }
 
 
