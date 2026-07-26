@@ -102,11 +102,21 @@ def alloy_check(session: nox.Session) -> None:
     exercising the same overlay mechanism the e2e stack uses.
     """
     from tools.materialize import COMBOS, materialize
+    from tools.snmp_fixtures import write_snmp_fixtures
 
     if shutil.which("docker") is None:
         session.error("docker is required for alloy_check")
     for combo, optional in COMBOS.items():
         config_dir = materialize(Path(session.create_tmp()) / combo, optional)
+        docker_env: list[str] = []
+        if combo == "snmp":
+            # 037's top-level local.file components need the device + auth
+            # files present even to `validate`. Empty stubs are enough: an
+            # empty device list is 0 targets (healthy-idle) and `auths: {}`
+            # merges cleanly over the built-in snmp.yml. Both files live inside
+            # the single /etc/alloy mount, so point SECRETS_DIR there too.
+            write_snmp_fixtures(config_dir, config_dir, devices=[], auths={})
+            docker_env = ["-e", "RU_3OPS_DISCOVERY_SECRETS_DIR=/etc/alloy"]
         unformatted = [
             cfg.name
             for cfg in sorted(config_dir.glob("*.alloy"))
@@ -120,6 +130,7 @@ def alloy_check(session: nox.Session) -> None:
             "docker",
             "run",
             "--rm",
+            *docker_env,
             "-v",
             f"{config_dir}:/etc/alloy:ro",
             ALLOY_IMAGE,

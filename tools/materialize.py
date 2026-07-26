@@ -26,6 +26,7 @@ COMBOS: dict[str, tuple[str, ...]] = {
     "otel": ("060_otel.alloy",),
     "host-metrics": ("070_host-metrics.alloy",),
     "host-logs": ("080_host-logs.alloy",),
+    "snmp": ("037_snmp.alloy",),
     "all": (
         "060_otel.alloy",
         "070_host-metrics.alloy",

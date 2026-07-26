@@ -1,0 +1,115 @@
+// Opt-in snmp domain overlay (manifest 10.6, 14.5). File-provider domain:
+// devices are listed in a YAML file, not Docker labels (SNMP hardware has no
+// container). Loaded ONLY in the snmp COMBO where the device and auth files
+// are guaranteed -- the two top-level local.file components fail New() on a
+// missing path (unhealthy cascade), so this is never a base file. Every
+// reference points INTO base output 090.
+
+local.file "snmp_auths" {
+	// Inline auth secret (manifest 10.6.1): named v2c/v3 profiles under an
+	// `auths:` map, layered over the built-in snmp.yml via merge below.
+	filename  = coalesce(sys.env("RU_3OPS_DISCOVERY_SECRETS_DIR"), "/run/alloy-secrets") + "/snmp_auths.yaml"
+	is_secret = true
+}
+
+local.file "snmp_devices" {
+	filename = coalesce(sys.env("RU_3OPS_DISCOVERY_SNMP_TARGETS_FILE"), "/etc/alloy/snmp_targets.yaml")
+}
+
+discovery.relabel "snmp" {
+	// from_yaml decodes the device list into list(map(string)); every value
+	// in the file is a quoted string, so targets is well-typed.
+	targets = encoding.from_yaml(local.file.snmp_devices.content)
+
+	// Module allowlist (manifest 10.6): only if_mib is accepted. The source
+	// label is the plain `module` key from the device YAML, NOT a docker-label
+	// prefix -- snmp is the file-provider domain. snmp_relabel_modules() reads
+	// this literal.
+	rule {
+		source_labels = ["module"]
+		regex         = "(if_mib)"
+		action        = "keep"
+	}
+
+	// Fail-closed (manifest 11): a device row without an auth profile name or
+	// without an address is dropped. Presence-only: the profile-name FORMAT is
+	// not enforced here (resolution happens in the exporter against the merged
+	// auths: map).
+	rule {
+		source_labels = ["auth"]
+		regex         = "(.+)"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["address"]
+		regex         = "(.+)"
+		action        = "keep"
+	}
+
+	// Profile-name anchor (manifest 8.5): the domain is domain-wide, so there
+	// is no per-target profile keep-rule (unlike blackbox) -- set the name on
+	// the config side. snmp_scrape_pairs() reads this replacement.
+	rule {
+		target_label = "snmp_profile"
+		replacement  = "snmp-standard-v1"
+	}
+
+	// Provenance (manifest 6.1), as in blackbox 035: collector/host are
+	// constants; environment/team pass through from the device file as
+	// non-reserved labels (the exporter copies them through).
+	rule {
+		target_label = "collector"
+		replacement  = "alloy"
+	}
+
+	rule {
+		target_label = "host"
+		replacement  = constants.hostname
+	}
+}
+
+prometheus.exporter.snmp "dev" {
+	targets = discovery.relabel.snmp.output
+
+	// Inline auth secret + mandatory merge: replace would wipe the ~48
+	// built-in modules the moment any auth is set (manifest 10.6.1).
+	config                = local.file.snmp_auths.content
+	config_merge_strategy = "merge"
+}
+
+// The exporter hides module/auth/name in __param_* reserved keys and does NOT
+// set instance (it defaults to the exporter's own listen address). Recover
+// instance from __param_target and module from __param_module (blackbox is the
+// precedent for instance, but its e2e never asserts module -- here we must),
+// and override the exporter's job=<base>/<name> with the domain job.
+discovery.relabel "enrich_snmp" {
+	targets = prometheus.exporter.snmp.dev.targets
+
+	rule {
+		source_labels = ["__param_target"]
+		target_label  = "instance"
+	}
+
+	rule {
+		source_labels = ["__param_module"]
+		target_label  = "module"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "snmp"
+	}
+}
+
+prometheus.scrape "snmp" {
+	// snmp-standard-v1 (manifest 8.5): 60s interval, 30s timeout for slow
+	// devices. Domain-wide -- one exporter, one scrape.
+	targets         = discovery.relabel.enrich_snmp.output
+	scrape_interval = "60s"
+	scrape_timeout  = "30s"
+
+	forward_to = [
+		prometheus.remote_write.default.receiver,
+	]
+}
