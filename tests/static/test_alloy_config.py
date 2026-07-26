@@ -98,3 +98,12 @@ def test_db_default_ports() -> None:
 
 def test_host_log_stream_labels() -> None:
     assert ac.host_log_stream_labels() == {"host", "collector", "source"}
+
+
+def test_snmp_scrape_pairs_from_overlay() -> None:
+    pairs = ac.snmp_scrape_pairs()
+    assert pairs == {"snmp-standard-v1": {"interval": "60s", "timeout": "30s"}}
+
+
+def test_snmp_relabel_modules_allowlist() -> None:
+    assert ac.snmp_relabel_modules() == {"if_mib"}

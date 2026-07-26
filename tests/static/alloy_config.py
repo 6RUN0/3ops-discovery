@@ -162,6 +162,52 @@ def scrape_pairs() -> dict[str, dict[str, str]]:
     }
 
 
+def snmp_relabel_modules() -> set[str]:
+    """Return modules accepted by the snmp module keep-rule in 037.
+
+    The source label is the plain ``module`` key from the device YAML (a
+    file-provider domain), not a docker-label prefix -- so this cannot reuse
+    the blackbox helper.
+    """
+    text = optional_sources()["037_snmp.alloy"]
+    for rule in _rules(text):
+        if re.search(r'source_labels\s*=\s*\["module"\]', rule) and re.search(
+            r'action\s*=\s*"keep"', rule
+        ):
+            m = re.search(r'regex\s*=\s*"\(([\w|]+)\)"', rule)
+            if m:
+                return set(m.group(1).split("|"))
+    raise AssertionError("snmp module keep-rule not found in 037")
+
+
+def snmp_scrape_pairs() -> dict[str, dict[str, str]]:
+    """Return implemented snmp scrape profiles (name -> params).
+
+    The domain is domain-wide: the profile name is set on the config side via
+    a ``snmp_profile`` set-rule in ``discovery.relabel.snmp`` (there is no
+    per-target keep-rule to carry it), and interval/timeout come from the
+    single scrape block. Both lookups are order-independent within the rule
+    body so ``alloy fmt`` reordering cannot break them.
+    """
+    text = optional_sources()["037_snmp.alloy"]
+    name: str | None = None
+    for rule in _rules(text):
+        if re.search(r'target_label\s*=\s*"snmp_profile"', rule):
+            m = re.search(r'replacement\s*=\s*"([\w-]+)"', rule)
+            if m:
+                name = m.group(1)
+                break
+    if name is None:
+        raise AssertionError("snmp_profile set-rule not found in 037")
+    interval = re.search(r'scrape_interval\s*=\s*"(\S+?)"', text)
+    timeout = re.search(r'scrape_timeout\s*=\s*"(\S+?)"', text)
+    if interval is None or timeout is None:
+        raise AssertionError("snmp scrape block not found in 037")
+    return {
+        name: {"interval": interval.group(1), "timeout": timeout.group(1)}
+    }
+
+
 def log_profile_allowlist() -> set[str]:
     """Names accepted by the log_profile allowlist rule in 040."""
     text = sources()["040_logs.alloy"]
