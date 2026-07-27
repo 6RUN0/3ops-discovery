@@ -368,6 +368,17 @@ extended-v1
 
 Профили позволяют контролировать нагрузку и не принимать произвольные настройки из labels. Выбираются через `ru.3ops.discovery.database.profile`; по умолчанию `standard-v1`.
 
+Database-профиль управляет объёмом сбора экспортёра — какие коллекторы опрашивают СУБД, — а не каденцией скрейпа: scrape-профили раздела [8.2](#82-scrape-профили) относятся только к доменам `metrics` и `blackbox`. Нагрузка монотонна: basic ≤ standard ≤ extended. `standard-v1` соответствует набору коллекторов экспортёра по умолчанию; несовместимое изменение набора требует нового имени профиля (раздел [8.1](#81-общие-правила)). Значение вне allowlist отбрасывает цель целиком (fail-closed), как и в остальных доменах с профилями.
+
+Маппинг профилей на коллекторы в референсной конфигурации ([alloy/030_database.alloy](../alloy/030_database.alloy)); в extended-наборы входят только коллекторы, работающие на «ванильной» СУБД без расширений и специальных настроек сервера:
+
+| Тип | `basic-v1` | `standard-v1` | `extended-v1` |
+|---|---|---|---|
+| `postgres` | дефолтные метрики без `pg_settings` | дефолты экспортёра | дефолты + `database_wraparound`, `long_running_transactions`, `process_idle`, `statio_user_indexes` |
+| `mysql`/`mariadb` | `global_status`, `global_variables` | шесть дефолтных коллекторов (закреплены явно) | дефолтные + `engine_innodb_status`, `info_schema.processlist`, `auto_increment.columns` |
+| `redis` | только `redis_*` серии (`redis_metrics_only`) | дефолты экспортёра | дефолты + client list + системная память |
+| `mongodb` | только diagnostic data (`serverStatus`) | полный сбор (`collect_all`) | эквивалент `standard-v1`: дефолт mongodb-экспортёра уже максимальный |
+
 ### 8.5. SNMP-профили
 
 Domain-wide allowlist версионированных snmp-профилей. Дифференциатор — увеличенный `timeout` (30s) под медленные устройства; §8.2 общий для `metrics`/`blackbox` и такого таймаута не даёт, поэтому snmp-профили вынесены отдельным семейством. Референс включает один профиль; применяется ко всему snmp-scrape (файловый провайдер даёт один экспортёр и один scrape).
@@ -986,7 +997,7 @@ docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.17.1 \
 |---|---|
 | [`010_discovery.alloy`](../alloy/010_discovery.alloy) | `discovery.docker`: opt-in discovery для metrics/database и discovery всех контейнеров для логов |
 | [`020_metrics.alloy`](../alloy/020_metrics.alloy) | Домен metrics: общий relabel (валидация + провенанс) и пара `discovery.relabel`/`prometheus.scrape` на каждый профиль раздела 8.2 |
-| [`030_database.alloy`](../alloy/030_database.alloy) | Домен database: `foreach`-pipeline для postgres, DSN из файла секрета |
+| [`030_database.alloy`](../alloy/030_database.alloy) | Домен database: `foreach`-pipeline на тип СУБД, DSN из файла секрета, объём сбора по `database.profile` (раздел 8.4) |
 | [`035_blackbox.alloy`](../alloy/035_blackbox.alloy) | Домен blackbox: общий `discovery.relabel` + `prometheus.exporter.blackbox` (модули `http_2xx`/`tcp_connect`/`icmp`/`tls_connect`) и пара фильтр+scrape на каждый профиль раздела 8.2 |
 | [`040_logs.alloy`](../alloy/040_logs.alloy) | Домен logs: relabel-правила и `loki.source.docker` |
 | [`050_log-profiles.alloy`](../alloy/050_log-profiles.alloy) | Profile dispatcher: `loki.process` с базовыми log-профилями |

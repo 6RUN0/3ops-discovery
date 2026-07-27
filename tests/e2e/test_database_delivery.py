@@ -48,9 +48,15 @@ def test_db_series_carry_provenance(
     secret_id: str,
     has_optional: bool,
 ) -> None:
+    # Scoped by instance: a db type can run several exporters (the
+    # profile pair does exactly that for postgres), so an unscoped query
+    # returns an arbitrary one. Waiting for a series with this instance
+    # still proves the synthesised identity: only the enrichment can
+    # produce it.
     series = wait_until(
         lambda: stack.prom_query(
-            f'{family}{{compose_project="{stack.project}"}}'
+            f'{family}{{compose_project="{stack.project}",'
+            f'instance="{secret_id}"}}'
         ),
         timeout=METRICS_BUDGET,
         desc=f"{family} series present",
@@ -70,3 +76,53 @@ def test_db_series_carry_provenance(
         # coalesce(absent, "") -> "" -> relabel drops the empty label.
         assert "environment" not in labels
         assert "team" not in labels
+
+
+def test_extended_profile_enables_extra_collectors(stack: Stack) -> None:
+    # The postgres service declares database.profile=extended-v1.
+    # pg_long_running_transactions comes from the long_running_transactions
+    # collector, which only that profile enables, so its presence pins the
+    # label to a real change in collection scope (pg_up alone cannot:
+    # every profile emits it).
+    series = wait_until(
+        lambda: stack.prom_query(
+            "pg_long_running_transactions"
+            f'{{compose_project="{stack.project}"}}'
+        ),
+        timeout=METRICS_BUDGET,
+        desc="extended-only postgres collector metric present",
+    )
+    assert series[0]["metric"]["instance"] == "postgres-orders"
+
+
+def test_basic_profile_shrinks_collection(stack: Stack) -> None:
+    # postgres-basic declares basic-v1 (disable_settings_metrics): the
+    # exporter must stay authenticated and up, yet stop exposing the
+    # pg_settings series. postgres-orders (extended-v1, settings stay
+    # on) is the positive control proving the absence comes from the
+    # profile, not from a change in exporter behaviour. The settings
+    # series ship in the same scrape as pg_up, so once both anchors are
+    # visible the absence check cannot race the remote_write path.
+    def _pg_up(instance: str) -> bool:
+        result = stack.prom_query(
+            f'pg_up{{compose_project="{stack.project}",instance="{instance}"}}'
+        )
+        return bool(result) and float(result[0]["value"][1]) == 1.0
+
+    wait_until(
+        lambda: _pg_up("postgres-audit"),
+        timeout=METRICS_BUDGET,
+        desc="basic-v1 postgres exporter up",
+    )
+    wait_until(
+        lambda: stack.prom_query(
+            f'pg_settings_max_connections{{compose_project="{stack.project}",'
+            'instance="postgres-orders"}'
+        ),
+        timeout=METRICS_BUDGET,
+        desc="control profile keeps the pg_settings series",
+    )
+    assert not stack.prom_query(
+        f'pg_settings_max_connections{{compose_project="{stack.project}",'
+        'instance="postgres-audit"}'
+    )

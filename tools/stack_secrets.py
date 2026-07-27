@@ -35,6 +35,15 @@ def write_secrets(secrets_dir: Path) -> dict[str, str]:
         f"postgresql://{user}:{pg_pw}@postgres:5432/postgres?sslmode=disable",
         encoding="ascii",
     )
+    # Second postgres instance on the basic-v1 profile: the e2e proves
+    # the profile shrinks the exporter's collection scope against the
+    # extended-v1 postgres-orders control. Same generated credentials,
+    # different server (compose service postgres-basic).
+    (secrets_dir / "postgres-audit.dsn").write_text(
+        f"postgresql://{user}:{pg_pw}@postgres-basic:5432/postgres"
+        "?sslmode=disable",
+        encoding="ascii",
+    )
     # go-sql-driver DSN; root, no database (trailing slash).
     (secrets_dir / "mariadb-billing.dsn").write_text(
         f"root:{my_pw}@(mariadb:3306)/", encoding="ascii"

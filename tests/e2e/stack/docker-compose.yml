@@ -214,6 +214,38 @@ services:
       ru.3ops.discovery.database.enabled: "true"
       ru.3ops.discovery.database.type: "postgres"
       ru.3ops.discovery.database.secret-id: "postgres-orders"
+      # extended-v1 enables extra collectors; the e2e asserts a metric
+      # only they emit, so the label observably changes the scope.
+      ru.3ops.discovery.database.profile: "extended-v1"
+
+  postgres-basic:
+    # basic-v1 counterpart of the postgres service: its exporter must
+    # drop the pg_settings series while postgres-orders keeps them --
+    # the pair pins the profile to an observable change in collection
+    # scope. Shares the generated credentials with the other postgres
+    # containers (one throwaway secret source per type is enough).
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${RU_3OPS_DISCOVERY_E2E_PG_USER:?set by the pytest fixture}
+      POSTGRES_PASSWORD: ${RU_3OPS_DISCOVERY_E2E_PG_PASSWORD:?set by the pytest fixture}
+    networks:
+      - telemetry
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "data"
+      ru.3ops.discovery.database.enabled: "true"
+      ru.3ops.discovery.database.type: "postgres"
+      ru.3ops.discovery.database.secret-id: "postgres-audit"
+      ru.3ops.discovery.database.profile: "basic-v1"
 
   db-badsecret:
     # Negative scenario: everything valid except the secret-id, which

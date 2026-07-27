@@ -24,12 +24,10 @@ LOG_PROFILES_UNIMPLEMENTED: dict[str, str] = {
 #: All manifest 10.2 database types are implemented as of phase 2.
 DB_TYPES_UNIMPLEMENTED: dict[str, str] = {}
 
-DB_PROFILES_UNHANDLED: dict[str, str] = {
-    "basic-v1": "reference ignores database.profile; exporters run "
-    "with default collectors",
-    "standard-v1": "reference ignores database.profile",
-    "extended-v1": "reference ignores database.profile",
-}
+#: All manifest 8.4 database profiles are handled in 030: every pipeline
+#: validates the profile label fail-closed and drives its exporter's
+#: collection scope from it (standard-v1 = the exporter's defaults).
+DB_PROFILES_UNHANDLED: dict[str, str] = {}
 
 #: All manifest 8.2 scrape profiles are implemented in 035_blackbox.
 BLACKBOX_SCRAPE_PROFILES_UNIMPLEMENTED: dict[str, str] = {}

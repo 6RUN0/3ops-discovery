@@ -13,8 +13,25 @@ def test_db_types_asymmetry_is_exact() -> None:
     assert implemented & allowed == set()
 
 
-def test_db_profiles_are_a_documented_asymmetry() -> None:
-    assert md.db_profiles() == set(asymmetries.DB_PROFILES_UNHANDLED)
+def test_db_profile_allowlists_match_manifest() -> None:
+    # Every pipeline must validate the profile label fail-closed against
+    # the manifest 8.4 allowlist; "" is the unset-label default path.
+    allowlists = ac.db_profile_allowlists()
+    assert set(allowlists) == set(ac.db_default_ports())
+    for allowlist in allowlists.values():
+        assert allowlist == md.db_profiles() | {""}
+    assert asymmetries.DB_PROFILES_UNHANDLED == {}
+
+
+def test_db_profile_argument_maps_cover_the_allowlist() -> None:
+    # Indexing a profile-keyed map with a missing key is a load-time
+    # error, so each map must cover the full 8.4 set. Two maps: postgres
+    # enabled_collectors and mysql set_collectors (redis/mongodb drive
+    # booleans via ==, which cannot fail on an unknown key).
+    maps = ac.db_profile_map_keys()
+    assert len(maps) == 2
+    for keys in maps:
+        assert keys == md.db_profiles()
 
 
 def test_default_ports_match_manifest_table() -> None:

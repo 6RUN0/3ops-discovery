@@ -347,6 +347,46 @@ def db_default_ports() -> dict[str, str]:
     return ports
 
 
+def db_profile_allowlists() -> dict[str, set[str]]:
+    """
+    Database type -> profile allowlist of its keep-rule in 030.
+
+    The empty alternative (unset label -> default profile) is part of the
+    regex and is returned as "" so the gate can assert it explicitly.
+    """
+    allowlists: dict[str, set[str]] = {}
+    for name, body in re.findall(
+        r'(?ms)discovery\.relabel "database_(\w+)" \{\n(.*?)^\}$',
+        sources()["030_database.alloy"],
+    ):
+        for rule in _rules(body):
+            regex = _keep_regex(rule, "database_profile")
+            if regex is not None:
+                allowlists[name] = set(regex.strip("()").split("|"))
+    if not allowlists:
+        raise AssertionError("no database profile keep-rules found in 030")
+    return allowlists
+
+
+def db_profile_map_keys() -> list[set[str]]:
+    """
+    Key sets of exporter argument maps indexed by the profile label.
+
+    The postgres and mysql templates pick collector lists via
+    ``{ ... }[coalesce(each[<profile label>], ...)]``; indexing a missing
+    key is a load-time error, so every map must cover the full manifest
+    8.4 allowlist (the relabel keep-rule guards only non-empty garbage).
+    """
+    maps = re.findall(
+        r"(?ms)= \{\n(.*?)^\s*\}\[coalesce\(each\["
+        rf'"{_LABEL}_database_profile"\]',
+        sources()["030_database.alloy"],
+    )
+    if not maps:
+        raise AssertionError("no profile-indexed argument maps found in 030")
+    return [set(re.findall(r'"([\w-]+)"\s*=', body)) for body in maps]
+
+
 def otel_promoted_stream_labels() -> set[str]:
     """
     Labels 060_otel promotes to Loki streams via the resource-hint.

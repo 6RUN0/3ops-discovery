@@ -138,8 +138,11 @@ def test_badsecret_target_is_dropped(stack: Stack) -> None:
         timeout=METRICS_BUDGET,
         desc="valid postgres pipeline alive",
     )
+    # Two valid postgres targets survive (postgres-orders and the
+    # basic-v1 postgres-audit); the badsecret target must not make it
+    # three.
     kept = stack.relabel_project_targets("discovery.relabel.database_postgres")
-    assert kept == 1, (
-        f"expected only the valid postgres target after the secret-id "
-        f"drop, got {kept} targets (path-traversal id not dropped?)"
+    assert kept == 2, (
+        f"expected only the two valid postgres targets after the "
+        f"secret-id drop, got {kept} (path-traversal id not dropped?)"
     )

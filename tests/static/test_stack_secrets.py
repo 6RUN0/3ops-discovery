@@ -10,6 +10,7 @@ def test_write_secrets_creates_all_dsn_files(tmp_path: Path) -> None:
     names = {p.name for p in tmp_path.iterdir()}
     assert names == {
         "postgres-orders.dsn",
+        "postgres-audit.dsn",
         "mariadb-billing.dsn",
         "redis-cache.dsn",
         "redis-cache.redispass",

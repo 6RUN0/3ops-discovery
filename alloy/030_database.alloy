@@ -48,6 +48,19 @@ discovery.relabel "database_postgres" {
 		action = "keep"
 	}
 
+	// Fail-closed profile allowlist (manifest 8.4): unknown profiles are
+	// dropped here because the exporter template below indexes a map by
+	// the profile value, and a missing map key is a load-time error, not
+	// a silent default. The empty alternative accepts an unset label
+	// (default standard-v1 via coalesce in the template).
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_profile",
+		]
+		regex  = "(|basic-v1|standard-v1|extended-v1)"
+		action = "keep"
+	}
+
 	// Collapse the per-port target fan-out: keep only the target whose
 	// private port matches the declared database port; the default is the
 	// standard port of the type (5432, manifest section 10.2.1).
@@ -82,8 +95,21 @@ foreach "postgres" {
 			is_secret = true
 		}
 
+		// Profile-driven collection scope (manifest 8.4): standard-v1 is
+		// the exporter's default set; basic-v1 additionally drops the
+		// pg_settings collection; extended-v1 enables extra collectors
+		// restricted to ones that work on a vanilla server (no
+		// extensions, no server-version gate).
 		prometheus.exporter.postgres "db" {
 			data_source_names = [local.file.dsn.content]
+
+			disable_settings_metrics = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") == "basic-v1"
+
+			enabled_collectors = {
+				"basic-v1"    = [],
+				"standard-v1" = [],
+				"extended-v1" = ["database_wraparound", "long_running_transactions", "process_idle", "statio_user_indexes"],
+			}[coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1")]
 		}
 
 		// Provenance enrichment (manifest 6.1): the exporter's own targets
@@ -186,6 +212,16 @@ discovery.relabel "database_mysql" {
 		action = "keep"
 	}
 
+	// Fail-closed profile allowlist (manifest 8.4), see the postgres
+	// pipeline.
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_profile",
+		]
+		regex  = "(|basic-v1|standard-v1|extended-v1)"
+		action = "keep"
+	}
+
 	rule {
 		target_label = "__tmp_database_port"
 		replacement  = "3306"
@@ -217,8 +253,21 @@ foreach "mysql" {
 			is_secret = true
 		}
 
+		// Profile-driven collection scope (manifest 8.4). set_collectors
+		// fully overrides the exporter's default set, so standard-v1
+		// pins today's upstream defaults explicitly: a profile's
+		// behaviour must not drift with an exporter upgrade (manifest
+		// 8.1 requires a new profile name for incompatible changes).
+		// extended-v1 adds collectors that work on a vanilla server
+		// (binlog and perf_schema stay out: they need server settings).
 		prometheus.exporter.mysql "db" {
 			data_source_name = local.file.dsn.content
+
+			set_collectors = {
+				"basic-v1"    = ["global_status", "global_variables"],
+				"standard-v1" = ["global_status", "global_variables", "info_schema.innodb_cmp", "info_schema.innodb_cmpmem", "info_schema.query_response_time", "slave_status"],
+				"extended-v1" = ["global_status", "global_variables", "info_schema.innodb_cmp", "info_schema.innodb_cmpmem", "info_schema.query_response_time", "slave_status", "engine_innodb_status", "info_schema.processlist", "auto_increment.columns"],
+			}[coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1")]
 		}
 
 		discovery.relabel "enrich_mysql" {
@@ -309,6 +358,16 @@ discovery.relabel "database_redis" {
 		action = "keep"
 	}
 
+	// Fail-closed profile allowlist (manifest 8.4), see the postgres
+	// pipeline.
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_profile",
+		]
+		regex  = "(|basic-v1|standard-v1|extended-v1)"
+		action = "keep"
+	}
+
 	rule {
 		target_label = "__tmp_database_port"
 		replacement  = "6379"
@@ -350,9 +409,17 @@ foreach "redis" {
 			is_secret = true
 		}
 
+		// Profile-driven collection scope (manifest 8.4): basic-v1 keeps
+		// only redis_* series (drops the exporter's own Go runtime
+		// metrics); extended-v1 adds client-list and system memory
+		// metrics on top of the defaults.
 		prometheus.exporter.redis "db" {
 			redis_addr     = local.file.addr.content
 			redis_password = local.file.password.content
+
+			redis_metrics_only  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") == "basic-v1"
+			export_client_list  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") == "extended-v1"
+			incl_system_metrics = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") == "extended-v1"
 		}
 
 		discovery.relabel "enrich_redis" {
@@ -443,6 +510,16 @@ discovery.relabel "database_mongodb" {
 		action = "keep"
 	}
 
+	// Fail-closed profile allowlist (manifest 8.4), see the postgres
+	// pipeline.
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_database_profile",
+		]
+		regex  = "(|basic-v1|standard-v1|extended-v1)"
+		action = "keep"
+	}
+
 	rule {
 		target_label = "__tmp_database_port"
 		replacement  = "27017"
@@ -474,8 +551,15 @@ foreach "mongodb" {
 			is_secret = true
 		}
 
+		// Profile-driven collection scope (manifest 8.4): basic-v1 keeps
+		// only the diagnostic serverStatus data. The exporter's default
+		// (collect_all) is already the maximum, so extended-v1 is an
+		// accepted equivalent of standard-v1 (manifest 8.4).
 		prometheus.exporter.mongodb "db" {
 			mongodb_uri = local.file.dsn.content
+
+			collect_all            = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_diagnostic_data = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") == "basic-v1"
 		}
 
 		discovery.relabel "enrich_mongodb" {
