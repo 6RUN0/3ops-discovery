@@ -27,10 +27,12 @@ def write_secret(path: Path, content: str, *, encoding: str = "ascii") -> Path:
     # good. os.open applies the umask, so a wider umask cannot loosen
     # this -- but it cannot tighten a file that already exists either,
     # hence the explicit chmod for the overwrite case.
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, SECRET_MODE)
+    descriptor = os.open(
+        path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, SECRET_MODE
+    )
     with os.fdopen(descriptor, "w", encoding=encoding) as handle:
         handle.write(content)
-    os.chmod(path, SECRET_MODE)
+    path.chmod(SECRET_MODE)
     return path
 
 

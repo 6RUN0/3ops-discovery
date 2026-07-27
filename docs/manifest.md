@@ -465,6 +465,8 @@ The identifier validation rules and the read-only mount are identical across dom
 
 The `secret-id` space is a single trust domain within the host: the contract does not bind a container to a particular secret, and any container with a valid label may reference any existing secret file. Only secrets meant for the containers of that host should be placed into its secret directory; use a `secret-id` prefix convention to separate teams. Prefixes are an operator convention only: the configuration does not check them, and technically every secret file on the host is reachable by every container of that host. A consequence of the same trust model: a container can determine whether a secret file exists by declaring the corresponding `secret-id` and observing whether an exporter appears; the content of the secret is not disclosed. Binding `secret-id` to a container identity is out of scope for version `0.2` (section [16](#16-out-of-scope)).
 
+The limits of secret redaction. `is_secret = true` guarantees redaction in the Alloy API and in component exports: the value is handed out as `(secret)`. The guarantee does not extend to configuration-load error messages -- when the declared type and the file content disagree, Alloy may quote a fragment of the value it read (the `host:port` of someone else's database, say) in the error text. This is Alloy behaviour rather than a choice of the contract, and no configuration changes it. What follows in practice: the collector's own logs are sensitive and deserve the same handling as secrets -- they should not be sent anywhere secrets are not sent (see section [13.2](#132-may-be-stored)).
+
 The snmp domain is the single documented exception to the "one file per `<auth-id>`" convention: its secret is a single `snmp_auths.yaml` file with named profiles inside the YAML (the `auths:` map) rather than one file per `auth-id`. The `secret-id` regular expression above normalizes the secret file names of the label-driven domains and does NOT constrain the profile name referenced by the `auth` field of the file provider (section [10.6.1](#1061-snmp-auth)).
 
 ## 10. Domains
@@ -949,6 +951,8 @@ The snmp file provider (overlay 037) checks its counterparts with the same fail-
 Docker does not allow changing the labels of a running container. Changes take effect only after the container is recreated with the new labels.
 
 ## 13. Security requirements
+
+The collector's own logs are sensitive data. Alloy writes configuration-load diagnostics into them, and those may contain fragments of the values it read, including ones marked `is_secret` (the limits of redaction are in section [9](#9-secret-contract)). The reference configuration collects the stdout/stderr of every container, the Alloy container included -- a deliberate choice in favour of observing the collector, not an oversight. If the log backend is trusted less than the secret directory, collection for the collector is switched off with an explicit `ru.3ops.discovery.logs.enabled=false` on its container.
 
 ### 13.1. Must not be stored in Docker labels
 
