@@ -831,7 +831,7 @@ Auth-модель домена: именованные профили в `snmp_a
 
 ### 10.7. Domain: ipmi
 
-Используется для BMC/IPMI targets через внешний `ipmi_exporter` или другой adapter.
+BMC/IPMI-мониторинг через внешний `ipmi_exporter` (или другой adapter). У Alloy нет нативного IPMI-компонента — в отличие от snmp, где есть встроенный `prometheus.exporter.snmp`, — поэтому ipmi не самостоятельный механизм, а **частный случай домена [metrics](#101-domain-metrics)**: внешний exporter опрашивает BMC по IPMI и публикует Prometheus-endpoint, а Alloy скрейпит этот endpoint как обычный metrics-target. IPMI-специфичной конфигурации на стороне Alloy нет.
 
 #### 10.7.1. Labels
 
@@ -843,9 +843,9 @@ ru.3ops.discovery.ipmi.secret-id
 ru.3ops.discovery.ipmi.profile
 ```
 
-Файл секрета: `/run/alloy-secrets/<secret-id>.ipmi` по общему контракту раздела [9](#9-secret-contract).
+Labels описывают намерение (адрес BMC, модуль exporter, секрет, профиль), но роль Alloy сводится к тому, чтобы скрейпить HTTP-endpoint внешнего exporter: доменного pipeline на стороне Alloy, как у snmp ([10.6](#106-domain-snmp)), здесь нет. Файл секрета: `/run/alloy-secrets/<secret-id>.ipmi` по общему контракту раздела [9](#9-secret-contract); credentials BMC потребляет сам exporter, а не Alloy.
 
-Alloy не обязан напрямую реализовывать IPMI. Он может скрейпить Prometheus endpoint внешнего exporter.
+Референс-конфигурация не поставляет ipmi-overlay (в отличие от `037_snmp.alloy`): рекомендуемый путь — пометить контейнер `ipmi_exporter` labels домена [metrics](#101-domain-metrics) и скрейпить его существующим metrics-pipeline. Отдельный overlay появится, только если Alloy получит нативный IPMI-компонент.
 
 ## 11. Validation rules
 

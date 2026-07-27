@@ -32,3 +32,4 @@
 - Добавлен опциональный файл host-логов `080_host-logs.alloy` (`loki.source.journal` из systemd journal → `loki.write`) со статическими labels `host`/`collector`/`source`.
 - Реализован домен blackbox (`035_blackbox.alloy`): HTTP-пробы по Docker-labels `ru.3ops.discovery.blackbox.*` через `prometheus.exporter.blackbox` (референс-модуль `http_2xx`, профиль `normal-v1`).
 - Домен snmp (§8.5/§10.6/§10.6.1/§14.5): файловый провайдер устройств, auth-модель v2c/v3 (authPriv), opt-in overlay `037_snmp.alloy`, static-гейты и e2e с живым Net-SNMP агентом.
+- Уточнён домен ipmi (§10.7): у Alloy нет нативного IPMI-компонента, поэтому домен переформулирован как частный случай `metrics` — скрейп Prometheus-endpoint внешнего `ipmi_exporter`; labels и суффикс секрета `.ipmi` сохранены (семантика контракта не изменилась).
