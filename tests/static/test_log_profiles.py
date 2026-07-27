@@ -32,6 +32,13 @@ def test_mixed_stages_are_exclusive_and_named() -> None:
     assert r'!~ "^\\s*\\{"' in logfmt, (
         "mixed-v1 logfmt selector must exclude JSON-shaped lines"
     )
+    # And the manifest has to say so. It used to describe the profile
+    # with "may", listing two heuristics that overlap, so a second
+    # implementer could satisfy 10.3.6 with a pipeline whose output
+    # depends on stage order.
+    assert "исключающие" in md.section("10.3.6"), (
+        "10.3.6 does not state that the mixed-v1 branches are exclusive"
+    )
 
 
 def test_source_consumes_relabeled_targets() -> None:

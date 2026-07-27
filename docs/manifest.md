@@ -213,6 +213,8 @@ compose_project
 compose_service
 ```
 
+The log path adds `service_name`, `log_profile` and `source` to this set; the full list of permitted stream labels is in section [6.2](#62-loki-label-cardinality), which governs cardinality rather than composition. There is no single place listing every emitted label, by construction: metrics and logs have different sets, and section [6.2](#62-loki-label-cardinality) is the normative source for logs.
+
 The `container` label comes from the Docker engine metadata and `host` from the hostname of the Alloy collector; neither is set by container labels, so a container cannot forge their values. The remaining labels are declared by the container itself (see section [13.5](#135-trust-in-labels)). For logs the set is additionally constrained by the allowlist of section [6.2](#62-loki-label-cardinality).
 
 The `instance` label belongs to metrics; for logs its counterpart is `service_name` (see section [10.3.5](#1035-labels)). The analogy is incomplete and must not be leaned on as a rule: `service_name` is derived from `logs.service` alone, whereas the global `instance` does not extend to logs.
@@ -283,7 +285,9 @@ Rules:
 - major changes may alter semantics or remove fields;
 - starting from the first change that alters label semantics, the Alloy configuration must state the supported versions explicitly (in `0.2` the check is reserved, see section [5](#5-global-labels)).
 
-The label carries the major and minor parts only: patch changes by definition do not alter label semantics and are not reflected in the contract.
+The label carries the major and minor parts only: patch changes by definition do not alter label semantics and are not reflected in the contract. The format is `<major>.<minor>`, both parts decimal without leading zeros: `^\d+\.\d+$`. The values `0.2.0`, `v0.2` and `0.2-rc1` do not conform; the specification version in the header of this document is a full SemVer and deliberately does not share the format of this label -- that one versions the text, this one versions the meaning of the labels.
+
+Behaviour on an unsupported version is undefined in `0.2` because the check is reserved: an implementation must accept any value and may not drop a target based on it. When the check does arrive, it must obey the rule of the logs domain (section [10.3.4](#1034-unknown-profile)): logs are not lost under any version, and dropping by version is admissible only for domains with fail-closed semantics.
 
 ## 8. Profiles
 
@@ -727,6 +731,8 @@ The reference configuration implements items 1-2 with an allowlist rule in `disc
 | `ru.3ops.discovery.logs.redaction-profile` | No | The identifier of the redaction policy |
 | `ru.3ops.discovery.logs.drop-profile` | No | The identifier of the noise filtering policy |
 
+Switching collection off is the only fail-OPEN check in the contract, and deliberately so. The opt-out fires on the literal `false` alone; any other value (`False`, `0`, `no`, a typo) does NOT switch collection off, and logs keep being collected. The direction of failure was chosen in favour of the rule in section [10.3.4](#1034-unknown-profile): a typo in a label must not silently lose logs, whereas collecting more than intended is visible and reversible. Every other label is fail-closed (section [11](#11-validation-rules)).
+
 For version `0.2` a single composite profile is recommended. The additional `stream-policy`, `redaction-profile` and `drop-profile` are reserved for future extension and need not be implemented: their profile families are not defined in section [8](#8-profiles) and the reference does not read these labels.
 
 #### 10.3.6. Examples
@@ -798,14 +804,16 @@ Used for HTTP, TCP, ICMP and TLS checks.
 | `ru.3ops.discovery.blackbox.enabled` | Yes | `true` |
 | `ru.3ops.discovery.blackbox.module` | Yes | For example `http_2xx`, `tcp_connect`, `icmp`, `tls_connect` |
 | `ru.3ops.discovery.blackbox.scheme` | No | `http` or `https`; defaults to `http` |
-| `ru.3ops.discovery.blackbox.address` | No | The probe address; defaults to the container address |
+| `ru.3ops.discovery.blackbox.address` | No | The probe host, without scheme and without port; defaults to the container address |
 | `ru.3ops.discovery.blackbox.port` | Yes | The probe port |
 | `ru.3ops.discovery.blackbox.path` | No | The HTTP path |
 | `ru.3ops.discovery.blackbox.profile` | No | A scrape profile from the allowlist; defaults to `normal-v1` |
 
-The `module` value must belong to the blackbox exporter module allowlist defined by the Alloy configuration. Arbitrary modules from labels are not accepted. The shape of the probe target depends on the module: HTTP modules receive the URL `scheme://host:port/path`, TCP and TLS modules receive `host:port`, ICMP modules receive the host alone. Alloy adds a `module` label carrying the name of the module used to every blackbox probe series.
+The `module` value must belong to the blackbox exporter module allowlist defined by the Alloy configuration. Arbitrary modules from labels are not accepted.
 
-For ICMP modules the `blackbox.port` value is not part of the probe itself (ICMP has no port), but the label stays mandatory and goes through the same validation: the declared port must match a real exposed port of the container, otherwise the target is dropped. The rule holds for an external `blackbox.address` too: the port is checked against the private ports of the container itself, so a probe of `example.com:443` from a container that does not expose port 443 is dropped silently. The consequences of `blackbox.address` for the trust model are covered in section [13.5](#135-trust-in-labels).
+`blackbox.address` carries the host ONLY (`example.com` or an IP): no scheme, no port, no path. The probe target is assembled by the implementation from `address`, `scheme`, `port` and `path`, differently for each module, so a port written into `address` itself would produce a target with two ports. The shape of the probe target depends on the module: HTTP modules receive the URL `scheme://host:port/path`, TCP and TLS modules receive `host:port`, ICMP modules receive the host alone. Alloy adds a `module` label carrying the name of the module used to every blackbox probe series.
+
+For ICMP modules the `blackbox.port` value is not part of the probe itself (ICMP has no port), but the label stays mandatory and goes through the same validation: the declared port must match a real exposed port of the container, otherwise the target is dropped. The rule holds for an external `blackbox.address` too: the port is checked against the private ports of the container itself, so a probe with `address: example.com` and `port: 443` from a container that does not expose port 443 is dropped silently. The consequences of `blackbox.address` for the trust model are covered in section [13.5](#135-trust-in-labels).
 
 ICMP probes need no extra privileges in a typical Docker environment: the standard capability set (`NET_RAW`) or unprivileged ICMP sockets (Docker opens `net.ipv4.ping_group_range` for every group by default) is enough. In hardened environments where `NET_RAW` is dropped and `ping_group_range` is narrowed at the same time, ICMP probes will not work; the way out is to restore `cap_add: [NET_RAW]` or to widen `sysctls: net.ipv4.ping_group_range` on the Alloy container.
 
@@ -828,6 +836,8 @@ labels:
 ### 10.5. Domain: otel
 
 Used for services that send OTLP telemetry.
+
+The receiver listens on the conventional OTLP ports: `4317` (gRPC) and `4318` (HTTP). The values are fixed by the contract and are not parameterized by an environment variable -- unlike the endpoints of section [14.1](#141-environment-parameters), this is not a deployment value but an address senders know in advance: changing the port would require changing the configuration of every client. A deployment that needs a different port changes the [`060_otel`](../alloy-optional/060_otel.alloy) overlay -- a customization under section [14.3](#143-customizing-the-reference-configuration), not a parameter.
 
 #### 10.5.1. Labels
 
@@ -1053,6 +1063,10 @@ The `--stability.level=experimental` flag is required by the `foreach` block (ex
 docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.17.1 \
   validate --stability.level=experimental /etc/alloy
 ```
+
+The Alloy version policy. The tag in the command above is normative: the contract has been verified on exactly that tag, and the same one must appear in `noxfile.ALLOY_IMAGE` (checked both ways by a static gate). The contract declares no range of compatible versions -- not because versions do not matter, but because exactly one has honestly been verified: updating the tag is a change to the contract and passes the same gates (`alloy fmt`, `validate` for every combination, e2e). No lower bound is given deliberately: `foreach` is experimental, and upstream guarantees neither syntax stability nor the continued existence of an experimental block in the next release.
+
+The contract offers no configuration free of experimental features: `foreach` lives in the base file [`030_database.alloy`](../alloy/030_database.alloy), so `--stability.level=experimental` is mandatory for the whole reference rather than for the database domain alone. A deployment that cannot accept experimental features excludes file 030 entirely -- and with it the database domain; no other domain depends on `foreach`.
 
 The numeric prefix in the file names sets the reading order (the pipeline flow: discovery, then domains, then outputs). It does not affect how Alloy works: every file of the directory merges into a single component graph and cross-file references resolve regardless of order.
 
