@@ -114,7 +114,7 @@ def test_snmp_scrape_pairs_from_overlay() -> None:
 
 
 def test_snmp_relabel_modules_allowlist() -> None:
-    assert ac.snmp_relabel_modules() == {"if_mib"}
+    assert ac.snmp_relabel_modules() == {"if_mib", "system"}
 
 
 def test_cadvisor_relabel_target_labels() -> None:

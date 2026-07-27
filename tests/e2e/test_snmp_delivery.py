@@ -28,16 +28,29 @@ def test_snmp_v3_delivery_with_provenance(snmp_stack: Stack) -> None:
     assert labels["host"]  # constants.hostname, non-empty
 
 
-def test_valid_device_is_kept_and_invalid_dropped(snmp_stack: Stack) -> None:
-    # Fail-closed control: the fixture provisions two devices, one with a
-    # module outside the (if_mib) allowlist. Exactly the one valid e2e device
-    # survives the relabel keep-rules; the bad-module row is dropped.
+def test_system_module_delivers_device_identity(snmp_stack: Stack) -> None:
+    # The second device row points the system module at the same agent:
+    # sysUpTime (a plain gauge from the 1.3.6.1.2.1.1 walk) only exists in
+    # that module, so its presence pins the allowlist extension to a real
+    # walk, not just a surviving target.
+    series = wait_until(
+        lambda: snmp_stack.prom_query('sysUpTime{job="snmp",module="system"}'),
+        timeout=METRICS_BUDGET,
+        desc="sysUpTime{module=system} delivered",
+    )
+    assert series[0]["metric"]["instance"] == "snmp-agent:161"
+
+
+def test_valid_devices_are_kept_and_invalid_dropped(snmp_stack: Stack) -> None:
+    # Fail-closed control: the fixture provisions three devices, one with a
+    # module outside the (if_mib|system) allowlist. Exactly the two valid e2e
+    # devices survive the relabel keep-rules; the bad-module row is dropped.
     wait_until(
         lambda: _snmp_series(snmp_stack),
         timeout=METRICS_BUDGET,
         desc="snmp pipeline alive",
     )
     kept = snmp_stack.relabel_targets_by_env("discovery.relabel.snmp", "e2e")
-    assert kept == 1, (
-        f"expected exactly the one valid e2e device kept, got {kept}"
+    assert kept == 2, (
+        f"expected exactly the two valid e2e devices kept, got {kept}"
     )

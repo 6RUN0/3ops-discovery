@@ -432,9 +432,20 @@ def snmp_stack(
                 "environment": "e2e",
                 "team": "platform",
             },
-            # Fail-closed negative: module outside the (if_mib) allowlist. The
-            # discovery.relabel.snmp keep-rule MUST drop this row, so only the
-            # valid device above survives (relabel_targets_by_env == 1).
+            # Same agent through the system module: one device row per
+            # module, so the second module is a second row with its own name.
+            {
+                "name": "snmp-agent-system",
+                "address": "snmp-agent:161",
+                "module": "system",
+                "auth": "netmon-v3",
+                "environment": "e2e",
+                "team": "platform",
+            },
+            # Fail-closed negative: module outside the (if_mib|system)
+            # allowlist. The discovery.relabel.snmp keep-rule MUST drop this
+            # row, so only the two valid devices above survive
+            # (relabel_targets_by_env == 2).
             {
                 "name": "snmp-bad-module",
                 "address": "snmp-agent:161",

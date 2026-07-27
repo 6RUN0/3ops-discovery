@@ -21,13 +21,14 @@ discovery.relabel "snmp" {
 	// in the file is a quoted string, so targets is well-typed.
 	targets = encoding.from_yaml(local.file.snmp_devices.content)
 
-	// Module allowlist (manifest 10.6): only if_mib is accepted. The source
-	// label is the plain `module` key from the device YAML, NOT a docker-label
-	// prefix -- snmp is the file-provider domain. snmp_relabel_modules() reads
-	// this literal.
+	// Module allowlist (manifest 10.6): if_mib (interfaces) and system
+	// (identity/uptime). One module per device row; a device needing both is
+	// listed twice under distinct names. The source label is the plain
+	// `module` key from the device YAML, NOT a docker-label prefix -- snmp is
+	// the file-provider domain. snmp_relabel_modules() reads this literal.
 	rule {
 		source_labels = ["module"]
-		regex         = "(if_mib)"
+		regex         = "(if_mib|system)"
 		action        = "keep"
 	}
 

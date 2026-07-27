@@ -50,6 +50,9 @@ SNMP_SCRAPE_PROFILES_UNIMPLEMENTED: dict[str, str] = {}
 #: allowlist is one-sided (modules live in the exporter's built-in snmp.yml,
 #: no in-repo source of truth), so this only guards disjointness.
 SNMP_MODULES_UNIMPLEMENTED: dict[str, str] = {
-    "system": "reference ships only the if_mib module (manifest 10.6)",
-    "cisco_device": "reference ships only the if_mib module (manifest 10.6)",
+    "cisco_device": (
+        "deliberately cut: vendor OIDs cannot be verified against the e2e"
+        " net-snmp agent, and the manifest 10.6 module list is open by"
+        " design -- vendor modules are a deployment concern"
+    ),
 }

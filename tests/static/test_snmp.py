@@ -22,12 +22,12 @@ def test_scrape_profile_asymmetry_is_exact() -> None:
     assert implemented & allowed == set()
 
 
-def test_module_allowlist_is_if_mib_and_disjoint_from_gaps() -> None:
+def test_module_allowlist_is_exact_and_disjoint_from_gaps() -> None:
     # One-sided: the snmp modules live in the exporter's built-in snmp.yml, so
     # there is no in-repo config set to cross-check (unlike blackbox). Assert
     # the shipped allowlist against the hand-maintained literal, and guard that
     # no shipped module is on the documented-gap list.
     shipped = ac.snmp_relabel_modules()
-    assert shipped == {"if_mib"}
+    assert shipped == {"if_mib", "system"}
     unshipped = set(asymmetries.SNMP_MODULES_UNIMPLEMENTED)
     assert shipped & unshipped == set()

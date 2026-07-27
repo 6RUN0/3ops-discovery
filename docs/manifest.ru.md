@@ -820,7 +820,7 @@ OTLP-путь — исключение из провенанса раздела 
 |---|---|---|
 | `name` | нет | Человекочитаемое имя устройства (провенанс) |
 | `address` | да | `host:port` SNMP-агента (presence-проверка в relabel) |
-| `module` | да | Модуль snmp_exporter из allowlist; в референсе — `if_mib` (открытый пример-список, как в blackbox [10.4](#104-domain-blackbox)) |
+| `module` | да | Модуль snmp_exporter из allowlist; в референсе — `if_mib` (интерфейсы) и `system` (идентичность и аптайм устройства: `sysUpTime`, `sysName`) — открытый пример-список, как в blackbox [10.4](#104-domain-blackbox). Одна запись — один модуль; устройству с несколькими модулями соответствует несколько записей с разными `name` |
 | `auth` | да | Имя auth-профиля из [10.6.1](#1061-snmp-auth) (presence-проверка; резолвится экспортёром) |
 | `environment` | нет | Provenance-label (пропускается как non-reserved) |
 | `team` | нет | Provenance-label (пропускается как non-reserved) |
@@ -1071,7 +1071,7 @@ Alloy сливает все `*.alloy`-файлы каталога в один г
 | [`070_host-metrics.alloy`](../alloy-optional/070_host-metrics.alloy) | Opt-in host-метрики: `prometheus.exporter.unix` (серии `node_*`) → `prometheus.remote_write`; rootfs/procfs/sysfs через `RU_3OPS_DISCOVERY_HOST_*` |
 | [`075_container-metrics.alloy`](../alloy-optional/075_container-metrics.alloy) | Opt-in per-container метрики: `prometheus.exporter.cadvisor` (серии `container_cpu_*`/`container_memory_*`/`container_network_*`; `container_fs_*` вне периметра) → `prometheus.remote_write`. Docker API — через `docker_host` (реюз `RU_3OPS_DISCOVERY_DOCKER_HOST`, socket-proxy: GET-allowlist разделов `CONTAINERS`/`INFO`/`VERSION`/`PING` достаточен); при недоступном Docker API вывод практически пуст (`docker_only`). Провенанс §6.1: allowlisted container-labels → `environment`/`team`/`compose_*`, `name` → `container`; сырые `container_label_*`/`id`/`name` отбрасываются; `instance` = hostname коллектора, `job` = `integrations/cadvisor` (метка экспортёра; оба — осознанные gap'ы). Кардинальность: `store_container_labels = false` + allowlist, root-cgroup-статистика отключена, `disabled_metrics`/`enabled_metrics` — tunable. Привилегии деплоя (host cgroup namespace) — раздел [14.3](#143-кастомизация-референсной-конфигурации); per-container opt-out не поддерживается. |
 | [`080_host-logs.alloy`](../alloy-optional/080_host-logs.alloy) | Opt-in host-логи: `loki.source.journal` (systemd journal) → `loki.write`; статические labels `host`/`collector`/`source` (в §6.2 allowlist) |
-| [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) | Домен snmp (opt-in overlay): файловый провайдер (`local.file` + `encoding.from_yaml`), `prometheus.exporter.snmp` (модуль `if_mib`, профиль `snmp-standard-v1`), auth из inline `config`-секрета (`local.file` `is_secret`) через merge. Включается только вместе с device/auth-файлами (top-level `local.file` без файла unhealthy). |
+| [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) | Домен snmp (opt-in overlay): файловый провайдер (`local.file` + `encoding.from_yaml`), `prometheus.exporter.snmp` (модули `if_mib`/`system`, профиль `snmp-standard-v1`), auth из inline `config`-секрета (`local.file` `is_secret`) через merge. Включается только вместе с device/auth-файлами (top-level `local.file` без файла unhealthy). |
 
 ## 15. Использование
 
