@@ -22,6 +22,9 @@ def test_snmp_v3_delivery_with_provenance(snmp_stack: Stack) -> None:
     assert labels["job"] == "snmp"
     assert labels["instance"] == "snmp-agent:161"
     assert labels["module"] == "if_mib"  # M1: restored in enrich_snmp
+    # The device file `name` survives as the series label `device`
+    # (instance carries the address, not the human-facing name).
+    assert labels["device"] == "snmp-agent"
     assert labels["environment"] == "e2e"
     assert labels["team"] == "platform"
     assert labels["collector"] == "alloy"

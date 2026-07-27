@@ -58,7 +58,8 @@ loki.process "docker_profiles" {
 	}
 
 	stage.match {
-		selector = `{log_profile="mixed-v1"} |~ "^\\s*\\{"`
+		selector      = `{log_profile="mixed-v1"} |~ "^\\s*\\{"`
+		pipeline_name = "mixed-v1-json"
 
 		stage.json {
 			drop_malformed = false
@@ -79,8 +80,12 @@ loki.process "docker_profiles" {
 		}
 	}
 
+	// JSON-shaped lines are excluded: a line like {"msg":"raised level=
+	// high"} matches both heuristics, and running logfmt after json
+	// would overwrite the JSON-extracted values in structured metadata.
 	stage.match {
-		selector = `{log_profile="mixed-v1"} |~ "(^|\\s)(level|msg|status)="`
+		selector      = `{log_profile="mixed-v1"} |~ "(^|\\s)(level|msg|status)=" !~ "^\\s*\\{"`
+		pipeline_name = "mixed-v1-logfmt"
 
 		stage.logfmt {
 			mapping = {

@@ -43,6 +43,16 @@ def test_module_allowlist_is_exact_and_disjoint_from_gaps() -> None:
     assert shipped & unshipped == set()
 
 
+def test_device_name_becomes_a_series_label() -> None:
+    # The exporter consumes `name` into __param_name, which is dropped
+    # on scrape, so without a copy to a non-reserved label the device
+    # name never reaches the series (instance carries the address).
+    text = ac.optional_sources()["037_snmp.alloy"]
+    assert 'source_labels = ["name"]\n\t\ttarget_label  = "device"' in text, (
+        "no name -> device copy rule in 037"
+    )
+
+
 def test_module_gap_entries_appear_in_manifest() -> None:
     # The disjointness check above can never retire a gap entry for a
     # module the manifest no longer mentions -- a phantom name satisfies

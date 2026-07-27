@@ -1,5 +1,7 @@
 """Manifest 8.3/10.3 vs 040/050."""
 
+import re
+
 from tests.static import alloy_config as ac
 from tests.static import asymmetries
 from tests.static import manifest_doc as md
@@ -12,6 +14,24 @@ def test_allowlist_is_subset_of_manifest() -> None:
 def test_asymmetry_table_is_exact() -> None:
     unimplemented = md.log_profiles() - ac.log_profile_allowlist()
     assert unimplemented == set(asymmetries.LOG_PROFILES_UNIMPLEMENTED)
+
+
+def test_mixed_stages_are_exclusive_and_named() -> None:
+    text = ac.sources()["050_log-profiles.alloy"]
+    # Every dispatcher stage carries pipeline_name, so per-stage Loki
+    # process metrics stay distinguishable in diagnostics.
+    assert text.count("stage.match {") == text.count("pipeline_name")
+    # The two mixed-v1 stages must be mutually exclusive: a JSON line
+    # with logfmt-looking text inside a value (`{"msg":"raised level=
+    # high"}`) would otherwise run both parsers, and logfmt would
+    # overwrite the JSON-extracted values in structured metadata.
+    selectors = re.findall(r"selector\s*=\s*`([^`]*)`", text)
+    mixed = [s for s in selectors if 'log_profile="mixed-v1"' in s]
+    assert len(mixed) == 2
+    logfmt = next(s for s in mixed if "level|msg|status" in s)
+    assert r'!~ "^\\s*\\{"' in logfmt, (
+        "mixed-v1 logfmt selector must exclude JSON-shaped lines"
+    )
 
 
 def test_source_consumes_relabeled_targets() -> None:

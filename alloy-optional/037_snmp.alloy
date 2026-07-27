@@ -62,6 +62,15 @@ discovery.relabel "snmp" {
 		target_label  = "name"
 	}
 
+	// Series-side identity of the device: the exporter consumes `name`
+	// into __param_name (dropped on scrape) and instance carries the
+	// address, so the human-facing name survives only as a non-reserved
+	// label the exporter passes through.
+	rule {
+		source_labels = ["name"]
+		target_label  = "device"
+	}
+
 	// Profile-name anchor (manifest 8.5): the domain is domain-wide, so there
 	// is no per-target profile keep-rule (unlike blackbox) -- set the name on
 	// the config side. snmp_scrape_pairs() reads this replacement.
