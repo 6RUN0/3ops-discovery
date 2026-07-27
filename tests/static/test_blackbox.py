@@ -22,6 +22,14 @@ def test_scrape_profile_asymmetry_is_exact() -> None:
     assert implemented & allowed == set()
 
 
+def test_port_keep_is_fail_closed() -> None:
+    # Same fallback-target hole as metrics, with a sharper edge: an icmp
+    # probe composes a portless target, so without the presence keep a
+    # container with no TCP ports gets probed while skipping the port
+    # validation manifest 10.4.1 explicitly requires for ICMP too.
+    assert ac.port_presence_keep_regexes()["blackbox"] == "(.+)"
+
+
 def test_module_allowlist_matches_exporter_config() -> None:
     # Config-internal consistency: the relabel keep-rule, the exporter
     # config AND the target-composition rules must accept the same modules

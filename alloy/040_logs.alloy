@@ -80,8 +80,14 @@ discovery.relabel "docker_logs" {
 }
 
 loki.source.docker "containers" {
-	host          = coalesce(sys.env("RU_3OPS_DISCOVERY_DOCKER_HOST"), "unix:///var/run/docker.sock")
-	targets       = discovery.docker.docker_logs.targets
+	host = coalesce(sys.env("RU_3OPS_DISCOVERY_DOCKER_HOST"), "unix:///var/run/docker.sock")
+
+	// Relabeled output, NOT raw discovery targets (manifest 10.3.1): the
+	// opt-out drop must exclude a container BEFORE the source. Fed raw
+	// targets, the tailer still opens every opt-out container's log
+	// stream and a fired per-line drop rule clears ALL labels, shipping
+	// entries as the empty stream {} which Loki rejects.
+	targets       = discovery.relabel.docker_logs.output
 	relabel_rules = discovery.relabel.docker_logs.rules
 
 	labels = {

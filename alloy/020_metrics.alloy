@@ -45,6 +45,20 @@ discovery.relabel "metrics" {
 		action = "keep"
 	}
 
+	// metrics.port is mandatory (manifest 10.1.1) and must fail closed
+	// (manifest 11). The keepequal below cannot enforce presence on its
+	// own: a container with no exposed TCP ports rides the
+	// discovery.docker fallback target, which carries no
+	// __meta_docker_port_private, so keepequal would compare two empty
+	// strings and pass -- scraping the container on port 80.
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_port",
+		]
+		regex  = "(.+)"
+		action = "keep"
+	}
+
 	rule {
 		source_labels = [
 			"__meta_docker_container_label_ru_3ops_discovery_metrics_port",

@@ -20,3 +20,12 @@ def test_asymmetry_table_is_exact() -> None:
     allowed = set(asymmetries.SCRAPE_PROFILES_UNIMPLEMENTED)
     assert implemented | allowed == manifest
     assert implemented & allowed == set()
+
+
+def test_port_keep_is_fail_closed() -> None:
+    # Without a presence keep, a container that declares metrics.enabled
+    # but no TCP ports rides the discovery.docker fallback target (no
+    # __meta_docker_port_private) straight through keepequal ("" == "")
+    # and gets scraped on port 80 (manifest 10.1.1 makes the label
+    # mandatory, 11 makes its validation fail-closed).
+    assert ac.port_presence_keep_regexes()["metrics"] == "(.+)"

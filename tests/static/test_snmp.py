@@ -22,6 +22,16 @@ def test_scrape_profile_asymmetry_is_exact() -> None:
     assert implemented & allowed == set()
 
 
+def test_every_target_gets_a_name() -> None:
+    # prometheus.exporter.snmp refuses the WHOLE targets list when any
+    # row lacks `name` (the check runs on every re-evaluation of the
+    # arguments), so one nameless device row would take down the entire
+    # domain -- a failure mode manifest 11 does not allow. The manifest
+    # 10.6 keeps `name` optional, so the reference defaults it to the
+    # device address; the rule must fire only when name is empty.
+    assert ac.snmp_name_default_rule() == (";(.+)", "$1")
+
+
 def test_module_allowlist_is_exact_and_disjoint_from_gaps() -> None:
     # One-sided: the snmp modules live in the exporter's built-in snmp.yml, so
     # there is no in-repo config set to cross-check (unlike blackbox). Assert

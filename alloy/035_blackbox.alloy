@@ -64,6 +64,20 @@ discovery.relabel "blackbox" {
 	// port is non-numeric, out of range or absent on the container. This
 	// applies to icmp targets too even though the probe itself is portless
 	// (manifest 10.4).
+	// blackbox.port is mandatory even for portless icmp probes (manifest
+	// 10.4.1) and must fail closed (manifest 11). Without this presence
+	// keep, a container with no exposed TCP ports rides the
+	// discovery.docker fallback target (no __meta_docker_port_private),
+	// keepequal compares two empty strings and passes, and the icmp
+	// composition -- which never consults the port -- probes anyway.
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_blackbox_port",
+		]
+		regex  = "(.+)"
+		action = "keep"
+	}
+
 	rule {
 		source_labels = [
 			"__meta_docker_container_label_ru_3ops_discovery_blackbox_port",

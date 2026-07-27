@@ -2,8 +2,29 @@
 
 import subprocess
 
+import requests
+
 from tests.e2e.conftest import LOGS_BUDGET, Stack, wait_until
 from tests.static import manifest_doc as md
+
+
+def _source_target_containers(stack: Stack) -> set[str]:
+    """Container names in the targets argument of loki.source.docker."""
+    resp = requests.get(
+        f"{stack.alloy_url}/api/v0/web/components/"
+        "loki.source.docker.containers",
+        timeout=10,
+    )
+    resp.raise_for_status()
+    names: set[str] = set()
+    for arg in resp.json().get("arguments", []):
+        if arg.get("name") != "targets":
+            continue
+        for target in arg["value"]["value"]:
+            labels = {p["key"]: p["value"]["value"] for p in target["value"]}
+            name = labels.get("__meta_docker_container_name", "")
+            names.add(name.removeprefix("/"))
+    return names
 
 
 def test_json_profile_parses_into_structured_metadata(
@@ -109,6 +130,19 @@ def test_silent_optout_with_positive_control(stack: Stack) -> None:
     assert not stack.loki_series(
         f'{{compose_service="app-silent",compose_project="{stack.project}"}}'
     ), "opt-out container has a Loki stream"
+    # The opt-out must exclude the container BEFORE the source (manifest
+    # 10.3.1): fed raw discovery targets, the tailer still reads the
+    # opt-out container and ships its lines as the empty stream {},
+    # which no Loki series selector can see -- exactly how the old
+    # wiring kept this test green. Assert on the source's own targets,
+    # with an in-band positive control proving the API read works.
+    tailed = _source_target_containers(stack)
+    assert stack.compose_container("app-logs-raw") in tailed, (
+        "positive control: collected container missing from source targets"
+    )
+    assert stack.compose_container("app-silent") not in tailed, (
+        "opt-out container is still handed to loki.source.docker"
+    )
 
 
 def test_python_traceback_is_one_entry(stack: Stack) -> None:

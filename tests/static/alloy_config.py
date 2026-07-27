@@ -244,6 +244,64 @@ def snmp_scrape_pairs() -> dict[str, dict[str, str]]:
     return {name: {"interval": interval.group(1), "timeout": timeout.group(1)}}
 
 
+def logs_source_targets() -> str:
+    """Return the targets expression of loki.source.docker in 040."""
+    text = sources()["040_logs.alloy"]
+    block = re.search(
+        r'(?ms)^loki\.source\.docker "containers" \{\n(.*?)^\}$', text
+    )
+    if block is None:
+        raise AssertionError("loki.source.docker block not found in 040")
+    m = re.search(r"targets\s*=\s*(\S+)", block.group(1))
+    if m is None:
+        raise AssertionError("targets expression not found in 040 source")
+    return m.group(1)
+
+
+def port_presence_keep_regexes() -> dict[str, str]:
+    """
+    Domain -> regex of the presence keep-rule on the declared port label.
+
+    discovery.docker emits a portless fallback target (no
+    __meta_docker_port_private) for a container with no exposed TCP
+    ports; keepequal alone then compares two empty strings and passes
+    the target. The presence keep is what makes the mandatory port
+    label fail-closed (manifest 10.1.1, 10.4.1, 11).
+    """
+    found: dict[str, str] = {}
+    for domain, file, suffix in (
+        ("metrics", "020_metrics.alloy", "metrics_port"),
+        ("blackbox", "035_blackbox.alloy", "blackbox_port"),
+    ):
+        for rule in _rules(sources()[file]):
+            regex = _keep_regex(rule, suffix)
+            if regex is not None:
+                found[domain] = regex
+    return found
+
+
+def snmp_name_default_rule() -> tuple[str, str]:
+    """
+    Return (regex, replacement) of the name-default rule in 037.
+
+    prometheus.exporter.snmp rejects its WHOLE targets list when any row
+    lacks ``name``, so the reference must default it (the manifest 10.6
+    keeps ``name`` optional). The rule concatenates name;address and
+    matches only when name is empty, so a declared name always wins.
+    """
+    text = optional_sources()["037_snmp.alloy"]
+    for rule in _rules(text):
+        if not re.search(r'target_label\s*=\s*"name"', rule):
+            continue
+        if not re.search(r'source_labels\s*=\s*\["name", "address"\]', rule):
+            continue
+        regex_m = re.search(r'regex\s*=\s*"(.*)"', rule)
+        repl_m = re.search(r'replacement\s*=\s*"(.*)"', rule)
+        if regex_m and repl_m:
+            return regex_m.group(1), repl_m.group(1)
+    raise AssertionError("snmp name-default rule not found in 037")
+
+
 def log_profile_allowlist() -> set[str]:
     """Names accepted by the log_profile allowlist rule in 040."""
     text = sources()["040_logs.alloy"]

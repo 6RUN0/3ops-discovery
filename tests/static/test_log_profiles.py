@@ -1,4 +1,4 @@
-"""Manifest 8.3 vs 040/050."""
+"""Manifest 8.3/10.3 vs 040/050."""
 
 from tests.static import alloy_config as ac
 from tests.static import asymmetries
@@ -12,6 +12,15 @@ def test_allowlist_is_subset_of_manifest() -> None:
 def test_asymmetry_table_is_exact() -> None:
     unimplemented = md.log_profiles() - ac.log_profile_allowlist()
     assert unimplemented == set(asymmetries.LOG_PROFILES_UNIMPLEMENTED)
+
+
+def test_source_consumes_relabeled_targets() -> None:
+    # Manifest 10.3.1: logs.enabled=false containers are excluded BEFORE
+    # the source. Wiring raw discovery targets into loki.source.docker
+    # would tail every opt-out container and ship its lines with an
+    # empty label set (the tailer applies the drop rule per line, and a
+    # fired drop clears ALL labels), which Loki rejects per-stream.
+    assert ac.logs_source_targets() == "discovery.relabel.docker_logs.output"
 
 
 def test_dispatcher_covers_allowlist_except_raw_passthrough() -> None:

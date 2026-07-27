@@ -48,6 +48,20 @@ discovery.relabel "snmp" {
 		action        = "keep"
 	}
 
+	// Default name to the device address. prometheus.exporter.snmp
+	// rejects its WHOLE targets list when any row lacks `name` (the
+	// check runs on every re-evaluation), so one nameless row would take
+	// down the entire domain; the manifest 10.6 keeps `name` optional,
+	// so the reference must default it. The name;address concatenation
+	// matches only when name is empty, so a declared name always wins.
+	rule {
+		source_labels = ["name", "address"]
+		separator     = ";"
+		regex         = ";(.+)"
+		replacement   = "$1"
+		target_label  = "name"
+	}
+
 	// Profile-name anchor (manifest 8.5): the domain is domain-wide, so there
 	// is no per-target profile keep-rule (unlike blackbox) -- set the name on
 	// the config side. snmp_scrape_pairs() reads this replacement.
