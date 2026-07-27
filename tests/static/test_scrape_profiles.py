@@ -36,3 +36,20 @@ def test_port_keep_is_fail_closed() -> None:
     # and gets scraped on port 80 (manifest 10.1.1 makes the label
     # mandatory, 11 makes its validation fail-closed).
     assert ac.port_presence_keep_regexes()["metrics"] == "(.+)"
+
+
+def test_exactly_the_documented_profile_serves_unmarked_targets() -> None:
+    # The keep-regex of the default filter carries a trailing "?" so it
+    # also matches an unset label. Nothing used to read that marker: the
+    # scanner stripped it along with the parentheses, making (fast-v1)
+    # and (fast-v1)? indistinguishable. A profile pair copied with the
+    # marker left on would scrape every default target twice -- once on
+    # its own cadence, once on the copy's -- and pass every gate.
+    documented = md.default_profile(
+        "10.1.1", "ru.3ops.discovery.metrics.profile"
+    )
+    assert ac.default_scrape_profiles() == {documented}
+    blackbox = md.default_profile(
+        "10.4.1", "ru.3ops.discovery.blackbox.profile"
+    )
+    assert ac.default_blackbox_scrape_profiles() == {blackbox}

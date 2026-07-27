@@ -80,8 +80,12 @@ def extension_point_targets() -> set[str]:
 
     A "type.label" is referenced when an optional file forwards into
     "<type>.<label>.receiver" (or .input), or consumes
-    "<type>.<label>.targets" -- the manifest 14.4 extension points
-    include two .targets exports, so the scan must see them too.
+    "<type>.<label>.targets" or "<type>.<label>.output" -- the manifest
+    14.4 extension points include two .targets exports, and .output is
+    how one relabel feeds another, so the scan must see all four. Leaving
+    .output out meant an overlay could consume the output of a base
+    relabel -- an internal stage of a domain pipeline, not a published
+    export -- and no gate would notice.
     References that resolve to an optional-internal component (the
     file's own graph) are subtracted; what remains MUST exist in base.
     Deliberately NOT intersected with base: the anti-drift gate asserts
@@ -92,10 +96,29 @@ def extension_point_targets() -> set[str]:
     referenced: set[str] = set()
     for text in optional_sources().values():
         for typ, label in re.findall(
-            r"([a-z][\w.]+)\.([\w]+)\.(?:receiver|input|targets)", text
+            r"([a-z][\w.]+)\.([\w]+)\.(?:receiver|input|targets|output)", text
         ):
             referenced.add(f"{typ}.{label}")
     return referenced - optional_component_names()
+
+
+def extension_point_exports() -> set[str]:
+    """
+    Full export names ("<type>.<label>.<export>") overlays take from base.
+
+    The manifest 14.4 table lists exports, not components, so binding an
+    overlay to it needs the export kind as well: base may declare a
+    component whose receiver is public and whose output is not.
+    """
+    internal = optional_component_names()
+    exports: set[str] = set()
+    for text in optional_sources().values():
+        for typ, label, kind in re.findall(
+            r"([a-z][\w.]+)\.([\w]+)\.(receiver|input|targets|output)", text
+        ):
+            if f"{typ}.{label}" not in internal:
+                exports.add(f"{typ}.{label}.{kind}")
+    return exports
 
 
 def _blocks(text: str, header: str) -> list[tuple[str, str]]:
@@ -201,11 +224,35 @@ def _keep_regex(rule: str, label_suffix: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _profile_keep(regex: str, scrape: str) -> tuple[str, bool]:
+    """
+    Split a profile keep-regex into (profile name, serves the default).
+
+    Parsed rather than stripped. ``regex.strip("()?")`` returned the same
+    name for ``(fast-v1)`` and ``(fast-v1)?`` -- and that trailing ``?``
+    is the entire difference between a filter that serves marked targets
+    and one that also swallows every unmarked one. A profile pair copied
+    with the marker left on would have scraped every default target a
+    second time and satisfied every gate while doing it.
+    """
+    match = re.fullmatch(r"\(([\w-]+)\)(\?)?", regex)
+    if match is None:
+        raise AssertionError(
+            f"scrape {scrape}: profile keep-regex {regex!r} is not a single "
+            f"alternative; one filter must serve exactly one profile"
+        )
+    return match.group(1), match.group(2) is not None
+
+
 def _profile_pairs(
     text: str, label_suffix: str, domain: str
-) -> dict[str, dict[str, str]]:
+) -> tuple[dict[str, dict[str, str]], frozenset[str]]:
     """
     Pair every prometheus.scrape with the profile filter it references.
+
+    Returns the (profile -> params) map and the set of profiles whose
+    filter also accepts an unset label, i.e. the ones serving as the
+    domain default.
 
     Reference-based on purpose: the scrape's ``targets`` expression names
     the filter relabel whose keep-rule defines the profile, so a fast
@@ -218,6 +265,7 @@ def _profile_pairs(
         re.findall(r'(?ms)^discovery\.relabel "(\w+)" \{\n(.*?)^\}$', text)
     )
     pairs: dict[str, dict[str, str]] = {}
+    defaults: set[str] = set()
     for scrape_name, body in re.findall(
         r'(?ms)^prometheus\.scrape "(\w+)" \{\n(.*?)^\}$', text
     ):
@@ -231,10 +279,11 @@ def _profile_pairs(
                 f"scrape {scrape_name}: no relabel reference or interval"
             )
         profile = None
+        serves_default = False
         for rule in _rules(relabels.get(ref.group(1), "")):
             regex = _keep_regex(rule, label_suffix)
             if regex is not None:
-                profile = regex.strip("()?")
+                profile, serves_default = _profile_keep(regex, scrape_name)
         if profile is None:
             raise AssertionError(
                 f"scrape {scrape_name}: referenced relabel {ref.group(1)} "
@@ -250,14 +299,47 @@ def _profile_pairs(
             "interval": interval.group(1),
             "timeout": timeout.group(1),
         }
-    return pairs
+        if serves_default:
+            defaults.add(profile)
+    return pairs, frozenset(defaults)
 
 
 def scrape_pairs() -> dict[str, dict[str, str]]:
     """Return implemented scrape profiles: name -> {interval, timeout}."""
     return _profile_pairs(
         sources()["020_metrics.alloy"], "metrics_profile", "metrics"
-    )
+    )[0]
+
+
+def default_scrape_profiles() -> frozenset[str]:
+    """Metrics profiles whose filter also accepts an unset profile label."""
+    return _profile_pairs(
+        sources()["020_metrics.alloy"], "metrics_profile", "metrics"
+    )[1]
+
+
+def default_blackbox_scrape_profiles() -> frozenset[str]:
+    """Blackbox profiles whose filter also accepts an unset profile label."""
+    return _profile_pairs(
+        sources()["035_blackbox.alloy"], "blackbox_profile", "blackbox"
+    )[1]
+
+
+def metrics_type_allowlist() -> set[str]:
+    """
+    Values accepted by the metrics.type keep-rule in 020.
+
+    The other domains bind their type/module allowlists to the manifest
+    by a gate -- database.type, the blackbox modules, the snmp modules.
+    This one was a bare literal in the config with nothing on the other
+    end, which is how a domain grows a second accepted type in one place
+    only.
+    """
+    for rule in _rules(sources()["020_metrics.alloy"]):
+        regex = _keep_regex(rule, "metrics_type")
+        if regex is not None:
+            return set(regex.strip("()").split("|"))
+    raise AssertionError("metrics.type keep-rule not found in 020")
 
 
 def snmp_relabel_modules() -> set[str]:
@@ -620,7 +702,7 @@ def blackbox_scrape_pairs() -> dict[str, dict[str, str]]:
     """Return implemented blackbox scrape profiles (name -> params)."""
     return _profile_pairs(
         sources()["035_blackbox.alloy"], "blackbox_profile", "blackbox"
-    )
+    )[0]
 
 
 def blackbox_composition_modules() -> set[str]:

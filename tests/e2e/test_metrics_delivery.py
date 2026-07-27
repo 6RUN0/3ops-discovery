@@ -125,6 +125,35 @@ def test_fast_profile_target_is_routed_to_fast_pair(stack: Stack) -> None:
     assert not any(t.get(name_label) == rabbitmq for t in normal)
 
 
+def test_unmarked_target_reaches_only_the_default_pair(stack: Stack) -> None:
+    # The other direction, which nothing checked. app-metrics declares no
+    # profile at all, so it belongs to normal-v1 and to nothing else. If a
+    # non-default filter ever grew the "?" marker -- the copy-paste this
+    # domain invites -- the target would land in two pairs at once and be
+    # scraped twice on two cadences, while every assertion about the fast
+    # target still passed.
+    name_label = "__meta_docker_container_name"
+    app = "/" + stack.compose_container("app-metrics")
+
+    wait_until(
+        lambda: any(
+            t.get(name_label) == app
+            for t in stack.relabel_target_labels(
+                "discovery.relabel.metrics_normal_v1"
+            )
+        ),
+        timeout=METRICS_BUDGET,
+        desc="unmarked target on the default profile filter",
+    )
+    for profile in ("fast", "slow"):
+        others = stack.relabel_target_labels(
+            f"discovery.relabel.metrics_{profile}_v1"
+        )
+        assert not any(t.get(name_label) == app for t in others), (
+            f"unmarked target also reached the {profile}-v1 pair"
+        )
+
+
 def test_badsecret_target_is_dropped(stack: Stack) -> None:
     # The path-traversal secret-id ("bad/../id") must fail the manifest
     # section 9 keep-rule in 030, so the database relabel keeps ONLY the

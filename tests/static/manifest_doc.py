@@ -247,6 +247,79 @@ def domain_labels(number: str) -> dict[str, bool]:
     return labels
 
 
+def default_profile(number: str, label: str) -> str:
+    """Return the default profile a 10.x labels table names for ``label``."""
+    for row in table(number):
+        if _plain(row["Label"]) == label:
+            found = re.search(r"по умолчанию `([\w-]+)`", row["Значение"])
+            if found is None:
+                raise AnchorError(
+                    f"section {number} names no default for {label}"
+                )
+            return found.group(1)
+    raise AnchorError(f"label {label} not found in manifest section {number}")
+
+
+def domain_label_values(number: str, label: str) -> set[str]:
+    """
+    Return the backticked values a 10.x labels table allows for a label.
+
+    Only literal values are returned: a descriptive cell ("Порт metrics
+    endpoint") yields the empty set, so a caller comparing against a
+    config allowlist must decide what an empty answer means rather than
+    silently agreeing with it.
+    """
+    for row in table(number):
+        if _plain(row["Label"]) == label:
+            return set(re.findall(r"`([^`]+)`", row["Значение"]))
+    raise AnchorError(f"label {label} not found in manifest section {number}")
+
+
+@cache
+def labels_sections() -> tuple[str, ...]:
+    """
+    Return every 10.x subsection titled "Labels", in document order.
+
+    Derived from the manifest rather than listed in the gate: a domain
+    added with its labels subsection is covered the moment it is written
+    down, and a hand-kept list would have to be remembered exactly when
+    attention is on the new domain instead. That is how 10.7.1 stayed
+    outside the coverage gate.
+    """
+    found = tuple(re.findall(r"(?m)^#+ (10(?:\.\d+)*)\. Labels$", _text()))
+    if not found:
+        raise AnchorError("no 10.x Labels subsections found in the manifest")
+    return found
+
+
+def domain_label_names(number: str) -> set[str]:
+    """
+    Return the contract label names documented in a 10.x Labels subsection.
+
+    Two shapes are accepted. Most domains use a pipe table carrying a
+    mandatory column; the declarative ipmi domain (10.7.1) lists bare
+    names in a text block, because nothing reads those labels and the
+    contract has never said which of them a container must declare.
+    Converting it to a table would mean inventing that column, so the
+    extractor bends instead of the specification.
+    """
+    try:
+        names = set(domain_labels(number))
+    except AnchorError:
+        names = {
+            line.strip()
+            for line in code_block(number).splitlines()
+            if line.strip()
+        }
+    stray = {name for name in names if not name.startswith("ru.3ops.")}
+    if stray or not names:
+        raise AnchorError(
+            f"section {number} does not read as a labels list: "
+            f"{sorted(stray) or 'empty'}"
+        )
+    return names
+
+
 def optional_files() -> set[str]:
     """Section 14.5: names of the optional overlay files."""
     return {_plain(row["Файл"]) for row in table("14.5")}

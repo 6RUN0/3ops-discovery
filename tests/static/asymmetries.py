@@ -36,6 +36,17 @@ LABELS_UNREAD: dict[str, str] = {
     "receiver has no traces output, so trace pushes fail loudly",
     "ru.3ops.discovery.otel.metrics": "declarative, see otel.enabled",
     "ru.3ops.discovery.otel.logs": "declarative, see otel.enabled",
+    "ru.3ops.discovery.ipmi.enabled": "declarative domain: Alloy has no "
+    "native IPMI component, so the domain is a special case of metrics -- "
+    "scraping an external ipmi_exporter -- and ships no pipeline that "
+    "could read the label (manifest 10.7)",
+    "ru.3ops.discovery.ipmi.address": "declarative, see ipmi.enabled; the "
+    "BMC address is consumed by the exporter, not by Alloy",
+    "ru.3ops.discovery.ipmi.module": "declarative, see ipmi.enabled",
+    "ru.3ops.discovery.ipmi.secret-id": "declarative, see ipmi.enabled; "
+    "BMC credentials are read by the exporter, not by Alloy",
+    "ru.3ops.discovery.ipmi.profile": "declarative, see ipmi.enabled; it "
+    "names a manifest 8.2 scrape profile, and the domain has none of its own",
 }
 
 #: All manifest 8.2 scrape profiles are implemented in 020_metrics.
@@ -87,3 +98,21 @@ SNMP_MODULES_UNIMPLEMENTED: dict[str, str] = {}
 #: exact equality against this number in both directions, so a phantom
 #: entry fails the gate just as a new undeclared row does.
 TRANSLATION_EXTRA_TABLE_ROWS: dict[str, int] = {"README.md": 1}
+
+#: Config files that produce no series or streams of their own, and are
+#: therefore exempt from the manifest 6.1 provenance check. Everything
+#: else in alloy/ and alloy-optional/ must attach host and collector;
+#: test_provenance.py derives the checked set by subtracting this table
+#: from the file glob, so a new domain file is covered on arrival rather
+#: than when someone remembers to list it.
+NOT_SERIES_PATHS: dict[str, str] = {
+    "010_discovery.alloy": "discovery only: exports targets, and the "
+    "domain files attach provenance to what they build from them",
+    "050_log-profiles.alloy": "parses line content into structured "
+    "metadata; the stream labels are attached by 040 upstream",
+    "060_otel.alloy": "the shared OTLP receiver is static and has no "
+    "Docker metadata, so it cannot produce container/host provenance -- "
+    "documented as an explicit exemption by manifest 10.5",
+    "090_outputs.alloy": "the write path: remote_write and loki.write "
+    "forward what the domains already labelled",
+}

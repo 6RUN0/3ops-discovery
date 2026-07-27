@@ -14,13 +14,11 @@ from tests.static import alloy_config as ac
 from tests.static import asymmetries
 from tests.static import manifest_doc as md
 
-LABELS_TABLE_SECTIONS = ("10.1.1", "10.2.1", "10.3.5", "10.4.1", "10.5.1")
 
-
-def _documented_labels() -> dict[str, bool]:
-    labels: dict[str, bool] = {}
-    for number in LABELS_TABLE_SECTIONS:
-        labels |= md.domain_labels(number)
+def _documented_labels() -> set[str]:
+    labels: set[str] = set()
+    for number in md.labels_sections():
+        labels |= md.domain_label_names(number)
     return labels
 
 
@@ -46,7 +44,30 @@ def test_documented_labels_read_or_documented_gap() -> None:
                 f"{label}: documented but never read; wire it up or add "
                 "a LABELS_UNREAD entry with a reason"
             )
-    ghosts = unread - set(documented)
+    ghosts = unread - documented
     assert not ghosts, (
         f"LABELS_UNREAD entries missing from every labels table: {ghosts}"
     )
+
+
+def test_every_domain_with_labels_is_covered() -> None:
+    # The gate used to read a hand-kept tuple of five sections, and the
+    # ipmi domain (10.7.1) was written without being added to it -- five
+    # documented labels that no direction of the check ever saw. The list
+    # now comes from the manifest, so this asserts the derivation itself:
+    # every 10.x domain that has a Labels subsection is in it.
+    covered = set(md.labels_sections())
+    domains = set(
+        re.findall(
+            r"(?m)^### (10\.\d+)\. Domain: ",
+            md.MANIFEST.read_text(encoding="utf-8"),
+        )
+    )
+    missing = {
+        domain
+        for domain in domains
+        if not any(number.startswith(f"{domain}.") for number in covered)
+    }
+    # 10.6 (snmp) is the one domain not driven by Docker labels: its
+    # targets come from a file, so it has no labels subsection to cover.
+    assert missing == {"10.6"}, f"domains without a labels section: {missing}"
