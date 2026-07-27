@@ -196,10 +196,17 @@ discovery.relabel "metrics_normal_v1" {
 	}
 }
 
+// The scrape response is an untrusted input too (manifest 13.5): the
+// address is built from container metadata, but a 302 answer would send
+// the next request wherever the responder likes -- a link-local metadata
+// endpoint no label could ever name. Pinned in every prometheus.scrape
+// of the reference and held there by a static gate, because the omission
+// regresses silently the moment a profile pair is copied.
 prometheus.scrape "metrics_normal_v1" {
-	targets         = discovery.relabel.metrics_normal_v1.output
-	scrape_interval = "30s"
-	scrape_timeout  = "10s"
+	targets          = discovery.relabel.metrics_normal_v1.output
+	scrape_interval  = "30s"
+	scrape_timeout   = "10s"
+	follow_redirects = false
 
 	forward_to = [
 		prometheus.remote_write.default.receiver,
@@ -219,9 +226,10 @@ discovery.relabel "metrics_fast_v1" {
 }
 
 prometheus.scrape "metrics_fast_v1" {
-	targets         = discovery.relabel.metrics_fast_v1.output
-	scrape_interval = "15s"
-	scrape_timeout  = "10s"
+	targets          = discovery.relabel.metrics_fast_v1.output
+	scrape_interval  = "15s"
+	scrape_timeout   = "10s"
+	follow_redirects = false
 
 	forward_to = [
 		prometheus.remote_write.default.receiver,
@@ -241,9 +249,10 @@ discovery.relabel "metrics_slow_v1" {
 }
 
 prometheus.scrape "metrics_slow_v1" {
-	targets         = discovery.relabel.metrics_slow_v1.output
-	scrape_interval = "60s"
-	scrape_timeout  = "15s"
+	targets          = discovery.relabel.metrics_slow_v1.output
+	scrape_interval  = "60s"
+	scrape_timeout   = "15s"
+	follow_redirects = false
 
 	forward_to = [
 		prometheus.remote_write.default.receiver,

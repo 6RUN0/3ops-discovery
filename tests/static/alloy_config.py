@@ -98,6 +98,52 @@ def extension_point_targets() -> set[str]:
     return referenced - optional_component_names()
 
 
+def _blocks(text: str, header: str) -> list[tuple[str, str]]:
+    """
+    Return (label, body) for every ``<header> "<label>" {`` block.
+
+    Indentation-aware, unlike the line-anchored regexes elsewhere in this
+    module: the database domain declares its scrapes inside a ``foreach``,
+    so anchoring at column zero would silently skip the four blocks a
+    whole-config gate most needs to see.
+    """
+    opening = re.compile(
+        rf'(?m)^(?P<indent>\t*){re.escape(header)} "(?P<label>\w+)" \{{$'
+    )
+    found: list[tuple[str, str]] = []
+    for block in opening.finditer(text):
+        closing = re.search(
+            rf"(?m)^{block['indent']}\}}$", text[block.end() :]
+        )
+        if closing is None:
+            raise AssertionError(
+                f'unterminated {header} "{block["label"]}" block'
+            )
+        found.append(
+            (block["label"], text[block.end() : block.end() + closing.start()])
+        )
+    return found
+
+
+def scrape_blocks() -> list[tuple[str, str, str]]:
+    """
+    Return (file, label, body) for every prometheus.scrape in the reference.
+
+    Base and overlays together: a scrape is a scrape wherever it lives,
+    and the hardening gates must not stop at the directory boundary. The
+    label is not unique on its own -- the database domain declares four
+    blocks named "db" -- so the file name travels with it.
+    """
+    found = [
+        (name, label, body)
+        for name, text in {**sources(), **optional_sources()}.items()
+        for label, body in _blocks(text, "prometheus.scrape")
+    ]
+    if not found:
+        raise AssertionError("no prometheus.scrape blocks found")
+    return found
+
+
 def _all_text() -> str:
     """Return base plus optional config text (env scan spans overlays too)."""
     return "\n".join([*sources().values(), *optional_sources().values()])

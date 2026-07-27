@@ -33,6 +33,7 @@ discovery.relabel "host_metrics" {
 }
 
 prometheus.scrape "host" {
-	targets    = discovery.relabel.host_metrics.output
-	forward_to = [prometheus.remote_write.default.receiver]
+	targets          = discovery.relabel.host_metrics.output
+	follow_redirects = false
+	forward_to       = [prometheus.remote_write.default.receiver]
 }

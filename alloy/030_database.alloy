@@ -193,7 +193,8 @@ foreach "postgres" {
 		}
 
 		prometheus.scrape "db" {
-			targets = discovery.relabel.enrich_postgres.output
+			targets          = discovery.relabel.enrich_postgres.output
+			follow_redirects = false
 
 			forward_to = [
 				prometheus.remote_write.default.receiver,
@@ -360,7 +361,8 @@ foreach "mysql" {
 		}
 
 		prometheus.scrape "db" {
-			targets = discovery.relabel.enrich_mysql.output
+			targets          = discovery.relabel.enrich_mysql.output
+			follow_redirects = false
 
 			forward_to = [
 				prometheus.remote_write.default.receiver,
@@ -531,7 +533,8 @@ foreach "redis" {
 		}
 
 		prometheus.scrape "db" {
-			targets = discovery.relabel.enrich_redis.output
+			targets          = discovery.relabel.enrich_redis.output
+			follow_redirects = false
 
 			forward_to = [
 				prometheus.remote_write.default.receiver,
@@ -690,7 +693,8 @@ foreach "mongodb" {
 		}
 
 		prometheus.scrape "db" {
-			targets = discovery.relabel.enrich_mongodb.output
+			targets          = discovery.relabel.enrich_mongodb.output
+			follow_redirects = false
 
 			forward_to = [
 				prometheus.remote_write.default.receiver,

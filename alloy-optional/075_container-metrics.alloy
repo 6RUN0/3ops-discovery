@@ -48,8 +48,9 @@ discovery.relabel "cadvisor" {
 prometheus.scrape "cadvisor" {
 	// Default interval on purpose (like 070): a host overlay, not a
 	// docker-label domain with a per-target profile.
-	targets    = discovery.relabel.cadvisor.output
-	forward_to = [prometheus.relabel.cadvisor.receiver]
+	targets          = discovery.relabel.cadvisor.output
+	follow_redirects = false
+	forward_to       = [prometheus.relabel.cadvisor.receiver]
 }
 
 // Series-side provenance: the allowlisted docker labels surface as

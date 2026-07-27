@@ -312,9 +312,10 @@ discovery.relabel "blackbox_normal_v1" {
 }
 
 prometheus.scrape "blackbox_normal_v1" {
-	targets         = discovery.relabel.blackbox_normal_v1.output
-	scrape_interval = "30s"
-	scrape_timeout  = "10s"
+	targets          = discovery.relabel.blackbox_normal_v1.output
+	scrape_interval  = "30s"
+	scrape_timeout   = "10s"
+	follow_redirects = false
 
 	forward_to = [
 		prometheus.remote_write.default.receiver,
@@ -334,9 +335,10 @@ discovery.relabel "blackbox_fast_v1" {
 }
 
 prometheus.scrape "blackbox_fast_v1" {
-	targets         = discovery.relabel.blackbox_fast_v1.output
-	scrape_interval = "15s"
-	scrape_timeout  = "10s"
+	targets          = discovery.relabel.blackbox_fast_v1.output
+	scrape_interval  = "15s"
+	scrape_timeout   = "10s"
+	follow_redirects = false
 
 	forward_to = [
 		prometheus.remote_write.default.receiver,
@@ -356,9 +358,10 @@ discovery.relabel "blackbox_slow_v1" {
 }
 
 prometheus.scrape "blackbox_slow_v1" {
-	targets         = discovery.relabel.blackbox_slow_v1.output
-	scrape_interval = "60s"
-	scrape_timeout  = "15s"
+	targets          = discovery.relabel.blackbox_slow_v1.output
+	scrape_interval  = "60s"
+	scrape_timeout   = "15s"
+	follow_redirects = false
 
 	forward_to = [
 		prometheus.remote_write.default.receiver,
