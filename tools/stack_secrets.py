@@ -14,6 +14,8 @@ from pathlib import Path
 
 import yaml
 
+from tools import snmp_fixtures
+
 #: Fixed SNMPv3 passphrases for the ephemeral e2e/demo snmp-agent. Unlike the
 #: DB credentials (randomised per run), these MUST equal the static
 #: snmp-agent/snmpd.conf createUser line, so they are constants, not
@@ -64,24 +66,22 @@ def write_secrets(secrets_dir: Path) -> dict[str, str]:
     # netmon-v3 creds MUST equal the snmp-agent snmpd.conf (v3 authPriv,
     # SHA/AES). Path is fixed by convention (RU_3OPS_DISCOVERY_SECRETS_DIR),
     # so no env var is returned for it.
+    auths = {
+        "netmon-v3": {
+            "version": snmp_fixtures.SNMP_V3,
+            "username": "netmon",
+            "security_level": "authPriv",
+            "password": _SNMP_AUTH_PASS,
+            "auth_protocol": "SHA",
+            "priv_protocol": "AES",
+            "priv_password": _SNMP_PRIV_PASS,
+        }
+    }
+    # This is the only real auth profile the repository produces, so it is
+    # also the only place the contract's control point can actually fire.
+    snmp_fixtures.validate_auths(auths)
     (secrets_dir / "snmp_auths.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "auths": {
-                    "netmon-v3": {
-                        "version": 3,
-                        "username": "netmon",
-                        "security_level": "authPriv",
-                        "password": _SNMP_AUTH_PASS,
-                        "auth_protocol": "SHA",
-                        "priv_protocol": "AES",
-                        "priv_password": _SNMP_PRIV_PASS,
-                    }
-                }
-            },
-            sort_keys=False,
-        ),
-        encoding="utf-8",
+        yaml.safe_dump({"auths": auths}, sort_keys=False), encoding="utf-8"
     )
     return {
         "RU_3OPS_DISCOVERY_E2E_PG_USER": user,

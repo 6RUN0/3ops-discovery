@@ -66,6 +66,14 @@ def code_block(
     return blocks[index]
 
 
+def yaml_blocks(number: str) -> list[str]:
+    """Every ```yaml fenced block of a section, in document order."""
+    blocks = re.findall(r"(?ms)^```yaml\n(.*?)^```$", section(number))
+    if not blocks:
+        raise AnchorError(f"no yaml block found in manifest section {number}")
+    return blocks
+
+
 def table(number: str, index: int = 0) -> list[dict[str, str]]:
     """Pipe table #index of a section as a list of row dicts."""
     rows: list[list[str]] = []
@@ -174,6 +182,49 @@ def secret_formats() -> dict[str, str]:
         for typ in row["Тип"].split(","):
             formats[_plain(typ.strip())] = fmt
     return formats
+
+
+def snmp_auth_versions() -> set[int]:
+    """Section 10.6.1: the numeric `version` values the contract allows."""
+    m = re.search(r"`version ∈ \{([^}]+)\}`", section("10.6.1"))
+    if m is None:
+        raise AnchorError("snmp auth version allowlist not found in 10.6.1")
+    parts = [part.strip() for part in m.group(1).split(",")]
+    if not all(part.isdigit() for part in parts):
+        # The field is numeric; a `{v2c, v3}` spelling is the drift this
+        # anchor exists to catch, so fail as a missing anchor, not ValueError.
+        raise AnchorError(
+            f"snmp auth version allowlist is not numeric: {m.group(1)!r}"
+        )
+    return {int(part) for part in parts}
+
+
+def snmp_auth_level_fields() -> dict[str, set[str]]:
+    """Section 10.6.1: v3 security_level -> fields it makes mandatory."""
+    block = code_block("10.6.1", after="**Обязательные поля v3 по")
+    fields: dict[str, set[str]] = {}
+    for line in block.splitlines():
+        level, separator, values = line.partition(":")
+        if separator:
+            fields[level.strip()] = {
+                value.strip() for value in values.split("|") if value.strip()
+            }
+    if not fields:
+        raise AnchorError("no snmp auth level fields parsed from 10.6.1")
+    return fields
+
+
+def snmp_auth_enums() -> dict[str, set[str]]:
+    """Section 10.6.1: v3 field -> allowed values."""
+    block = code_block("10.6.1", after="**Enum-ы полей v3:**")
+    enums: dict[str, set[str]] = {}
+    for line in block.splitlines():
+        field, _, values = line.partition(":")
+        if values.strip():
+            enums[field.strip()] = {v.strip() for v in values.split("|")}
+    if not enums:
+        raise AnchorError("no snmp auth enums parsed from section 10.6.1")
+    return enums
 
 
 def domain_labels(number: str) -> dict[str, bool]:

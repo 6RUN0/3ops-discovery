@@ -848,16 +848,34 @@ OTLP-путь — исключение из провенанса раздела 
 
 Auth-модель домена: именованные профили в `snmp_auths.yaml`, на которые устройство ссылается по имени через поле `auth`.
 
-**Allowlist версий:** `v2c`, `v3`. Проверка только advisory: версия живёт в секрет-файле, который парсит экспортёр; Alloy-конфигурация её не инспектирует. Единственная точка контроля в репозитории — статический валидатор auth-фикстуры: `version ∈ {2, 3}` (НЕ диапазон экспортёра 1..3 — SNMPv1 запрещён контрактом).
+**Allowlist версий:** SNMPv2c и SNMPv3. В файле версия задаётся полем `version` — ЧИСЛОМ, а не строкой `v2c`/`v3`: `version: 2` означает v2c, `version: 3` — v3. Проверка только advisory: секрет-файл парсит экспортёр, Alloy-конфигурация его не инспектирует. Единственная точка контроля в репозитории — статический валидатор auth-фикстуры (`tools/snmp_fixtures.py`, `validate_auths`): `version ∈ {2, 3}` (НЕ диапазон экспортёра 1..3 — SNMPv1 запрещён контрактом).
 
-**Поля профиля по версии:**
+**Поля профиля по версии** (имена и типы — по `snmp_exporter` v0.29.0, struct `Auth`):
 
-- `v2c`: `community`.
-- `v3`: `username`, `security_level`, `password`, `auth_protocol`, `priv_protocol`, `priv_password` (полный список и enum-ы — в разделе «Схема файлов» дизайна).
+- `version: 2` (v2c): `community`.
+- `version: 3` (v3): `username` и `security_level`, плюс поля, обязательные для выбранного уровня.
+
+**Обязательные поля v3 по `security_level`** (сверх `username`):
+
+```text
+noAuthNoPriv:
+authNoPriv: password | auth_protocol
+authPriv: password | auth_protocol | priv_password | priv_protocol
+```
+
+**Enum-ы полей v3:**
+
+```text
+security_level: noAuthNoPriv | authNoPriv | authPriv
+auth_protocol:  MD5 | SHA | SHA224 | SHA256 | SHA384 | SHA512
+priv_protocol:  DES | AES | AES192 | AES192C | AES256 | AES256C
+```
+
+Экспортёр принимает и `context_name`; контракт его не использует.
 
 **Размещение секрета:** файл устройств хранит только ИМЯ профиля; credentials лежат только в `snmp_auths.yaml`, подаваемом как inline `config` из `local.file` с `is_secret = true`, — никогда в labels и не в списке устройств. Усиливает [13.1](#131-запрещено-хранить-в-docker-labels) (SNMP communities запрещены в labels); раздел [9](#9-secret-contract) трактует это как исключение из соглашения «один файл на `<auth-id>`». Relabel проверяет только ПРИСУТСТВИЕ `auth` (`keep auth != ""`) — формат имени не навязывается.
 
-**Известное ограничение:** `merge` сохраняет встроенные defaults, включая небезопасный `public_v2` (community `public`, v2c) и `public_v1` (v1, вне allowlist `{v2c, v3}`); `auth: "public_v2"` резолвится успешно, потому что relabel проверяет присутствие, а не членство. Контроль по имени в референсе невозможен (имена auth зависят от деплоя) — задокументированный риск, как и односторонний module-гейт.
+**Известное ограничение:** `merge` сохраняет встроенные defaults, включая небезопасный `public_v2` (community `public`, v2c) и `public_v1` (`version: 1`, вне allowlist `{2, 3}`); `auth: "public_v2"` резолвится успешно, потому что relabel проверяет присутствие, а не членство. Контроль по имени в референсе невозможен (имена auth зависят от деплоя) — задокументированный риск, как и односторонний module-гейт.
 
 **Неизвестное имя auth** (опечатка, отсутствует в слитом `auths:`) → ошибка на стороне экспортёра во время scrape, а НЕ drop на этапе discovery (relabel не может свериться с секрет-файлом). Задокументировано; отдельный e2e не добавляется.
 
@@ -1103,7 +1121,7 @@ Alloy сливает все `*.alloy`-файлы каталога в один г
 Для уменьшения дублирования можно использовать YAML anchors:
 
 ```yaml
-ru.3ops.discovery-common: &alloy-discovery-common
+x-3ops-discovery-common: &alloy-discovery-common
   ru.3ops.discovery.enabled: "true"
   ru.3ops.discovery.version: "0.2"
   ru.3ops.discovery.environment: "production"
@@ -1134,6 +1152,27 @@ services:
       ru.3ops.discovery.database.port: "5432"
       ru.3ops.discovery.database.secret-id: "postgres-orders"
 ```
+
+Префикс `x-` в имени anchor-ключа обязателен и НЕ противоречит требованию
+reverse-DNS для самих labels — правило действует в двух местах
+противоположным образом:
+
+- **Top-level ключ compose-файла** обязан быть либо известным ключом схемы
+  (`services`, `networks`, `volumes`, ...), либо extension-ключом с префиксом
+  `x-`. Ключ `ru.3ops.discovery-common` не является ни тем, ни другим, и
+  `docker compose config` отвергает такой файл целиком
+  (`additional properties ... not allowed`).
+- **Ключ внутри `labels:`** обязан оставаться reverse-DNS (`ru.3ops.*`):
+  для map-формы `labels:` compose трактует ключ с префиксом `x-` как
+  extension и под своим именем до контейнера не доводит — все такие ключи
+  сворачиваются в один служебный label `#extensions` со значением вида
+  `map[x-ключ:значение]`. Discovery такой label не видит, а на контейнере
+  остаётся мусорная метка. Именно поэтому пространство имён контракта —
+  reverse-DNS, а не `x-`-префикс (раздел
+  [4](#4-нормализация-docker-labels-в-alloy)).
+
+Anchor-ключ виден только парсеру YAML и не попадает ни в один контейнер —
+его имя свободно, кроме обязательного `x-`.
 
 ### 15.2. Итоговый минимальный контракт
 
