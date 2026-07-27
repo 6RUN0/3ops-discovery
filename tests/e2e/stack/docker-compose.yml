@@ -466,6 +466,25 @@ services:
     networks:
       - telemetry
 
+  app-logs-multiport:
+    # Two exposed (unpublished) TCP ports make discovery.docker emit two
+    # targets sharing one container ID -- the fan-out 040/manifest 14
+    # promise the logs domain survives because loki.source.docker
+    # dedupes targets by container ID. The e2e test pins that promise.
+    # (Multi-NETWORK fan-out does not exist under the discovery.docker
+    # default match_first_network=true, so ports are the live trigger.)
+    build: ./app
+    expose:
+      - "8081"
+      - "8082"
+    environment:
+      APP_LOG_FORMAT: raw
+    networks:
+      - telemetry
+    labels:
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.logs.service: "app-logs-multiport"
+
   app-logs-unknown:
     # Unknown profile degrades to raw-v1 without losing logs
     # (manifest 10.3.4).

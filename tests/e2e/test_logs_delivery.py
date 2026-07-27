@@ -1,6 +1,7 @@
 """Loki delivery assertions: profiles, structured metadata, allowlist."""
 
 import subprocess
+from typing import Any
 
 import requests
 
@@ -25,6 +26,86 @@ def _source_target_containers(stack: Stack) -> set[str]:
             name = labels.get("__meta_docker_container_name", "")
             names.add(name.removeprefix("/"))
     return names
+
+
+def _containers_detail(stack: Stack) -> dict[str, Any]:
+    """Full component detail of loki.source.docker.containers."""
+    resp = requests.get(
+        f"{stack.alloy_url}/api/v0/web/components/"
+        "loki.source.docker.containers",
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return dict(resp.json())
+
+
+def _target_container_ids(detail: dict[str, Any], container: str) -> list[str]:
+    """Container IDs of the source targets naming one container."""
+    ids: list[str] = []
+    for arg in detail.get("arguments", []):
+        if arg.get("name") != "targets":
+            continue
+        for target in arg["value"]["value"]:
+            labels = {p["key"]: p["value"]["value"] for p in target["value"]}
+            if labels.get("__meta_docker_container_name") == container:
+                ids.append(labels["__meta_docker_container_id"])
+    return ids
+
+
+def _tailer_container_ids(detail: dict[str, Any]) -> list[str]:
+    """Container IDs of the running tailers (debug info blocks)."""
+    ids: list[str] = []
+    for block in detail.get("debugInfo", []):
+        if block.get("name") != "targets_info":
+            continue
+        attrs = {
+            attr["name"]: attr.get("value", {}).get("value")
+            for attr in block.get("body", [])
+        }
+        ids.append(attrs["id"])
+    return ids
+
+
+def test_multiport_container_is_tailed_once(stack: Stack) -> None:
+    # discovery.docker emits one target per exposed TCP port (and only
+    # for the FIRST network: match_first_network defaults to true, so
+    # ports are the live fan-out trigger); 040 relies on
+    # loki.source.docker collapsing that fan-out by container ID.
+    # app-logs-multiport exposes two ports, so first PROVE the fan-out
+    # reaches the source (>= 2 targets carrying one container ID --
+    # without that precondition the dedup claim would be vacuously
+    # green), then assert a single tailer and no duplicate delivery.
+    container = "/" + stack.compose_container("app-logs-multiport")
+
+    def _fanout() -> tuple[dict[str, Any], str] | None:
+        detail = _containers_detail(stack)
+        ids = _target_container_ids(detail, container)
+        if len(ids) >= 2 and len(set(ids)) == 1:
+            return detail, ids[0]
+        return None
+
+    detail, container_id = wait_until(
+        _fanout,
+        timeout=LOGS_BUDGET,
+        desc="multi-port target fan-out at loki.source.docker",
+    )
+    assert _tailer_container_ids(detail).count(container_id) == 1, (
+        "loki.source.docker runs more than one tailer for one container"
+    )
+    entries = wait_until(
+        lambda: (
+            stack.loki_entries(
+                f'{{service_name="app-logs-multiport",'
+                f'compose_project="{stack.project}"}}'
+            )
+            or None
+        ),
+        timeout=LOGS_BUDGET,
+        desc="multiport stream flowing",
+    )
+    assert len(entries) == len(set(entries)), (
+        "a log line was delivered more than once"
+    )
 
 
 def test_json_profile_parses_into_structured_metadata(
