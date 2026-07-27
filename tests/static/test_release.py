@@ -41,11 +41,33 @@ def test_version_comes_from_the_manifest_header() -> None:
 
 def test_tag_must_match_the_manifest_version() -> None:
     version = release.spec_version()
-    assert release.verify_tag(f"v{version}") == version
+    assert (
+        release.verify_tag(f"v{version}-snapshot.1") == f"{version}-snapshot.1"
+    )
     with pytest.raises(release.ReleaseError, match="does not match"):
-        release.verify_tag("v999.0.0")
-    with pytest.raises(release.ReleaseError, match="does not match"):
+        release.verify_tag("v999.0.0-snapshot.1")
+    with pytest.raises(release.ReleaseError, match="not of the form"):
         release.verify_tag(version)  # missing the v prefix
+
+
+def test_a_draft_manifest_may_only_ship_pre_releases() -> None:
+    # A moving document must not occupy the final number: readers who
+    # fetch v0.2.0 later would get an archive of a text that has since
+    # changed, with no way to tell.
+    version = release.spec_version()
+    if release.spec_status() == release.DRAFT_STATUS:
+        with pytest.raises(release.ReleaseError, match="still Draft"):
+            release.verify_tag(f"v{version}")
+        assert release.is_prerelease(f"v{version}-snapshot.1") is True
+    else:
+        assert release.verify_tag(f"v{version}") == version
+        assert release.is_prerelease(f"v{version}") is False
+
+
+def test_pre_release_suffix_forces_a_pre_release() -> None:
+    # Independent of the manifest status: an rc is an rc.
+    version = release.spec_version()
+    assert release.is_prerelease(f"v{version}-rc.1") is True
 
 
 def test_archive_ships_every_validated_alloy_file(built: Path) -> None:

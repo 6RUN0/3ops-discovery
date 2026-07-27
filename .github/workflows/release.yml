@@ -59,6 +59,10 @@ jobs:
         run: uv run nox -s preflight
 
       - name: nox -s release
+        env:
+          # The archive carries the tag's pre-release suffix, so two
+          # snapshots of one contract version cannot collide.
+          RELEASE_TAG: ${{ github.ref_name }}
         run: uv run nox -s release
 
       - name: Publish
@@ -67,10 +71,20 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         # Assets by glob, not by name: tools/release.py owns how the
         # archive is named and must stay the only place that knows.
-        run: >-
-          gh release create "$RELEASE_TAG"
-          dist/*.tar.gz
-          dist/SHA256SUMS
-          --title "3ops Discovery $RELEASE_TAG"
-          --notes "Contract and reference Alloy configuration.
-          Changes: CHANGELOG.md. Verify with sha256sum -c SHA256SUMS."
+        run: |
+          # An array, not a string: an empty flag variable would reach gh
+          # as an empty argument, and quoting it is the only way past
+          # SC2086. A snapshot of a Draft manifest must not sit in the
+          # releases list looking like a finished contract.
+          kind=()
+          if uv run python -c 'import os, sys
+          from tools.release import is_prerelease
+          sys.exit(0 if is_prerelease(os.environ["RELEASE_TAG"]) else 1)'; then
+            kind+=(--prerelease)
+          fi
+          gh release create "$RELEASE_TAG" \
+            dist/*.tar.gz dist/SHA256SUMS \
+            --title "3ops Discovery $RELEASE_TAG" \
+            --notes "Contract and reference Alloy configuration. Changes:
+          CHANGELOG.md. Verify with sha256sum -c SHA256SUMS." \
+            "${kind[@]}"

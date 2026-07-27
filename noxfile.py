@@ -229,10 +229,16 @@ def release(session: nox.Session) -> None:
     file set, reproducibility) live in tests/static/test_release.py and
     run as part of ``tests``.
     """
-    from tools.release import build, spec_version
+    from tools.release import build, spec_status, spec_version, verify_tag
 
-    archive = build(REPO / "dist")
-    session.log(f"spec version {spec_version()}")
+    # The tag, when there is one, decides the name: a snapshot carries
+    # its pre-release suffix into the archive so two snapshots of one
+    # contract version cannot collide. Plain `nox -s release` builds the
+    # bare version for a local look.
+    tag = next(iter(session.posargs), os.environ.get("RELEASE_TAG"))
+    version = verify_tag(tag) if tag else spec_version()
+    archive = build(REPO / "dist", version)
+    session.log(f"spec {spec_version()} ({spec_status()}), built as {version}")
     session.log(f"{archive.name} ({archive.stat().st_size} bytes)")
     session.log(f"checksum in {archive.parent / 'SHA256SUMS'}")
 

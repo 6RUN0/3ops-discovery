@@ -45,6 +45,16 @@ ARCHIVE_README = "packaging/ARCHIVE-README.md"
 #: Unix epoch, chosen so the value is obviously synthetic.
 _EPOCH = 0
 _VERSION = re.compile(r"(?m)^\*\*Версия спецификации:\*\* `(\d+\.\d+\.\d+)`")
+_STATUS = re.compile(r"(?m)^\*\*Статус:\*\* (\S+)")
+#: v<major.minor.patch> with an optional SemVer pre-release part. The
+#: shape of that part is deliberately not prescribed -- snapshot.3,
+#: rc.1 and 20260727 are all the caller's business.
+_TAG = re.compile(
+    r"^v(?P<version>\d+\.\d+\.\d+)(?:-(?P<pre>[0-9A-Za-z.-]+))?$"
+)
+
+#: Manifest header status meaning the contract text is still moving.
+DRAFT_STATUS = "Draft"
 
 
 class ReleaseError(RuntimeError):
@@ -65,19 +75,48 @@ def spec_version() -> str:
     return found.group(1)
 
 
+def spec_status() -> str:
+    """Return the contract status from the manifest header, e.g. "Draft"."""
+    found = _STATUS.search(MANIFEST.read_text(encoding="utf-8"))
+    if found is None:
+        raise ReleaseError(f"no status in the header of {MANIFEST}")
+    return found.group(1)
+
+
 def verify_tag(tag: str) -> str:
     """
-    Check that a git tag names exactly the manifest version.
+    Check a git tag against the manifest; return the version it carries.
 
-    The release workflow runs on a tag push, so this is what stops a
-    ``v0.3.0`` tag from publishing an archive of the 0.2.0 contract.
+    Two things are enforced. The numeric part must be the manifest's
+    version -- the workflow runs on a tag push, and this is what stops a
+    v0.3.0 tag from publishing the 0.2.0 contract. And while the
+    manifest still says Draft, only a pre-release tag is accepted: a
+    moving document must not occupy the final number, under which
+    readers of the archive expect the finished contract.
     """
+    match = _TAG.match(tag)
+    if match is None:
+        raise ReleaseError(f"tag {tag} is not of the form vX.Y.Z[-pre]")
     version = spec_version()
-    if tag != f"v{version}":
+    if match["version"] != version:
         raise ReleaseError(
             f"tag {tag} does not match the manifest: expected v{version}"
         )
-    return version
+    status = spec_status()
+    if status == DRAFT_STATUS and not match["pre"]:
+        raise ReleaseError(
+            f"the manifest is still {status}, so {tag} needs a pre-release "
+            f"suffix (v{version}-snapshot.1, for example)"
+        )
+    # With the pre-release part kept: two snapshots of one contract
+    # version must not collide on the archive file name.
+    return tag[1:]
+
+
+def is_prerelease(tag: str) -> bool:
+    """Return True if the tag must be published as a pre-release."""
+    match = _TAG.match(tag)
+    return bool(match and match["pre"]) or spec_status() == DRAFT_STATUS
 
 
 def archive_name(version: str | None = None) -> str:
