@@ -1,0 +1,30 @@
+---
+# Opt-in delivery checks: the full docker compose stack takes minutes
+# and ~20 services, so it is not part of the per-push gates. Trigger
+# manually from the Actions tab, or rely on the weekly run to catch
+# environment drift (runner images, registry pulls).
+name: e2e
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1"  # Mondays 05:17 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: compose delivery suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
+        with:
+          version: "0.11.32"
+          enable-cache: true
+      - name: nox -s e2e
+        run: uv run nox -s e2e
