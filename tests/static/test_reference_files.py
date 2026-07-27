@@ -4,7 +4,12 @@ import re
 from pathlib import Path
 
 import pytest
-from noxfile import ALLOY_IMAGE, AlloyFmtError, alloy_fmt_verdict
+from noxfile import (
+    ALLOY_IMAGE,
+    AlloyFmtError,
+    alloy_config_mount,
+    alloy_fmt_verdict,
+)
 
 from tests.static import alloy_config as ac
 from tests.static import manifest_doc as md
@@ -46,6 +51,16 @@ def test_fmt_verdict_separates_a_diff_from_a_docker_failure() -> None:
     assert alloy_fmt_verdict(1, "is not formatted correctly") is True
     with pytest.raises(AlloyFmtError, match="docker exited 125"):
         alloy_fmt_verdict(125, "Unable to find image locally")
+
+
+def test_config_mount_source_must_be_absolute() -> None:
+    # docker reads a relative -v source as a NAMED VOLUME, not a host
+    # directory: `.nox/alloy_check/tmp/base` broke CI with "invalid
+    # characters for a local volume name" while a laxer local docker
+    # took it. The gate must not depend on which docker runs it.
+    assert alloy_config_mount(Path("/tmp/cfg")) == "/tmp/cfg:/etc/alloy:ro"
+    with pytest.raises(ValueError, match="must be absolute"):
+        alloy_config_mount(Path(".nox/alloy_check/tmp/base"))
 
 
 def test_fmt_verdict_reports_the_cause_it_was_given() -> None:

@@ -78,6 +78,22 @@ class AlloyFmtError(RuntimeError):
     """docker could not run the formatter, so the file was never checked."""
 
 
+def alloy_config_mount(config_dir: Path) -> str:
+    """
+    Return the ``-v`` argument mounting a config dir read-only.
+
+    The path must be absolute. Docker reads a RELATIVE source as a
+    NAMED VOLUME rather than a host directory and rejects it ("includes
+    invalid characters for a local volume name"), which is exactly how
+    CI broke while a laxer local docker accepted `.nox/...` happily.
+    """
+    if not config_dir.is_absolute():
+        raise ValueError(
+            f"the config mount source must be absolute, got {config_dir}"
+        )
+    return f"{config_dir}:/etc/alloy:ro"
+
+
 def alloy_fmt_verdict(returncode: int, stderr: str) -> bool:
     """
     Return True if the file needs reformatting; raise if docker failed.
@@ -107,7 +123,7 @@ def _alloy_fmt_would_change(config_dir: Path, name: str) -> bool:
             "run",
             "--rm",
             "-v",
-            f"{config_dir}:/etc/alloy:ro",
+            alloy_config_mount(config_dir),
             ALLOY_IMAGE,
             "fmt",
             "-t",
@@ -139,7 +155,11 @@ def alloy_check(session: nox.Session) -> None:
     # reason hidden; here a registry problem is reported as one.
     session.run("docker", "pull", ALLOY_IMAGE, external=True)
     for combo, optional in COMBOS.items():
-        config_dir = materialize(Path(session.create_tmp()) / combo, optional)
+        # resolve(): create_tmp() hands back a path relative to the repo,
+        # and docker needs an absolute one to see a host directory.
+        config_dir = materialize(
+            (Path(session.create_tmp()) / combo).resolve(), optional
+        )
         docker_env: list[str] = []
         if "037_snmp.alloy" in optional:
             # 037's top-level local.file components need the device + auth
@@ -164,7 +184,7 @@ def alloy_check(session: nox.Session) -> None:
             "--rm",
             *docker_env,
             "-v",
-            f"{config_dir}:/etc/alloy:ro",
+            alloy_config_mount(config_dir),
             ALLOY_IMAGE,
             "validate",
             "--stability.level=experimental",
