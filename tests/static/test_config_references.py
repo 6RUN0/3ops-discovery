@@ -49,7 +49,9 @@ def _cited(text: str) -> list[str]:
 def test_every_cited_section_exists(name: str) -> None:
     known = md.section_numbers()
     missing = [n for n in _cited(_configs()[name]) if n not in known]
-    assert not missing, f"{name} cites manifest sections that do not exist: {missing}"
+    assert not missing, (
+        f"{name} cites manifest sections that do not exist: {missing}"
+    )
 
 
 @pytest.mark.parametrize("name", sorted(_configs()))

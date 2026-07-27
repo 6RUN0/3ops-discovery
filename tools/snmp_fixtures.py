@@ -15,6 +15,8 @@ from typing import Any
 
 import yaml
 
+from tools.secret_files import write_secret
+
 #: Wire values of the `version` field: the exporter takes an int, not the
 #: `v2c`/`v3` spelling used in prose (manifest 10.6.1).
 SNMP_V2C = 2
@@ -129,6 +131,8 @@ def write_snmp_fixtures(
     (config_dir / "snmp_targets.yaml").write_text(
         yaml.safe_dump(devices, sort_keys=False), encoding="utf-8"
     )
-    (secrets_dir / "snmp_auths.yaml").write_text(
-        yaml.safe_dump({"auths": auths}, sort_keys=False), encoding="utf-8"
+    write_secret(
+        secrets_dir / "snmp_auths.yaml",
+        yaml.safe_dump({"auths": auths}, sort_keys=False),
+        encoding="utf-8",
     )

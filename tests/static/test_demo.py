@@ -32,3 +32,29 @@ def test_datasources_wire_both_backends() -> None:
     text = _DATASOURCES.read_text("utf-8")
     assert "url: http://prometheus:9090" in text
     assert "url: http://loki:3100" in text
+
+
+def test_anonymous_grafana_cannot_manage_datasources() -> None:
+    # The same compose file is the e2e harness AND the sandbox `nox -s
+    # demo` hands to a reader as an example. Managing data sources is
+    # Admin-only in Grafana OSS, so an anonymous Admin could add one
+    # pointing at any URL and read the answer -- an SSRF foothold inside
+    # the telemetry network, reached with no credentials at all.
+    role = re.search(r"GF_AUTH_ANONYMOUS_ORG_ROLE=(\w+)", _grafana_block())
+    assert role, "anonymous org role not set on the demo grafana"
+    assert role.group(1) != "Admin"
+
+
+def test_the_alloy_api_is_not_published_beyond_loopback() -> None:
+    # Inside the telemetry network the unauthenticated HTTP server is
+    # reachable by every workload and cannot be made otherwise -- a
+    # collector shares a network with what it scrapes (manifest 13.3).
+    # The host boundary is the one that IS enforceable, so it is the one
+    # pinned here: loopback, ephemeral port, never 0.0.0.0.
+    text = _COMPOSE.read_text("utf-8")
+    published = re.findall(r'^\s*- "([^"]*:\d+|\d+):\d+"', text, re.MULTILINE)
+    assert published, "no published ports found in compose"
+    for mapping in published:
+        assert mapping.startswith("127.0.0.1:"), (
+            f"port {mapping} is published beyond loopback"
+        )

@@ -987,8 +987,9 @@ If Alloy uses `/var/run/docker.sock`, the following must be taken into account:
 - a read-only mount does not make the Docker API strictly read-only;
 - access to the Docker socket is effectively highly privileged;
 - a socket proxy allowing read endpoints only is preferable;
-- Alloy must not be reachable from an untrusted Docker network;
 - the Alloy UI must not be published outward without authentication.
+
+The requirement "Alloy must not be reachable from an untrusted Docker network" cannot be met in full, and that is a property of the model rather than an oversight in the configuration. Scraping a container means sharing a network with it, so a collector is always a neighbour of what it collects from: the Alloy HTTP server (`/metrics`, the unauthenticated `/api/v0/web/components`) and the opt-in OTLP receiver are visible to every container on that network. Splitting networks does not help -- with several networks `discovery.docker` takes only the alphabetically first one (section [14](#14-reference-implementation)), so the collector still has to sit in the network of the things it observes. What follows in practice: untrusted workloads are separated by a collector of their own, not by a network of the same one; on a shared network, assume neighbours can read the component list and its arguments (values marked `is_secret` are redacted).
 
 ### 13.4. Secret path traversal
 

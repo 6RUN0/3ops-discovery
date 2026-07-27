@@ -15,6 +15,7 @@ from pathlib import Path
 import yaml
 
 from tools import snmp_fixtures
+from tools.secret_files import write_secret
 
 #: Fixed SNMPv3 passphrases for the ephemeral e2e/demo snmp-agent. Unlike the
 #: DB credentials (randomised per run), these MUST equal the static
@@ -33,33 +34,30 @@ def write_secrets(secrets_dir: Path) -> dict[str, str]:
     mongo_pw = pysecrets.token_hex(16)
     user = "xad_e2e"
 
-    (secrets_dir / "postgres-orders.dsn").write_text(
+    write_secret(
+        secrets_dir / "postgres-orders.dsn",
         f"postgresql://{user}:{pg_pw}@postgres:5432/postgres?sslmode=disable",
-        encoding="ascii",
     )
     # Second postgres instance on the basic-v1 profile: the e2e proves
     # the profile shrinks the exporter's collection scope against the
     # extended-v1 postgres-orders control. Same generated credentials,
     # different server (compose service postgres-basic).
-    (secrets_dir / "postgres-audit.dsn").write_text(
+    write_secret(
+        secrets_dir / "postgres-audit.dsn",
         f"postgresql://{user}:{pg_pw}@postgres-basic:5432/postgres"
         "?sslmode=disable",
-        encoding="ascii",
     )
     # go-sql-driver DSN; root, no database (trailing slash).
-    (secrets_dir / "mariadb-billing.dsn").write_text(
-        f"root:{my_pw}@(mariadb:3306)/", encoding="ascii"
+    write_secret(
+        secrets_dir / "mariadb-billing.dsn", f"root:{my_pw}@(mariadb:3306)/"
     )
     # redis_addr cannot take a Secret, so the address (host:port) lives in
     # .dsn (non-secret) and the password in .redispass (manifest 9).
-    (secrets_dir / "redis-cache.dsn").write_text(
-        "redis:6379", encoding="ascii"
-    )
-    (secrets_dir / "redis-cache.redispass").write_text(
-        redis_pw, encoding="ascii"
-    )
-    (secrets_dir / "mongodb-docs.dsn").write_text(
-        f"mongodb://{user}:{mongo_pw}@mongodb:27017", encoding="ascii"
+    write_secret(secrets_dir / "redis-cache.dsn", "redis:6379")
+    write_secret(secrets_dir / "redis-cache.redispass", redis_pw)
+    write_secret(
+        secrets_dir / "mongodb-docs.dsn",
+        f"mongodb://{user}:{mongo_pw}@mongodb:27017",
     )
     # SNMP auth secret for the file-provider domain (overlay 037). Not a .dsn:
     # the exporter reads it as inline `config` via local.file is_secret. The
@@ -80,8 +78,10 @@ def write_secrets(secrets_dir: Path) -> dict[str, str]:
     # This is the only real auth profile the repository produces, so it is
     # also the only place the contract's control point can actually fire.
     snmp_fixtures.validate_auths(auths)
-    (secrets_dir / "snmp_auths.yaml").write_text(
-        yaml.safe_dump({"auths": auths}, sort_keys=False), encoding="utf-8"
+    write_secret(
+        secrets_dir / "snmp_auths.yaml",
+        yaml.safe_dump({"auths": auths}, sort_keys=False),
+        encoding="utf-8",
     )
     return {
         "RU_3OPS_DISCOVERY_E2E_PG_USER": user,
