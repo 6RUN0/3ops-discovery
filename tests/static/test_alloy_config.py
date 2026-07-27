@@ -12,13 +12,19 @@ def test_blackbox_module_allowlist_is_consistent() -> None:
     # The relabel keep-rule and the exporter config must define the same
     # module set: a module the relabel accepts but the exporter cannot probe
     # (or vice versa) is a silent hole.
-    assert ac.blackbox_config_modules() == {"http_2xx"}
-    assert ac.blackbox_relabel_modules() == {"http_2xx"}
+    assert ac.blackbox_config_modules() == {"http_2xx", "tcp_connect", "icmp"}
+    assert ac.blackbox_relabel_modules() == {
+        "http_2xx",
+        "tcp_connect",
+        "icmp",
+    }
 
 
 def test_blackbox_scrape_pairs() -> None:
     assert ac.blackbox_scrape_pairs() == {
         "normal-v1": {"interval": "30s", "timeout": "10s"},
+        "fast-v1": {"interval": "15s", "timeout": "10s"},
+        "slow-v1": {"interval": "60s", "timeout": "15s"},
     }
 
 

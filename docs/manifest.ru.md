@@ -756,7 +756,11 @@ services:
 | `ru.3ops.discovery.blackbox.path` | Нет | HTTP path |
 | `ru.3ops.discovery.blackbox.profile` | Нет | Scrape-профиль из allowlist; по умолчанию `normal-v1` |
 
-Значение `module` должно входить в allowlist модулей blackbox exporter, заданный конфигурацией Alloy. Произвольные модули из labels не принимаются.
+Значение `module` должно входить в allowlist модулей blackbox exporter, заданный конфигурацией Alloy. Произвольные модули из labels не принимаются. Формат цели пробы зависит от модуля: HTTP-модули получают URL `scheme://host:port/path`, TCP-модули — `host:port`, ICMP-модули — только host. Каждой серии blackbox-проб Alloy добавляет label `module` с именем использованного модуля.
+
+Для ICMP-модулей значение `blackbox.port` в саму пробу не входит (у ICMP нет порта), но label остаётся обязательным и проходит ту же валидацию: объявленный порт должен совпадать с реальным экспонированным портом контейнера, иначе target отбрасывается.
+
+ICMP-пробы не требуют дополнительных привилегий в типовой Docker-среде: стандартного набора capabilities (`NET_RAW`) либо непривилегированных ICMP-сокетов (Docker по умолчанию открывает `net.ipv4.ping_group_range` для всех групп) достаточно. В hardened-средах, где одновременно отброшен `NET_RAW` и сужен `ping_group_range`, ICMP-пробы работать не будут; выход — вернуть `cap_add: [NET_RAW]` или расширить `sysctls: net.ipv4.ping_group_range` у контейнера Alloy.
 
 #### 10.4.2. Example
 
@@ -981,7 +985,7 @@ docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.17.1 \
 | [`010_discovery.alloy`](../alloy/010_discovery.alloy) | `discovery.docker`: opt-in discovery для metrics/database и discovery всех контейнеров для логов |
 | [`020_metrics.alloy`](../alloy/020_metrics.alloy) | Домен metrics: общий relabel (валидация + провенанс) и пара `discovery.relabel`/`prometheus.scrape` на каждый профиль раздела 8.2 |
 | [`030_database.alloy`](../alloy/030_database.alloy) | Домен database: `foreach`-pipeline для postgres, DSN из файла секрета |
-| [`035_blackbox.alloy`](../alloy/035_blackbox.alloy) | Домен blackbox: `discovery.relabel` + `prometheus.exporter.blackbox` (модуль `http_2xx`, профиль `normal-v1`) |
+| [`035_blackbox.alloy`](../alloy/035_blackbox.alloy) | Домен blackbox: общий `discovery.relabel` + `prometheus.exporter.blackbox` (модули `http_2xx`/`tcp_connect`/`icmp`) и пара фильтр+scrape на каждый профиль раздела 8.2 |
 | [`040_logs.alloy`](../alloy/040_logs.alloy) | Домен logs: relabel-правила и `loki.source.docker` |
 | [`050_log-profiles.alloy`](../alloy/050_log-profiles.alloy) | Profile dispatcher: `loki.process` с базовыми log-профилями |
 | [`090_outputs.alloy`](../alloy/090_outputs.alloy) | Выходы: `prometheus.remote_write` и `loki.write` |

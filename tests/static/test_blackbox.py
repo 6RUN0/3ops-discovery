@@ -23,11 +23,15 @@ def test_scrape_profile_asymmetry_is_exact() -> None:
 
 
 def test_module_allowlist_matches_exporter_config() -> None:
-    # Config-internal consistency: the relabel keep-rule and the exporter
-    # config must accept the same modules (manifest 10.4 lists modules as
-    # open-ended examples, so there is no closed set to anchor against).
+    # Config-internal consistency: the relabel keep-rule, the exporter
+    # config AND the target-composition rules must accept the same modules
+    # (manifest 10.4 lists modules as open-ended examples, so there is no
+    # closed set to anchor against). Composition is fail-open -- a module
+    # accepted by the keep-rule but lacking a composition rule would probe
+    # the raw discovery address -- so the three-way equality is mandatory.
     # Plus a disjointness guard: no shipped module is on the documented-gap
     # list, so the two never silently drift into overlap.
     assert ac.blackbox_relabel_modules() == ac.blackbox_config_modules()
+    assert ac.blackbox_composition_modules() == ac.blackbox_config_modules()
     unshipped = set(asymmetries.BLACKBOX_MODULES_UNIMPLEMENTED)
     assert ac.blackbox_config_modules() & unshipped == set()

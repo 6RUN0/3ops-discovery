@@ -410,24 +410,33 @@ def blackbox_relabel_modules() -> set[str]:
 
 def blackbox_scrape_pairs() -> dict[str, dict[str, str]]:
     """Return implemented blackbox scrape profiles (name -> params)."""
+    return _profile_pairs(
+        sources()["035_blackbox.alloy"], "blackbox_profile", "blackbox"
+    )
+
+
+def blackbox_composition_modules() -> set[str]:
+    """
+    Modules with a target-composition rule in the shared blackbox relabel.
+
+    Composition is fail-open: a module missing here would keep the raw
+    discovery address as the probe target instead of being dropped, so
+    the gate pairing this set with the keep-rule allowlist and the
+    exporter config is mandatory, not cosmetic.
+    """
     text = sources()["035_blackbox.alloy"]
-    profiles = []
+    found = set()
     for rule in _rules(text):
-        regex = _keep_regex(rule, "blackbox_profile")
-        if regex is not None:
-            profiles.append(regex.strip("()?"))
-    intervals = re.findall(r'scrape_interval\s*=\s*"(\S+?)"', text)
-    timeouts = re.findall(r'scrape_timeout\s*=\s*"(\S+?)"', text)
-    if not (len(profiles) == len(intervals) == len(timeouts)):
-        raise AssertionError(
-            "profile keep-rules and scrape blocks in 035 do not pair up"
-        )
-    return {
-        name: {"interval": interval, "timeout": timeout}
-        for name, interval, timeout in zip(
-            profiles, intervals, timeouts, strict=True
-        )
-    }
+        if f"{_LABEL}_blackbox_module" not in rule:
+            continue
+        if not re.search(r'target_label\s*=\s*"__address__"', rule):
+            continue
+        m = re.search(r'regex\s*=\s*"(\w+)\\\\\|', rule)
+        if m:
+            found.add(m.group(1))
+    if not found:
+        raise AssertionError("no composition rules found in 035")
+    return found
 
 
 def _cadvisor_text() -> str:

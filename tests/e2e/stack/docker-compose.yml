@@ -565,6 +565,72 @@ services:
       ru.3ops.discovery.blackbox.path: "/metrics"
       ru.3ops.discovery.blackbox.scheme: "ftp"
 
+  probe-tcp:
+    # tcp_connect module (manifest 10.4) combined with the fast-v1 profile:
+    # one container covers both the module composition (host:port target,
+    # no scheme/path) and the blackbox profile routing. Service name
+    # deliberately avoids the "blackbox-probe" substring the http test
+    # matches on.
+    build: ./app
+    environment:
+      APP_METRICS_PORT: "8080"
+    networks:
+      - telemetry
+    expose:
+      - "8080"
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+      ru.3ops.discovery.blackbox.enabled: "true"
+      ru.3ops.discovery.blackbox.module: "tcp_connect"
+      ru.3ops.discovery.blackbox.port: "8080"
+      ru.3ops.discovery.blackbox.profile: "fast-v1"
+
+  probe-icmp:
+    # icmp module (manifest 10.4): the probe target is the bare container
+    # IP -- no port -- but blackbox.port stays mandatory and must match a
+    # REAL exposed port (keepequal), hence the expose below even though
+    # the probe never connects to it.
+    build: ./app
+    environment:
+      APP_METRICS_PORT: "8080"
+    networks:
+      - telemetry
+    expose:
+      - "8080"
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+      ru.3ops.discovery.blackbox.enabled: "true"
+      ru.3ops.discovery.blackbox.module: "icmp"
+      ru.3ops.discovery.blackbox.port: "8080"
+
+  probe-badmodule:
+    # Negative scenario (manifest 10.4, fail-closed): valid in EVERYTHING
+    # except the module, which is outside the exporter allowlist. The
+    # module keep-rule must DROP this target before composition -- being
+    # otherwise valid (real exposed port) guarantees the drop happens for
+    # the module, not for a failed port keepequal.
+    build: ./app
+    environment:
+      APP_METRICS_PORT: "8080"
+    networks:
+      - telemetry
+    expose:
+      - "8080"
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+      ru.3ops.discovery.blackbox.enabled: "true"
+      ru.3ops.discovery.blackbox.module: "dns"
+      ru.3ops.discovery.blackbox.port: "8080"
+
   snmp-agent:
     # File-provider domain target (manifest 10.6): external SNMP hardware has
     # no container, so 037_snmp.alloy finds it via a device file, NOT Docker

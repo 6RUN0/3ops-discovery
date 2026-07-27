@@ -31,18 +31,17 @@ DB_PROFILES_UNHANDLED: dict[str, str] = {
     "extended-v1": "reference ignores database.profile",
 }
 
-BLACKBOX_SCRAPE_PROFILES_UNIMPLEMENTED: dict[str, str] = {
-    "fast-v1": "reference ships only the normal-v1 blackbox pair (manifest "
-    "14)",
-    "slow-v1": "reference ships only the normal-v1 blackbox pair (manifest "
-    "14)",
-}
+#: All manifest 8.2 scrape profiles are implemented in 035_blackbox.
+BLACKBOX_SCRAPE_PROFILES_UNIMPLEMENTED: dict[str, str] = {}
 
-#: Modules the manifest 10.4 examples mention but the reference config does
-#: not ship in its exporter allowlist; adding one is an overlay/extension.
+#: Probe families the manifest 10.4 prose promises ("HTTP, TCP, ICMP и TLS
+#: checks") but the reference exporter allowlist does not ship. The module
+#: set is deliberately open-ended in the manifest (no closed normative
+#: list), so this one-sided table only guards disjointness with the
+#: shipped set.
 BLACKBOX_MODULES_UNIMPLEMENTED: dict[str, str] = {
-    "tcp_connect": "reference ships only the http_2xx module (manifest 10.4)",
-    "icmp": "reference ships only the http_2xx module (manifest 10.4)",
+    "tls_connect": "reference ships http_2xx/tcp_connect/icmp; the TLS "
+    "checks manifest 10.4 promises are not shipped",
 }
 
 #: The reference ships exactly one snmp profile (snmp-standard-v1); the
