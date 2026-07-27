@@ -17,7 +17,9 @@ them together.
 - `uv run nox -s tests` — static manifest-vs-config gates + mini-app
   units (no Docker).
 - `uv run nox -s e2e` — docker compose delivery checks (opt-in, takes
-  minutes). Subset: `uv run nox -s e2e -- tests/e2e/test_logs_delivery.py`.
+  minutes). Subset: `uv run nox -s e2e -- -k logs_delivery` (a file
+  path after `--` does not narrow the run: the session always passes
+  the whole `tests/e2e` directory to pytest, so filter with `-k`).
 - `uv run nox -s preflight` — everything.
 - `uv run nox -s demo` — interactive sandbox: full stack + Grafana
   (`--profile demo`, anonymous access at `http://127.0.0.1:3000`,
