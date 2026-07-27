@@ -167,6 +167,24 @@ def preflight(session: nox.Session) -> None:
         session.notify(name)
 
 
+@nox.session
+def release(session: nox.Session) -> None:
+    """
+    Pack the contract and the reference config into dist/.
+
+    Deliberately outside preflight: it writes artifacts rather than
+    checking anything. The gates that keep the archive honest (version,
+    file set, reproducibility) live in tests/static/test_release.py and
+    run as part of ``tests``.
+    """
+    from tools.release import build, spec_version
+
+    archive = build(REPO / "dist")
+    session.log(f"spec version {spec_version()}")
+    session.log(f"{archive.name} ({archive.stat().st_size} bytes)")
+    session.log(f"checksum in {archive.parent / 'SHA256SUMS'}")
+
+
 COMPOSE_FILE = REPO / "tests" / "e2e" / "stack" / "docker-compose.yml"
 
 

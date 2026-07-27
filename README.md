@@ -68,6 +68,17 @@ Everything runs through `uv run nox`.
 The Alloy image is pinned **by the manifest** (section [14](docs/manifest.md#14-reference-implementation));
 `noxfile.ALLOY_IMAGE` must match -- a static test enforces it.
 
+## Releasing
+
+`uv run nox -s release` builds `dist/3ops-discovery-<version>.tar.gz`
+and `SHA256SUMS`: the contract, the reference configuration, the overlay
+files and a deployment README. The version comes from the manifest
+header, the only place it is written down (`pyproject.toml` says `0.0.0`
+on purpose). The contents are enumerated by `git ls-files`, so untracked
+scratch never reaches the archive, and the build is reproducible: a
+rebuild yields the same sha256. Publishing is a workflow on a `vX.Y.Z`
+tag, which must match the manifest version.
+
 ## How it holds together
 
 The static gates extract normative facts from [`docs/manifest.ru.md`](docs/manifest.ru.md)

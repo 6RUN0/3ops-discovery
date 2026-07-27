@@ -21,6 +21,11 @@ them together.
   path after `--` does not narrow the run: the session always passes
   the whole `tests/e2e` directory to pytest, so filter with `-k`).
 - `uv run nox -s preflight` — everything.
+- `uv run nox -s release` — build `dist/<name>-<version>.tar.gz` +
+  `SHA256SUMS` (contract + reference config + overlays + deployment
+  README). Not a gate, so not in `preflight`; its invariants (version
+  from the manifest header only, `.alloy` set == what `alloy_check`
+  validates, reproducible bytes) live in `tests/static/test_release.py`.
 - `uv run nox -s demo` — interactive sandbox: full stack + Grafana
   (`--profile demo`, anonymous access at `http://127.0.0.1:3000`,
   Prometheus + Loki datasources provisioned). Prints URLs, follows logs;

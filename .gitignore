@@ -25,3 +25,6 @@ tests/e2e/_artifacts/
 
 # Interactive demo sandbox scratch (config + generated secrets)
 .demo/
+
+# Release archives (nox -s release); artifacts belong to the tag, not git
+dist/

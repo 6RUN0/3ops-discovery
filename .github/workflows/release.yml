@@ -1,0 +1,76 @@
+---
+# Publish a release on a v* tag: verify the tag against the manifest,
+# run every gate, then build and upload the archive.
+#
+# The tag is checked FIRST and cheaply -- a v0.3.0 tag on the 0.2.0
+# contract must fail in seconds, not after the e2e suite. Actions are
+# SHA-pinned as in ci.yml; tool versions come from
+# .github/scripts/install-gate-binaries.sh.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: verify, build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      # Creating the release and uploading its assets.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
+        with:
+          version: "0.11.32"
+          # No cache here on purpose: a release publishes artifacts, and
+          # a cache entry poisoned from a pull request could reach them.
+          enable-cache: false
+
+      - name: Tag matches the manifest version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: >-
+          uv run python -c
+          'import os; from tools.release import verify_tag;
+          print(verify_tag(os.environ["RELEASE_TAG"]))'
+
+      - name: Install gate binaries
+        run: >-
+          .github/scripts/install-gate-binaries.sh
+          taplo hadolint rumdl actionlint zizmor typos lychee
+
+      - name: nox -s preflight
+        env:
+          # lychee authenticates github.com link checks to avoid the
+          # anonymous rate limit.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run nox -s preflight
+
+      - name: nox -s release
+        run: uv run nox -s release
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        # Assets by glob, not by name: tools/release.py owns how the
+        # archive is named and must stay the only place that knows.
+        run: >-
+          gh release create "$RELEASE_TAG"
+          dist/*.tar.gz
+          dist/SHA256SUMS
+          --title "3ops Discovery $RELEASE_TAG"
+          --notes "Contract and reference Alloy configuration.
+          Changes: CHANGELOG.md. Verify with sha256sum -c SHA256SUMS."
