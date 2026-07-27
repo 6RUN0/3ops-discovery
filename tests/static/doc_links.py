@@ -1,4 +1,5 @@
-"""Markdown link extraction and GitHub-style anchor resolution.
+"""
+Markdown link extraction and GitHub-style anchor resolution.
 
 Backs test_doc_links: collects the repo's markdown files, computes the
 heading slugs GitHub generates for them, and resolves every relative

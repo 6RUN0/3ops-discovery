@@ -1,4 +1,5 @@
-"""Every intra-repo markdown link resolves: file paths and #fragments.
+"""
+Every intra-repo markdown link resolves: file paths and #fragments.
 
 rumdl checks markdown structure and lychee checks external URLs, but
 neither validates that a `#fragment` matches a real heading anchor, so
