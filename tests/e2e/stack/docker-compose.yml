@@ -4,8 +4,10 @@
 # filter on the promoted compose_project label because a shared Docker
 # daemon exposes foreign containers to discovery too.
 #
-# One telemetry network for every service: a container attached to
-# several networks duplicates targets/exporters (manifest section 14).
+# One telemetry network for every service: with several networks
+# discovery.docker only targets the alphabetically first one
+# (match_first_network default), which may not be the network Alloy
+# can reach (manifest section 14).
 # The docker-socket network is internal: only Alloy reaches the proxy.
 
 networks:

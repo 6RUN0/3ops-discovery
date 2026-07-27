@@ -1,8 +1,8 @@
 // Logs domain: stdout/stderr of all containers, opt-out via
 // ru.3ops.discovery.logs.enabled=false.
-// discovery.docker emits one target per container+network+port
-// combination; this does not duplicate logs because loki.source.docker
-// deduplicates targets by container ID and reads each container once.
+// discovery.docker emits one target per exposed TCP port; this does
+// not duplicate logs because loki.source.docker deduplicates targets
+// by container ID and reads each container once.
 
 discovery.relabel "docker_logs" {
 	targets = discovery.docker.docker_logs.targets
