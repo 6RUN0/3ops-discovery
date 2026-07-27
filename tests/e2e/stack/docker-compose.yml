@@ -609,6 +609,28 @@ services:
       ru.3ops.discovery.blackbox.module: "icmp"
       ru.3ops.discovery.blackbox.port: "8080"
 
+  probe-tls:
+    # tls_connect module (manifest 10.4): the probe target is host:port
+    # like tcp_connect, but the module performs a TLS handshake. The
+    # mini-app serves /metrics over TLS with a self-signed certificate
+    # created at container startup (no key material in git); the module
+    # skips chain verification by design, so self-signed is enough.
+    build: ./app
+    environment:
+      APP_TLS_PORT: "8443"
+    networks:
+      - telemetry
+    expose:
+      - "8443"
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+      ru.3ops.discovery.blackbox.enabled: "true"
+      ru.3ops.discovery.blackbox.module: "tls_connect"
+      ru.3ops.discovery.blackbox.port: "8443"
+
   probe-badmodule:
     # Negative scenario (manifest 10.4, fail-closed): valid in EVERYTHING
     # except the module, which is outside the exporter allowlist. The

@@ -387,12 +387,18 @@ def host_log_stream_labels() -> set[str]:
 
 
 def blackbox_config_modules() -> set[str]:
-    """Return modules defined in the blackbox exporter `config` YAML."""
+    """
+    Return modules defined in the blackbox exporter `config` YAML.
+
+    A module entry is identified by its leading `prober` key: nested
+    prober-option maps (tcp:, tls_config:) open a brace too but never
+    start with `prober`, so they must not count as modules.
+    """
     text = sources()["035_blackbox.alloy"]
-    m = re.search(r"modules:\s*\{(.*?)\}\s*\}", text)
+    m = re.search(r"modules:\s*\{(.*)\}", text)
     if m is None:
         raise AssertionError("blackbox exporter config modules not found")
-    return set(re.findall(r"(\w+):\s*\{", m.group(1)))
+    return set(re.findall(r"(\w+):\s*\{\s*prober", m.group(1)))
 
 
 def blackbox_relabel_modules() -> set[str]:

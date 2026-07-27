@@ -10,6 +10,7 @@ _MODULE_SERVICES = {
     "http_2xx": "blackbox-probe",
     "tcp_connect": "probe-tcp",
     "icmp": "probe-icmp",
+    "tls_connect": "probe-tls",
 }
 
 
@@ -57,9 +58,36 @@ def test_probe_success_delivered_per_module(stack: Stack) -> None:
         elif module == "tcp_connect":
             assert instance.endswith(":8080")
             assert "://" not in instance
+        elif module == "tls_connect":
+            assert instance.endswith(":8443")
+            assert "://" not in instance
         else:  # icmp: bare container IP, no scheme, no port
             assert "://" not in instance
             assert ":" not in instance
+
+
+def test_tls_probe_performed_a_real_handshake(stack: Stack) -> None:
+    # probe_success == 1 from a tcp prober cannot distinguish a completed
+    # TLS handshake from a plain TCP connect. probe_ssl_earliest_cert_expiry
+    # is emitted only after the prober negotiated TLS and parsed the peer
+    # certificate, so its presence (with a sane future expiry) pins the
+    # tls_connect module to a real handshake, not connectivity.
+    expr = (
+        'probe_ssl_earliest_cert_expiry{module="tls_connect",'
+        f'compose_project="{stack.project}"}}'
+    )
+
+    def _handshaked() -> list[dict[str, Any]] | None:
+        return stack.prom_query(expr) or None
+
+    series = wait_until(
+        _handshaked,
+        timeout=METRICS_BUDGET,
+        desc="cert-expiry metric proves the TLS handshake",
+    )
+    labels = series[0]["metric"]
+    assert labels["container"] == stack.compose_container("probe-tls")
+    assert float(series[0]["value"][1]) > 0
 
 
 def test_only_valid_probe_targets_survive_the_shared_relabel(

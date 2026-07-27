@@ -9,12 +9,12 @@
 // overwrites (__address__, instance, job), so the raw profile label is
 // still there for the filters to route on.
 //
-// The reference ships modules http_2xx, tcp_connect and icmp; the TLS
-// checks the manifest mentions are deliberately not shipped
-// (tests/static/asymmetries.py). Add a module by extending the exporter
-// `config` allowlist, the module keep-rule regex AND a composition rule
-// together (a static gate asserts the three stay equal); add a profile by
-// copying a thin filter/scrape pair.
+// The reference ships modules http_2xx, tcp_connect, icmp and
+// tls_connect -- all four probe families the manifest promises. Add a
+// module by extending the exporter `config` allowlist, the module
+// keep-rule regex AND a composition rule together (a static gate asserts
+// the three stay equal); add a profile by copying a thin filter/scrape
+// pair.
 //
 // prometheus.exporter.blackbox is GA in v1.17.1: no experimental flag.
 
@@ -37,7 +37,7 @@ discovery.relabel "blackbox" {
 		source_labels = [
 			"__meta_docker_container_label_ru_3ops_discovery_blackbox_module",
 		]
-		regex  = "(http_2xx|tcp_connect|icmp)"
+		regex  = "(http_2xx|tcp_connect|icmp|tls_connect)"
 		action = "keep"
 	}
 
@@ -161,6 +161,18 @@ discovery.relabel "blackbox" {
 		target_label = "__address__"
 	}
 
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_blackbox_module",
+			"__tmp_bb_host",
+			"__tmp_bb_port",
+		]
+		separator    = "|"
+		regex        = "tls_connect\\|(.*)\\|(.*)"
+		replacement  = "${1}:${2}"
+		target_label = "__address__"
+	}
+
 	// The module name is required on every blackbox target; it becomes
 	// __param_module on export.
 	rule {
@@ -234,7 +246,13 @@ prometheus.exporter.blackbox "probes" {
 	// be probed even if a container names it, because the relabel keep-rule
 	// above already rejects unknown modules. Keep the keep-rule, the
 	// composition rules and this config in sync.
-	config  = "{ modules: { http_2xx: { prober: http, timeout: \"5s\" }, tcp_connect: { prober: tcp, timeout: \"5s\" }, icmp: { prober: icmp, timeout: \"5s\" } } }"
+	//
+	// tls_connect skips chain verification on purpose: the label contract
+	// has no channel to hand CA material to Alloy, so the reference module
+	// proves the handshake and surfaces cert-expiry metrics; trusting a
+	// chain needs an environment-specific module with ca_file (manifest
+	// 10.4).
+	config  = "{ modules: { http_2xx: { prober: http, timeout: \"5s\" }, tcp_connect: { prober: tcp, timeout: \"5s\" }, icmp: { prober: icmp, timeout: \"5s\" }, tls_connect: { prober: tcp, timeout: \"5s\", tcp: { tls: true, tls_config: { insecure_skip_verify: true } } } } }"
 	targets = discovery.relabel.blackbox.output
 }
 

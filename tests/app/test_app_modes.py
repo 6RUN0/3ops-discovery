@@ -2,6 +2,8 @@
 
 import json
 import re
+import ssl
+from pathlib import Path
 
 import app
 
@@ -83,3 +85,14 @@ def test_otlp_fuzz_attributes_include_garbage_keys() -> None:
     attrs = app.otlp_resource_attributes(3, fuzz=True)
     assert any(k != "service.name" for k in attrs)
     assert attrs["service.name"] == "app-otel"
+
+
+def test_created_cert_pair_loads_into_a_tls_server_context(
+    tmp_path: Path,
+) -> None:
+    # The pair backs the APP_TLS_PORT listener probed by the blackbox
+    # tls_connect module (manifest 10.4); loading it into a server-side
+    # SSLContext is exactly what start_http_server does with it.
+    cert, key = app.create_self_signed_cert(tmp_path)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert, key)

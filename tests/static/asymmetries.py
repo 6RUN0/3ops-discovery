@@ -35,14 +35,11 @@ DB_PROFILES_UNHANDLED: dict[str, str] = {
 BLACKBOX_SCRAPE_PROFILES_UNIMPLEMENTED: dict[str, str] = {}
 
 #: Probe families the manifest 10.4 prose promises ("HTTP, TCP, ICMP и TLS
-#: checks") but the reference exporter allowlist does not ship. The module
-#: set is deliberately open-ended in the manifest (no closed normative
-#: list), so this one-sided table only guards disjointness with the
-#: shipped set.
-BLACKBOX_MODULES_UNIMPLEMENTED: dict[str, str] = {
-    "tls_connect": "reference ships http_2xx/tcp_connect/icmp; the TLS "
-    "checks manifest 10.4 promises are not shipped",
-}
+#: checks") but the reference exporter allowlist does not ship. All four
+#: families ship now, so this is empty; the module set stays open-ended in
+#: the manifest (no closed normative list), so the one-sided table only
+#: guards disjointness with the shipped set.
+BLACKBOX_MODULES_UNIMPLEMENTED: dict[str, str] = {}
 
 #: The reference ships exactly one snmp profile (snmp-standard-v1); the
 #: manifest 8.5 declares no others, so this is empty. It exists so the

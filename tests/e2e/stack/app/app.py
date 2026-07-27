@@ -5,6 +5,9 @@ One image, behaviour via env (manifest 10.3):
     APP_LOG_FORMAT      json | logfmt | raw | mixed | fuzz |
                         python-traceback | java-traceback  (default json)
     APP_METRICS_PORT    serve prometheus_client /metrics on this port
+    APP_TLS_PORT        additionally serve /metrics over TLS on this
+                        port, with a throwaway self-signed certificate
+                        created at startup (nothing persisted in git)
     APP_BURST           "<lines_per_sec>:<seconds>" burst of numbered
                         json lines at startup, then the normal pace
     APP_FUZZ_TELEMETRY  "1": garbage unicode labels + extreme gauge
@@ -23,9 +26,12 @@ import itertools
 import json
 import logging
 import os
+import subprocess
 import sys
+import tempfile
 import time
 import traceback
+from pathlib import Path
 
 from prometheus_client import Counter, Gauge, start_http_server
 
@@ -255,6 +261,41 @@ def run_otlp(endpoint: str, *, fuzz: bool) -> None:
         time.sleep(EMIT_PERIOD)
 
 
+def create_self_signed_cert(directory: Path) -> tuple[Path, Path]:
+    """
+    Create a throwaway self-signed cert/key pair, return their paths.
+
+    Shelled out to the openssl CLI (present in the pinned python:slim
+    base image) so the key exists only inside the running container:
+    the repo policy forbids committing secrets, even fake ones.
+    """
+    cert = directory / "tls.crt"
+    key = directory / "tls.key"
+    subprocess.run(
+        [
+            "openssl",
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-keyout",
+            str(key),
+            "-out",
+            str(cert),
+            "-days",
+            "2",
+            "-subj",
+            "/CN=probe-tls",
+            "-addext",
+            "subjectAltName=DNS:probe-tls",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return cert, key
+
+
 def main() -> int:
     fmt = os.environ.get("APP_LOG_FORMAT", "json")
     metrics_port = os.environ.get("APP_METRICS_PORT")
@@ -268,6 +309,12 @@ def main() -> int:
 
     if metrics_port:
         start_http_server(int(metrics_port))
+    tls_port = os.environ.get("APP_TLS_PORT")
+    if tls_port:
+        cert, key = create_self_signed_cert(
+            Path(tempfile.mkdtemp(prefix="tls-"))
+        )
+        start_http_server(int(tls_port), certfile=str(cert), keyfile=str(key))
     if burst:
         run_burst(*parse_burst(burst))
 
