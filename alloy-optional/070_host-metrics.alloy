@@ -14,7 +14,25 @@ prometheus.exporter.unix "host" {
 	sysfs_path  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOST_SYSFS_PATH"), "/host/sys")
 }
 
+// Provenance (manifest 6.1): the exporter target carries no docker
+// discovery metadata, so collector/host are attached here -- without
+// them the node_* series cannot be told apart per collector in a
+// multi-host installation.
+discovery.relabel "host_metrics" {
+	targets = prometheus.exporter.unix.host.targets
+
+	rule {
+		target_label = "collector"
+		replacement  = "alloy"
+	}
+
+	rule {
+		target_label = "host"
+		replacement  = constants.hostname
+	}
+}
+
 prometheus.scrape "host" {
-	targets    = prometheus.exporter.unix.host.targets
+	targets    = discovery.relabel.host_metrics.output
 	forward_to = [prometheus.remote_write.default.receiver]
 }

@@ -110,9 +110,9 @@ ru.3ops.discovery.database.secret.id
 
 ### `ru.3ops.discovery.enabled`
 
-Обязательный флаг участия контейнера в discovery для доменов metrics, database, blackbox, otel, snmp и ipmi.
+Обязательный флаг участия контейнера в discovery для доменов metrics, database, blackbox, otel и ipmi.
 
-Исключение: домен `logs` собирает stdout/stderr всех контейнеров по умолчанию и не требует этого label (см. раздел [10.3.1](#1031-политика-сбора-по-умолчанию)).
+Исключение: домен `logs` собирает stdout/stderr всех контейнеров по умолчанию и не требует этого label (см. раздел [10.3.1](#1031-политика-сбора-по-умолчанию)). Домен `snmp` управляется файлом устройств, а не Docker-labels (раздел [10.6](#106-domain-snmp)), поэтому глобальный `enabled` к нему неприменим.
 
 Допустимые значения:
 
@@ -133,6 +133,8 @@ ru.3ops.discovery.version: "0.2"
 
 Если label отсутствует, применяется версия контракта, заданная Alloy-конфигурацией по умолчанию.
 
+В версии `0.2` label зарезервирован: референсная конфигурация его не читает и обрабатывает все контейнеры по правилам `0.2`. Валидация версии появится вместе с первым изменением, меняющим семантику labels (раздел [7](#7-версионирование-контракта)).
+
 ### `ru.3ops.discovery.instance`
 
 Логическое имя экземпляра.
@@ -147,7 +149,7 @@ ru.3ops.discovery.instance: "orders-postgres"
 
 ### `ru.3ops.discovery.environment`
 
-Окружение:
+Окружение. Перечень открытый и конфигурацией не валидируется (при недоверенных соседях по хосту его ограничивают allowlist-правилом, раздел [13.5](#135-доверие-к-labels)); рекомендуемые значения:
 
 ```text
 production
@@ -224,7 +226,7 @@ collector
 source
 ```
 
-Stream labels формируются только из discovery metadata и labels контейнера. Поля, извлечённые из содержимого строки, в stream labels не продвигаются: содержимое подконтрольно приложению, и такое продвижение открывает подмену labels и неограниченную кардинальность стримов. Продвижение `level` в label допустимо только при нормализации значения к ограниченному набору.
+Stream labels формируются только из discovery metadata и labels контейнера. Поля, извлечённые из содержимого строки, в stream labels не продвигаются: содержимое подконтрольно приложению, и такое продвижение открывает подмену labels и неограниченную кардинальность стримов. Референс не продвигает `level` (его нет в allowlist выше, поле остаётся в списке ниже); кастомизация вправе продвигать `level` только при нормализации значения к ограниченному набору и с расширением allowlist.
 
 Следующие поля должны оставаться в строке или structured metadata:
 
@@ -245,6 +247,8 @@ pid
 
 Structured metadata не индексируется и не влияет на кардинальность, но размер значений контролируется приложением. Ограничение размера обеспечивается лимитами Loki (`max_structured_metadata_size`); референсная конфигурация значения не усекает.
 
+Structured metadata требует Loki 3.x со схемой v13 (TSDB) и включённым `allow_structured_metadata`. На более старой схеме push с metadata отклоняется целиком: профили с парсингом молча перестают доставлять строки, тогда как `raw-v1` продолжает работать — при частичной потере логов это первое, что стоит проверить.
+
 ## 7. Версионирование контракта
 
 Версия контракта передаётся через:
@@ -258,7 +262,7 @@ ru.3ops.discovery.version: "0.2"
 - patch-изменения не меняют смысл существующих labels;
 - minor-изменения могут добавлять новые необязательные labels;
 - major-изменения могут менять семантику или удалять поля;
-- Alloy-конфигурация должна явно задавать поддерживаемые версии.
+- начиная с первого изменения, меняющего семантику labels, Alloy-конфигурация должна явно задавать поддерживаемые версии (в `0.2` проверка зарезервирована, см. раздел [5](#5-глобальные-labels)).
 
 Label содержит только major и minor: patch-изменения по определению не меняют семантику labels и в контракте не отражаются.
 
@@ -270,7 +274,7 @@ Label содержит только major и minor: patch-изменения п�
 
 - Значение `*.profile` выбирается только из allowlist, заданного конфигурацией Alloy.
 - Label не является DSL или языком программирования pipeline: произвольные значения и списки стадий не поддерживаются.
-- Имя профиля обязано содержать версию.
+- Имя профиля обязано содержать версию: суффикс `-vN`, полное имя из символов `[a-z0-9-]` (имена профильных компонентов выводятся из него механически, раздел [14](#14-reference-implementation)).
 - Изменение профиля может повлиять на labels, cardinality, timestamps, alert rules и Grafana queries, поэтому несовместимые изменения требуют нового имени профиля.
 
 Пример версионирования:
@@ -325,6 +329,8 @@ drop rules
 message normalization
 ```
 
+Перечень описывает объём понятия log-профиля, а не обязательства каждого профиля: базовые профили ниже реализуют parser, multiline и structured metadata. Стадия timestamp в референсе не реализована: временем записи служит docker-таймстамп строки (момент записи приложением в stdout/stderr); таймстамп из содержимого строки не разбирается.
+
 Базовые профили:
 
 ```text
@@ -349,7 +355,8 @@ app-type-1-v1
   реальные профили именуются по семейству приложений.
 
 nginx-json-v1
-  Специализированный pipeline для JSON access logs.
+  Пример специализированного pipeline для JSON access logs;
+  в референс не входит (как и app-type-1-v1).
 
 java-stacktrace-v1
   Multiline pipeline для Java stack traces.
@@ -441,12 +448,14 @@ Redis — исключение: аргумент `redis_addr` экспортёр
 Контракт общий для доменов на Docker-labels; различается только доменный суффикс файла (snmp — файловый провайдер — исключение, см. §10.6.1):
 
 ```text
-database  /run/alloy-secrets/<secret-id>.dsn
+database  /run/alloy-secrets/<secret-id>.dsn   (+ <secret-id>.redispass для type=redis)
 snmp      /run/alloy-secrets/snmp_auths.yaml  (исключение, единый файл — см. §10.6.1)
 ipmi      /run/alloy-secrets/<secret-id>.ipmi
 ```
 
-Правила валидации идентификатора, read-only монтирования и `is_secret` одинаковы для всех доменов. Требования к защите от path traversal описаны в разделе [13.4](#134-secret-path-traversal).
+Каталог `/run/alloy-secrets` — значение по умолчанию; он настраивается переменной `RU_3OPS_DISCOVERY_SECRETS_DIR` (раздел [14.1](#141-параметры-окружения)).
+
+Правила валидации идентификатора и read-only монтирования одинаковы для всех доменов; `is_secret = true` обязателен для файлов с credentials (исключение — адресный `.dsn` redis: он несекретен по построению, см. выше, и читается без `is_secret`). Требования к защите от path traversal описаны в разделе [13.4](#134-secret-path-traversal).
 
 Пространство `secret-id` — единый trust domain в пределах хоста: контракт не привязывает контейнер к конкретному секрету, и любой контейнер с валидным label может сослаться на любой существующий файл секрета. В каталог секретов хоста следует выкладывать только секреты, предназначенные контейнерам этого хоста; для разграничения команд используйте соглашение о префиксах `secret-id`. Префиксы — только соглашение для операторов: конфигурация их не проверяет, и технически каждый файл секрета на хосте доступен каждому контейнеру этого хоста. Следствие той же модели доверия: контейнер может определить существование файла секрета, объявив соответствующий `secret-id` и наблюдая появление exporter; содержимое секрета при этом не раскрывается. Привязка `secret-id` к identity контейнера — вне рамок версии `0.2` (раздел [16](#16-out-of-scope)).
 
@@ -529,6 +538,8 @@ mongodb
 
 `type` обозначает wire-протокол и exporter, а не вендора СУБД. Протокол-совместимые сборки метятся базовым типом, отдельный тип для них не вводится: Percona Server for MySQL и Percona XtraDB Cluster — `type: mysql`; Percona Server for MongoDB — `type: mongodb` (так же, как managed-СУБД вида RDS/Aurora MySQL). MariaDB — исключение: это самостоятельный тип, разделяющий mysql-exporter, потому что операторы воспринимают её как отдельный продукт.
 
+`database.port` (и стандартный порт при его отсутствии) — селектор target, а не параметр подключения: значение сверяется с реальными приватными портами контейнера (`keepequal`, fail-closed — target с несуществующим портом отбрасывается), тогда как адрес подключения экспортёра целиком определяется `.dsn` (раздел [9](#9-secret-contract)). Расхождение порта в label и в DSN конфигурацией не детектируется.
+
 Стандартные порты по типам (действуют, если `database.port` не задан):
 
 | Тип | Порт |
@@ -552,6 +563,8 @@ mongodb
 | `ru.3ops.discovery.database.secret-id` | Да | Логический идентификатор секрета (раздел [9](#9-secret-contract)) |
 | `ru.3ops.discovery.database.sslmode` | Нет | Настройка TLS/SSL |
 | `ru.3ops.discovery.database.profile` | Нет | Профиль сбора из allowlist; по умолчанию `standard-v1` |
+
+`database.name`, `database.user` и `database.sslmode` — инвентарные labels (раздел [13.2](#132-разрешено-хранить)): референс их не читает, все параметры подключения берутся только из `.dsn`; при расхождении label и DSN действует DSN. Идентичность серии: `instance` = `database.instance`, иначе глобальный `ru.3ops.discovery.instance` (раздел [5](#5-глобальные-labels)), иначе `secret-id` (синтезированный fallback); `job` = `database.type`.
 
 #### 10.2.2. PostgreSQL example
 
@@ -691,7 +704,7 @@ Pipeline не должен удалять нераспознанные стро�
 | `ru.3ops.discovery.logs.redaction-profile` | Нет | Идентификатор политики редактирования |
 | `ru.3ops.discovery.logs.drop-profile` | Нет | Идентификатор политики фильтрации шума |
 
-Для версии `0.2` рекомендуется использовать один composite profile. Дополнительные `redaction-profile` и `drop-profile` зарезервированы для расширения и не обязательны к реализации.
+Для версии `0.2` рекомендуется использовать один composite profile. Дополнительные `stream-policy`, `redaction-profile` и `drop-profile` зарезервированы для расширения и не обязательны к реализации: их семейства профилей в разделе [8](#8-профили) не определены, референс эти labels не читает.
 
 #### 10.3.6. Примеры
 
@@ -760,8 +773,8 @@ services:
 | Label | Обязательный | Значение |
 |---|---:|---|
 | `ru.3ops.discovery.blackbox.enabled` | Да | `true` |
-| `ru.3ops.discovery.blackbox.module` | Да | Например `http_2xx`, `tcp_connect`, `tls_connect` |
-| `ru.3ops.discovery.blackbox.scheme` | Нет | `http` или `https` |
+| `ru.3ops.discovery.blackbox.module` | Да | Например `http_2xx`, `tcp_connect`, `icmp`, `tls_connect` |
+| `ru.3ops.discovery.blackbox.scheme` | Нет | `http` или `https`; по умолчанию `http` |
 | `ru.3ops.discovery.blackbox.address` | Нет | Адрес проверки; по умолчанию адрес контейнера |
 | `ru.3ops.discovery.blackbox.port` | Да | Порт проверки |
 | `ru.3ops.discovery.blackbox.path` | Нет | HTTP path |
@@ -769,7 +782,7 @@ services:
 
 Значение `module` должно входить в allowlist модулей blackbox exporter, заданный конфигурацией Alloy. Произвольные модули из labels не принимаются. Формат цели пробы зависит от модуля: HTTP-модули получают URL `scheme://host:port/path`, TCP- и TLS-модули — `host:port`, ICMP-модули — только host. Каждой серии blackbox-проб Alloy добавляет label `module` с именем использованного модуля.
 
-Для ICMP-модулей значение `blackbox.port` в саму пробу не входит (у ICMP нет порта), но label остаётся обязательным и проходит ту же валидацию: объявленный порт должен совпадать с реальным экспонированным портом контейнера, иначе target отбрасывается.
+Для ICMP-модулей значение `blackbox.port` в саму пробу не входит (у ICMP нет порта), но label остаётся обязательным и проходит ту же валидацию: объявленный порт должен совпадать с реальным экспонированным портом контейнера, иначе target отбрасывается. Правило действует и при внешнем `blackbox.address`: порт сверяется с приватными портами самого контейнера, поэтому проба `example.com:443` из контейнера, не экспонирующего порт 443, молча отбрасывается. Последствия `blackbox.address` для модели доверия — раздел [13.5](#135-доверие-к-labels).
 
 ICMP-пробы не требуют дополнительных привилегий в типовой Docker-среде: стандартного набора capabilities (`NET_RAW`) либо непривилегированных ICMP-сокетов (Docker по умолчанию открывает `net.ipv4.ping_group_range` для всех групп) достаточно. В hardened-средах, где одновременно отброшен `NET_RAW` и сужен `ping_group_range`, ICMP-пробы работать не будут; выход — вернуть `cap_add: [NET_RAW]` или расширить `sysctls: net.ipv4.ping_group_range` у контейнера Alloy.
 
@@ -806,7 +819,7 @@ labels:
 
 Этот домен в основном документирует ожидаемое поведение приложения. Alloy обычно поднимает общий OTLP receiver, а не отдельный receiver на каждый контейнер.
 
-Флаг `otel.enabled` поэтому носит декларативный характер: он не управляет приёмом OTLP (receiver общий и статичен), а фиксирует намерение сервиса и используется для инвентаризации.
+Флаг `otel.enabled` поэтому носит декларативный характер: он не управляет приёмом OTLP (receiver общий и статичен), а фиксирует намерение сервиса и используется для инвентаризации. Остальные labels домена декларативны по той же причине. Трейсы в `0.2` вне периметра: у референс-приёмника нет выхода traces, поэтому trace-экспорт отклоняется с явной ошибкой на стороне клиента, а не принимается молча.
 
 OTLP-путь — исключение из провенанса раздела [6.1](#61-labels-добавляемые-alloy): общий receiver статичен и не имеет Docker-метаданных, поэтому не производит provenance-labels `environment`/`team`/`container`. В Loki-stream продвигается только allowlist-набор resource-атрибутов OTLP (раздел [6.2](#62-loki-label-cardinality); в референсной конфигурации — только `service.name` → `service_name`); остальную идентификацию задаёт само отправляющее приложение через resource-атрибуты.
 
@@ -818,14 +831,14 @@ OTLP-путь — исключение из провенанса раздела 
 
 | Поле | Обязательный | Значение |
 |---|---|---|
-| `name` | нет | Человекочитаемое имя устройства (провенанс) |
+| `name` | нет | Человекочитаемое имя устройства (провенанс); при отсутствии референс подставляет `address` — exporter требует `name` у каждой записи |
 | `address` | да | `host:port` SNMP-агента (presence-проверка в relabel) |
 | `module` | да | Модуль snmp_exporter из allowlist; в референсе — `if_mib` (интерфейсы) и `system` (идентичность и аптайм устройства: `sysUpTime`, `sysName`) — открытый пример-список, как в blackbox [10.4](#104-domain-blackbox). Одна запись — один модуль; устройству с несколькими модулями соответствует несколько записей с разными `name` |
 | `auth` | да | Имя auth-профиля из [10.6.1](#1061-snmp-auth) (presence-проверка; резолвится экспортёром) |
 | `environment` | нет | Provenance-label (пропускается как non-reserved) |
 | `team` | нет | Provenance-label (пропускается как non-reserved) |
 
-Поле устройства называется `auth` — имя профиля, а НЕ discovery-label `auth-id` раздела [13.2](#132-разрешено-хранить) (он относится к доменам на Docker-labels). Секрет (SNMP community / SNMPv3 credentials) живёт только в `snmp_auths.yaml` (раздел [10.6.1](#1061-snmp-auth)), никогда в файле устройств.
+Поле устройства называется `auth` — ссылка-имя профиля из слитого `auths:`-map; хранить такие имена вне секретов разрешает раздел [13.2](#132-разрешено-хранить). Секрет (SNMP community / SNMPv3 credentials) живёт только в `snmp_auths.yaml` (раздел [10.6.1](#1061-snmp-auth)), никогда в файле устройств.
 
 Домен [10.7](#107-domain-ipmi) (ipmi) структурно похож, но в этой фазе остаётся доменом на Docker-labels (Out of scope для файлового провайдера).
 
@@ -860,7 +873,7 @@ ru.3ops.discovery.ipmi.secret-id
 ru.3ops.discovery.ipmi.profile
 ```
 
-Labels описывают намерение (адрес BMC, модуль exporter, секрет, профиль), но роль Alloy сводится к тому, чтобы скрейпить HTTP-endpoint внешнего exporter: доменного pipeline на стороне Alloy, как у snmp ([10.6](#106-domain-snmp)), здесь нет. Файл секрета: `/run/alloy-secrets/<secret-id>.ipmi` по общему контракту раздела [9](#9-secret-contract); credentials BMC потребляет сам exporter, а не Alloy.
+Labels описывают намерение (адрес BMC, модуль exporter, секрет, профиль), но роль Alloy сводится к тому, чтобы скрейпить HTTP-endpoint внешнего exporter: доменного pipeline на стороне Alloy, как у snmp ([10.6](#106-domain-snmp)), здесь нет. Все ipmi-labels в `0.2` — декларативные/инвентарные (ни референс, ни какой-либо доменный pipeline их не читает); `ipmi.profile` ссылается на scrape-профили раздела [8.2](#82-scrape-профили) — собственного семейства профилей у ipmi нет. Файл секрета: `/run/alloy-secrets/<secret-id>.ipmi` по общему контракту раздела [9](#9-secret-contract); credentials BMC потребляет сам exporter, а не Alloy.
 
 Референс-конфигурация не поставляет ipmi-overlay (в отличие от `037_snmp.alloy`): рекомендуемый путь — пометить контейнер `ipmi_exporter` labels домена [metrics](#101-domain-metrics) и скрейпить его существующим metrics-pipeline. Отдельный overlay появится, только если Alloy получит нативный IPMI-компонент.
 
@@ -869,7 +882,7 @@ Labels описывают намерение (адрес BMC, модуль expor
 Минимальные проверки перед созданием pipeline:
 
 - `enabled == true` — кроме домена logs (см. раздел [10.3.1](#1031-политика-сбора-по-умолчанию));
-- `version` поддерживается;
+- `version` поддерживается (в `0.2` проверка зарезервирована — см. раздел [5](#5-глобальные-labels));
 - `domain.enabled == true`;
 - `type` входит в allowlist;
 - `port` является числом 1..65535;
@@ -878,7 +891,9 @@ Labels описывают намерение (адрес BMC, модуль expor
 - `path` начинается с `/`;
 - `scheme` входит в allowlist.
 
-Неизвестный тип должен быть проигнорирован и отражён в логах Alloy.
+Неизвестное значение `type` приводит к отбрасыванию target целиком (fail-closed) и по возможности отражается в логах Alloy.
+
+Пустое значение любого label эквивалентно отсутствию label: действует значение по умолчанию соответствующего домена (при релейблинге метка с пустым значением удаляется, поэтому пустые значения не попадают в серии).
 
 Референсная конфигурация реализует проверки `path`, `scheme`, `profile` и `secret-id` relabel-правилами. Проверка `port` выполняется неявно и fail-closed: `keepequal` сопоставляет объявленный порт с реальными приватными портами контейнера, поэтому нечисловое, выходящее за диапазон или несуществующее значение приводит к отбрасыванию target.
 
@@ -888,7 +903,7 @@ Labels описывают намерение (адрес BMC, модуль expor
 
 ### 12.1. Добавление target
 
-1. Контейнер запускается с `ru.3ops.discovery.enabled=true`.
+1. Контейнер запускается с `ru.3ops.discovery.enabled=true` (домен logs — исключение: сбор по умолчанию, раздел [10.3.1](#1031-политика-сбора-по-умолчанию)).
 2. `discovery.docker` обнаруживает контейнер.
 3. `discovery.relabel` проверяет domain labels.
 4. Alloy создаёт соответствующий pipeline.
@@ -899,7 +914,7 @@ Labels описывают намерение (адрес BMC, модуль expor
 
 1. Контейнер останавливается или удаляется.
 2. Target исчезает из Docker discovery.
-3. Динамический `foreach` component удаляется.
+3. Для домена database удаляется динамический `foreach`-pipeline; статические scrape-компоненты остальных доменов просто теряют target.
 4. Новые telemetry samples перестают поступать.
 5. Исторические данные остаются в backend до окончания retention.
 
@@ -926,7 +941,7 @@ cookie/session values
 
 ```text
 secret-id
-auth-id
+имя auth-профиля (snmp)
 имя monitoring user
 имя базы
 порт
@@ -969,7 +984,9 @@ postgres-orders
 
 Labels декларируются самим контейнером, поэтому право запускать контейнеры на хосте означает право объявлять любые значения `job`, `instance`, `team`, `environment`, `service_name`, `compose_project` и `compose_service` — в том числе чужие. Границы этого доверия:
 
-- SSRF исключён: адрес scrape строится только из `__meta_docker_network_ip` и приватного порта самого контейнера, labels не могут перенаправить сбор на другой хост;
+- для доменов metrics и database SSRF исключён: адрес scrape строится только из `__meta_docker_network_ip` и приватного порта самого контейнера (для database — из файла секрета, который labels не выбирают за пределами `secret-id`), labels не могут перенаправить сбор на другой хост;
+- домен blackbox — осознанное исключение: `blackbox.address` (раздел [10.4.1](#1041-labels)) направляет пробу на произвольный хост, а результат (`probe_success`, статус, срок сертификата) виден в метриках — контейнер получает oracle достижимости сети от имени Alloy. Порт пробы ограничен приватными портами самого контейнера, но контейнер сам объявляет свои expose-порты, поэтому при недоверенных соседях `blackbox.address` следует ограничивать allowlist-правилом в `discovery.relabel`;
+- opt-in OTLP-приёмник (overlay `060_otel`) слушает без аутентификации и не производит provenance-labels (раздел [10.5](#105-domain-otel)): сетевой доступ к его портам равен праву писать телеметрию с произвольной идентичностью; приёмник следует держать во внутренней сети или закрывать аутентифицирующим reverse-proxy;
 - `container` добавляется из метаданных Docker engine, `host` — из hostname коллектора Alloy; ни один не подделывается через labels (раздел [6.1](#61-labels-добавляемые-alloy));
 - поэтому серии и стримы с подменёнными `job`/`team`/`service_name` всё равно несут честные `container` и `host` отправителя: они не сливаются с данными настоящего владельца и остаются отличимыми — но alert rules и dashboards, фильтрующие только по `team`/`job` без учёта `container`, увидят и подделанные данные;
 - поля из содержимого логов не продвигаются в stream labels (раздел [6.2](#62-loki-label-cardinality));
@@ -1005,7 +1022,9 @@ docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.17.1 \
 
 Профильные scrape-пары устроены слоисто: общий relabel домена несёт валидацию и провенанс, тонкая пара `discovery.relabel`/`prometheus.scrape` на профиль — только маршрутизацию на свой интервал. Имена профильных компонентов механически выводятся из полного имени профиля (`fast-v1` → `metrics_fast_v1`). Targets, объявившие профиль вне allowlist, сознательно не скрейпятся ни одной парой. Дополнительный профиль подключается копией тонкой пары (фильтр + scrape) с изменёнными regex profile-правила, `scrape_interval` и `scrape_timeout`.
 
-Известное ограничение референсной конфигурации: `discovery.docker` создаёт отдельный target на каждую комбинацию контейнер+сеть+порт. Fan-out по портам схлопывается `keepequal`-правилами (metrics, database), но контейнер, подключённый к нескольким Docker-сетям, даёт дублирующиеся targets: для metrics — двойной scrape одного endpoint, для database — дублирующиеся exporters с одинаковыми сериями. Контейнеры с telemetry рекомендуется подключать к одной сети, видимой Alloy. Логи от этого не страдают: `loki.source.docker` дедуплицирует targets по container ID.
+Известное ограничение референсной конфигурации: `discovery.docker` создаёт отдельный target на каждую комбинацию контейнер+сеть+порт. Fan-out по портам схлопывается `keepequal`-правилами (metrics, database, blackbox), но контейнер, подключённый к нескольким Docker-сетям, даёт дублирующиеся targets: для metrics — двойной scrape одного endpoint, для blackbox — дублирующиеся пробы с разными `instance` (при явном `blackbox.address` targets идентичны и схлопываются дедупликацией scrape-пула), для database — дублирующиеся exporters с одинаковыми сериями. Контейнеры с telemetry рекомендуется подключать к одной сети, видимой Alloy. Логи от этого не страдают: `loki.source.docker` дедуплицирует targets по container ID.
+
+Позиции чтения логов (`positions.yml`) и WAL `prometheus.remote_write` живут в `--storage.path` Alloy. Без persistent-тома пересоздание контейнера Alloy (обновление образа, `up --force-recreate`) приводит к повторной отправке доступной истории логов контейнеров и потере неотправленного WAL метрик; обычный рестарт процесса безопасен (writable-слой контейнера сохраняется). Для production-деплоя каталог `--storage.path` следует выносить на persistent-том; гарантий доставки строже at-least-once контракт не задаёт.
 
 ### 14.1. Параметры окружения
 
@@ -1034,6 +1053,8 @@ Deployment-специфичные значения настраиваются п
 - `prometheus.remote_write` работает с любым remote_write-совместимым хранилищем: Mimir, VictoriaMetrics, Thanos, Grafana Cloud.
 - `loki.write` — с любым endpoint, реализующим Loki push API.
 - Для OTLP-backends (Tempo, vendor APM) потоки конвертируются через `otelcol.receiver.prometheus` / `otelcol.receiver.loki` и экспортируются `otelcol.exporter.otlp`.
+
+Заменой одного URL дело ограничивается только для неаутентифицированных endpoint. Mimir и Grafana Cloud требуют аутентификацию и/или заголовок `X-Scope-OrgID`: помимо переменных раздела [14.1](#141-параметры-окружения) потребуется добавить в `090_outputs.alloy` блоки `basic_auth`/`authorization`/`headers` — с секретом из `local.file`, а не в URL (см. предупреждение в 14.1).
 
 Это не полный production-конфиг, а базовая структура реализации manifest. Пояснения к неочевидным местам (дедупликация targets по container ID, keep-правило для `secret-id`, соответствие scrape-профилям) находятся в комментариях самих файлов.
 
@@ -1068,7 +1089,7 @@ Alloy сливает все `*.alloy`-файлы каталога в один г
 | Файл | Содержимое |
 |---|---|
 | [`060_otel.alloy`](../alloy-optional/060_otel.alloy) | Opt-in OTLP receiver: `otelcol.receiver.otlp` → метрики в `prometheus.remote_write`, логи в `loki.write` через allowlist-processor |
-| [`070_host-metrics.alloy`](../alloy-optional/070_host-metrics.alloy) | Opt-in host-метрики: `prometheus.exporter.unix` (серии `node_*`) → `prometheus.remote_write`; rootfs/procfs/sysfs через `RU_3OPS_DISCOVERY_HOST_*` |
+| [`070_host-metrics.alloy`](../alloy-optional/070_host-metrics.alloy) | Opt-in host-метрики: `prometheus.exporter.unix` (серии `node_*`) → `prometheus.remote_write`; rootfs/procfs/sysfs через `RU_3OPS_DISCOVERY_HOST_*`; провенанс §6.1: `host`/`collector` добавляет `discovery.relabel` перед scrape |
 | [`075_container-metrics.alloy`](../alloy-optional/075_container-metrics.alloy) | Opt-in per-container метрики: `prometheus.exporter.cadvisor` (серии `container_cpu_*`/`container_memory_*`/`container_network_*`; `container_fs_*` вне периметра) → `prometheus.remote_write`. Docker API — через `docker_host` (реюз `RU_3OPS_DISCOVERY_DOCKER_HOST`, socket-proxy: GET-allowlist разделов `CONTAINERS`/`INFO`/`VERSION`/`PING` достаточен); при недоступном Docker API вывод практически пуст (`docker_only`). Провенанс §6.1: allowlisted container-labels → `environment`/`team`/`compose_*`, `name` → `container`; сырые `container_label_*`/`id`/`name` отбрасываются; `instance` = hostname коллектора, `job` = `integrations/cadvisor` (метка экспортёра; оба — осознанные gap'ы). Кардинальность: `store_container_labels = false` + allowlist, root-cgroup-статистика отключена, `disabled_metrics`/`enabled_metrics` — tunable. Привилегии деплоя (host cgroup namespace) — раздел [14.3](#143-кастомизация-референсной-конфигурации); per-container opt-out не поддерживается. |
 | [`080_host-logs.alloy`](../alloy-optional/080_host-logs.alloy) | Opt-in host-логи: `loki.source.journal` (systemd journal) → `loki.write`; статические labels `host`/`collector`/`source` (в §6.2 allowlist) |
 | [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) | Домен snmp (opt-in overlay): файловый провайдер (`local.file` + `encoding.from_yaml`), `prometheus.exporter.snmp` (модули `if_mib`/`system`, профиль `snmp-standard-v1`), auth из inline `config`-секрета (`local.file` `is_secret`) через merge. Включается только вместе с device/auth-файлами (top-level `local.file` без файла unhealthy). |

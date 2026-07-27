@@ -4,6 +4,20 @@ from tests.static import alloy_config as ac
 from tests.static import manifest_doc as md
 
 
+def test_optional_files_do_not_collide_with_each_other() -> None:
+    # The base-vs-optional check below unions all overlays first, so a
+    # same-named component in two overlays is invisible to it; only the
+    # Docker-bound alloy_check (all-snmp combo) would catch it. Fail in
+    # the offline gate instead: any combo containing both files breaks.
+    seen: dict[str, str] = {}
+    for fname, names in sorted(ac.optional_component_names_by_file().items()):
+        for name in sorted(names):
+            assert name not in seen, (
+                f"{name} declared in both {seen[name]} and {fname}"
+            )
+            seen[name] = fname
+
+
 def test_optional_names_do_not_collide_with_base() -> None:
     collide = ac.base_component_names() & ac.optional_component_names()
     assert collide == set(), f"optional redeclares base components: {collide}"

@@ -41,3 +41,14 @@ def test_module_allowlist_is_exact_and_disjoint_from_gaps() -> None:
     assert shipped == {"if_mib", "system"}
     unshipped = set(asymmetries.SNMP_MODULES_UNIMPLEMENTED)
     assert shipped & unshipped == set()
+
+
+def test_module_gap_entries_appear_in_manifest() -> None:
+    # The disjointness check above can never retire a gap entry for a
+    # module the manifest no longer mentions -- a phantom name satisfies
+    # it forever. Require every entry to exist in the 10.6 text.
+    for module in asymmetries.SNMP_MODULES_UNIMPLEMENTED:
+        assert f"`{module}`" in md.section("10.6"), (
+            f"{module}: dead SNMP_MODULES_UNIMPLEMENTED entry, "
+            "manifest 10.6 no longer mentions it"
+        )

@@ -294,6 +294,9 @@ services:
       ru.3ops.discovery.database.enabled: "true"
       ru.3ops.discovery.database.type: "mariadb"
       ru.3ops.discovery.database.secret-id: "mariadb-billing"
+      # Declared identity: must win over the synthesized secret-id
+      # fallback (manifest 5, 10.2.1).
+      ru.3ops.discovery.database.instance: "billing-db"
 
   redis:
     image: redis:8.8.0

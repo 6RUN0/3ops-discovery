@@ -22,6 +22,13 @@ def test_asymmetry_table_is_exact() -> None:
     assert implemented & allowed == set()
 
 
+def test_job_keep_is_fail_closed() -> None:
+    # metrics.job is mandatory (manifest 10.1.1) and used to fail open:
+    # relabel copied the empty value, the empty label was dropped and
+    # prometheus.scrape substituted its own component name as job.
+    assert ac.job_presence_keep_regex() == "(.+)"
+
+
 def test_port_keep_is_fail_closed() -> None:
     # Without a presence keep, a container that declares metrics.enabled
     # but no TCP ports rides the discovery.docker fallback target (no

@@ -176,6 +176,17 @@ def secret_formats() -> dict[str, str]:
     return formats
 
 
+def domain_labels(number: str) -> dict[str, bool]:
+    """Parse a 10.x labels table into label name -> mandatory flag."""
+    labels = {
+        _plain(row["Label"]): _plain(row["Обязательный"]) == "Да"
+        for row in table(number)
+    }
+    if not labels:
+        raise AnchorError(f"no labels parsed from section {number}")
+    return labels
+
+
 def optional_files() -> set[str]:
     """Section 14.5: names of the optional overlay files."""
     return {_plain(row["Файл"]) for row in table("14.5")}

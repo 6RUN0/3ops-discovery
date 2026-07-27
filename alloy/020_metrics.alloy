@@ -103,6 +103,18 @@ discovery.relabel "metrics" {
 		target_label = "__scheme__"
 	}
 
+	// metrics.job is mandatory (manifest 10.1.1) and must fail closed
+	// (manifest 11): without the presence keep an absent label yields an
+	// empty job, relabel drops the empty label and prometheus.scrape
+	// substitutes its own component name as the series job.
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_job",
+		]
+		regex  = "(.+)"
+		action = "keep"
+	}
+
 	rule {
 		source_labels = [
 			"__meta_docker_container_label_ru_3ops_discovery_metrics_job",

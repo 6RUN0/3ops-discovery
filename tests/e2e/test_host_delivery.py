@@ -16,11 +16,17 @@ def test_node_metrics_delivered(stack: Stack) -> None:
     # per host. Ephemeral Prometheus receives only from this stack, so an
     # unscoped presence check is sound (no compose_project on host series:
     # the exporter target has no docker discovery metadata).
-    wait_until(
+    series = wait_until(
         lambda: stack.prom_query("node_uname_info"),
         timeout=METRICS_BUDGET,
         desc="node_uname_info present",
     )
+    # 070 attaches manifest 6.1 provenance via discovery.relabel: node_*
+    # series must be attributable to their collector in a multi-host
+    # installation.
+    labels = series[0]["metric"]
+    assert labels["collector"] == "alloy"
+    assert labels["host"]
 
 
 def test_journal_logs_delivered(stack: Stack) -> None:

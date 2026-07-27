@@ -50,6 +50,11 @@ def materialize(dest: Path, optional: Iterable[str] = ()) -> Path:
     merged graph anyway, and failing here names the offending file.
     """
     dest.mkdir(parents=True, exist_ok=True)
+    # A reused dest (alloy_check materializes into nox's persistent tmp)
+    # must not keep files deleted or deselected since the last run:
+    # validate would silently bless a graph that no longer exists.
+    for stale in dest.glob("*.alloy"):
+        stale.unlink()
     base_files = sorted(BASE_DIR.glob("*.alloy"))
     if not base_files:
         raise FileNotFoundError(f"no *.alloy files in {BASE_DIR}")
@@ -57,9 +62,8 @@ def materialize(dest: Path, optional: Iterable[str] = ()) -> Path:
     for src in base_files:
         shutil.copy(src, dest / src.name)
     for name in optional:
-        # Collision is a name shadowing a base file, not a leftover file in
-        # a reused dest (alloy_check materializes into nox's persistent tmp,
-        # so the check must be against the base set, not dest contents).
+        # Collision is a name shadowing a base file, not a leftover file
+        # in dest (those were just removed).
         if name in base_names:
             raise FileExistsError(
                 f"optional file collides with a base file: {name}"

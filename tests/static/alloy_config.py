@@ -63,6 +63,14 @@ def optional_component_names() -> set[str]:
     return names
 
 
+def optional_component_names_by_file() -> dict[str, set[str]]:
+    """Per-overlay component name sets (for pairwise collision gates)."""
+    return {
+        name: _component_names(text)
+        for name, text in optional_sources().items()
+    }
+
+
 def extension_point_targets() -> set[str]:
     """
     Return the base exports that optional files reference.
@@ -71,17 +79,20 @@ def extension_point_targets() -> set[str]:
     NOT declared in an optional file itself.
 
     A "type.label" is referenced when an optional file forwards into
-    "<type>.<label>.receiver" (or .input). References that resolve to an
-    optional-internal component (the file's own graph) are subtracted;
-    what remains MUST exist in base. Deliberately NOT intersected with
-    base: the anti-drift gate asserts referenced <= base, so a typo'd
-    base reference (absent from base AND optional) fails the fast static
-    gate instead of being silently filtered away.
+    "<type>.<label>.receiver" (or .input), or consumes
+    "<type>.<label>.targets" -- the manifest 14.4 extension points
+    include two .targets exports, so the scan must see them too.
+    References that resolve to an optional-internal component (the
+    file's own graph) are subtracted; what remains MUST exist in base.
+    Deliberately NOT intersected with base: the anti-drift gate asserts
+    referenced <= base, so a typo'd base reference (absent from base AND
+    optional) fails the fast static gate instead of being silently
+    filtered away.
     """
     referenced: set[str] = set()
     for text in optional_sources().values():
         for typ, label in re.findall(
-            r"([a-z][\w.]+)\.([\w]+)\.(?:receiver|input)", text
+            r"([a-z][\w.]+)\.([\w]+)\.(?:receiver|input|targets)", text
         ):
             referenced.add(f"{typ}.{label}")
     return referenced - optional_component_names()
@@ -90,6 +101,11 @@ def extension_point_targets() -> set[str]:
 def _all_text() -> str:
     """Return base plus optional config text (env scan spans overlays too)."""
     return "\n".join([*sources().values(), *optional_sources().values()])
+
+
+def config_text() -> str:
+    """Public alias of the combined base+optional config text."""
+    return _all_text()
 
 
 def env_defaults() -> dict[str, set[str]]:
@@ -280,6 +296,15 @@ def port_presence_keep_regexes() -> dict[str, str]:
     return found
 
 
+def job_presence_keep_regex() -> str | None:
+    """Return the regex of the metrics.job presence keep-rule in 020."""
+    for rule in _rules(sources()["020_metrics.alloy"]):
+        regex = _keep_regex(rule, "metrics_job")
+        if regex is not None:
+            return regex
+    return None
+
+
 def snmp_name_default_rule() -> tuple[str, str]:
     """
     Return (regex, replacement) of the name-default rule in 037.
@@ -369,6 +394,39 @@ def db_types_implemented() -> set[str]:
     if not types:
         raise AssertionError("no database type keep-rules found in 030")
     return types
+
+
+def db_enrich_blocks() -> dict[str, str]:
+    """Bodies of the discovery.relabel enrich_* blocks nested in 030."""
+    blocks = dict(
+        re.findall(
+            r'(?ms)discovery\.relabel "enrich_(\w+)" \{\n(.*?)^\t\t\}$',
+            sources()["030_database.alloy"],
+        )
+    )
+    if not blocks:
+        raise AssertionError("no enrich blocks found in 030")
+    return blocks
+
+
+def files_with_host_provenance() -> set[str]:
+    """File names (base and optional) attaching host = constants.hostname."""
+    return {
+        name
+        for name, text in {**sources(), **optional_sources()}.items()
+        if "constants.hostname" in text
+    }
+
+
+def files_with_collector_provenance() -> set[str]:
+    """File names (base and optional) attaching the collector label."""
+    return {
+        name
+        for name, text in {**sources(), **optional_sources()}.items()
+        if re.search(
+            r'collector\s*=\s*"alloy"|target_label\s*=\s*"collector"', text
+        )
+    }
 
 
 def secret_id_regexes() -> list[str]:

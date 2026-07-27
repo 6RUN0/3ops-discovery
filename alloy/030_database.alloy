@@ -160,6 +160,11 @@ foreach "postgres" {
 				target_label = "collector"
 				replacement  = "alloy"
 			}
+
+			rule {
+				target_label = "host"
+				replacement  = constants.hostname
+			}
 			// Synthesised series identity: job = type, instance = secret id
 			// (always present, passes the section 9 regex, unique per db).
 			rule {
@@ -170,6 +175,20 @@ foreach "postgres" {
 			rule {
 				target_label = "instance"
 				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_secret_id"]
+			}
+			// Declared identity wins (manifest 5, 10.2.1): database.instance
+			// first, the global instance label next; the synthesized secret
+			// id above stays as the fallback. An absent key coalesces to "",
+			// which the (.+) copy-rule ignores.
+			rule {
+				target_label = "__tmp_declared_instance"
+				replacement  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_instance"], each["__meta_docker_container_label_ru_3ops_discovery_instance"], "")
+			}
+
+			rule {
+				source_labels = ["__tmp_declared_instance"]
+				regex         = "(.+)"
+				target_label  = "instance"
 			}
 		}
 
@@ -311,6 +330,11 @@ foreach "mysql" {
 			}
 
 			rule {
+				target_label = "host"
+				replacement  = constants.hostname
+			}
+
+			rule {
 				target_label = "job"
 				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_type"]
 			}
@@ -318,6 +342,20 @@ foreach "mysql" {
 			rule {
 				target_label = "instance"
 				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_secret_id"]
+			}
+			// Declared identity wins (manifest 5, 10.2.1): database.instance
+			// first, the global instance label next; the synthesized secret
+			// id above stays as the fallback. An absent key coalesces to "",
+			// which the (.+) copy-rule ignores.
+			rule {
+				target_label = "__tmp_declared_instance"
+				replacement  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_instance"], each["__meta_docker_container_label_ru_3ops_discovery_instance"], "")
+			}
+
+			rule {
+				source_labels = ["__tmp_declared_instance"]
+				regex         = "(.+)"
+				target_label  = "instance"
 			}
 		}
 
@@ -463,6 +501,11 @@ foreach "redis" {
 			}
 
 			rule {
+				target_label = "host"
+				replacement  = constants.hostname
+			}
+
+			rule {
 				target_label = "job"
 				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_type"]
 			}
@@ -470,6 +513,20 @@ foreach "redis" {
 			rule {
 				target_label = "instance"
 				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_secret_id"]
+			}
+			// Declared identity wins (manifest 5, 10.2.1): database.instance
+			// first, the global instance label next; the synthesized secret
+			// id above stays as the fallback. An absent key coalesces to "",
+			// which the (.+) copy-rule ignores.
+			rule {
+				target_label = "__tmp_declared_instance"
+				replacement  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_instance"], each["__meta_docker_container_label_ru_3ops_discovery_instance"], "")
+			}
+
+			rule {
+				source_labels = ["__tmp_declared_instance"]
+				regex         = "(.+)"
+				target_label  = "instance"
 			}
 		}
 
@@ -603,6 +660,11 @@ foreach "mongodb" {
 			}
 
 			rule {
+				target_label = "host"
+				replacement  = constants.hostname
+			}
+
+			rule {
 				target_label = "job"
 				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_type"]
 			}
@@ -610,6 +672,20 @@ foreach "mongodb" {
 			rule {
 				target_label = "instance"
 				replacement  = each["__meta_docker_container_label_ru_3ops_discovery_database_secret_id"]
+			}
+			// Declared identity wins (manifest 5, 10.2.1): database.instance
+			// first, the global instance label next; the synthesized secret
+			// id above stays as the fallback. An absent key coalesces to "",
+			// which the (.+) copy-rule ignores.
+			rule {
+				target_label = "__tmp_declared_instance"
+				replacement  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_instance"], each["__meta_docker_container_label_ru_3ops_discovery_instance"], "")
+			}
+
+			rule {
+				source_labels = ["__tmp_declared_instance"]
+				regex         = "(.+)"
+				target_label  = "instance"
 			}
 		}
 

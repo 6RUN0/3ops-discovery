@@ -32,9 +32,11 @@ def test_exporter_authenticated(
 
 
 @pytest.mark.parametrize(
-    ("family", "db_type", "secret_id", "has_optional"),
+    ("family", "db_type", "instance", "has_optional"),
     [
-        ("mysql_up", "mariadb", "mariadb-billing", True),
+        # mariadb declares database.instance: the declared identity must
+        # win over the synthesized secret-id fallback (manifest 5, 10.2.1).
+        ("mysql_up", "mariadb", "billing-db", True),
         ("redis_up", "redis", "redis-cache", True),
         # mongodb omits environment/team labels on purpose: proves the
         # enrichment tolerates absent optional labels.
@@ -45,30 +47,32 @@ def test_db_series_carry_provenance(
     stack: Stack,
     family: str,
     db_type: str,
-    secret_id: str,
+    instance: str,
     has_optional: bool,
 ) -> None:
     # Scoped by instance: a db type can run several exporters (the
     # profile pair does exactly that for postgres), so an unscoped query
     # returns an arbitrary one. Waiting for a series with this instance
-    # still proves the synthesised identity: only the enrichment can
-    # produce it.
+    # still proves the enriched identity: only the enrichment can
+    # produce it -- the declared database.instance for mariadb, the
+    # synthesized secret-id fallback for the others.
     series = wait_until(
         lambda: stack.prom_query(
             f'{family}{{compose_project="{stack.project}",'
-            f'instance="{secret_id}"}}'
+            f'instance="{instance}"}}'
         ),
         timeout=METRICS_BUDGET,
         desc=f"{family} series present",
     )
     labels = series[0]["metric"]
     assert labels["collector"] == "alloy"
+    assert labels["host"], "db series lost the manifest 6.1 host label"
     assert labels["compose_project"] == stack.project
     assert labels["container"]
-    # Synthesised identity must survive prometheus.scrape's defaults
+    # Enriched identity must survive prometheus.scrape's defaults
     # (scrape would otherwise set job to its own component name).
     assert labels["job"] == db_type
-    assert labels["instance"] == secret_id
+    assert labels["instance"] == instance
     if has_optional:
         assert labels["environment"] == "e2e"
         assert labels["team"] == "data"

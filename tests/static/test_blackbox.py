@@ -43,3 +43,14 @@ def test_module_allowlist_matches_exporter_config() -> None:
     assert ac.blackbox_composition_modules() == ac.blackbox_config_modules()
     unshipped = set(asymmetries.BLACKBOX_MODULES_UNIMPLEMENTED)
     assert ac.blackbox_config_modules() & unshipped == set()
+
+
+def test_module_gap_entries_appear_in_manifest() -> None:
+    # A one-sided gap table can hold phantom names forever (the snmp
+    # cisco_device entry died this way); require every entry to exist in
+    # the manifest 10.4 text.
+    for module in asymmetries.BLACKBOX_MODULES_UNIMPLEMENTED:
+        assert f"`{module}`" in md.section("10.4"), (
+            f"{module}: dead BLACKBOX_MODULES_UNIMPLEMENTED entry, "
+            "manifest 10.4 no longer mentions it"
+        )
