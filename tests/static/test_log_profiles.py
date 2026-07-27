@@ -71,3 +71,59 @@ def test_fail_closed_rule_names_the_logs_exception() -> None:
             f"section {number} states fail-closed without the logs "
             f"exception of 10.3.4"
         )
+
+
+def test_extracted_fields_match_the_manifest_table() -> None:
+    # A profile name is a promise that two implementations produce the
+    # same metadata. generic-json-v1 extracted level/trace_id/request_id
+    # while generic-logfmt-v1 also extracted status -- same family, same
+    # version suffix, different output, and nothing compared them.
+    documented = md.log_profile_fields()
+    declared = ac.structured_metadata_fields()
+    parsed = ac.parsed_fields()
+    for profile, fields in declared.items():
+        assert profile in documented, f"{profile} is not in the 8.3 table"
+        assert fields == documented[profile], (
+            f"{profile}: config declares {sorted(fields)}, "
+            f"8.3 documents {sorted(documented[profile])}"
+        )
+        # Both halves, or the check would accept a field declared in
+        # structured_metadata that the parser never extracts -- present
+        # in every record, always empty.
+        assert parsed[profile] == fields, (
+            f"{profile}: parser extracts {sorted(parsed[profile])} but "
+            f"structured_metadata declares {sorted(fields)}"
+        )
+
+
+def test_parsing_profiles_of_one_family_extract_the_same_fields() -> None:
+    # The asymmetry, stated as its own property: the input format is what
+    # distinguishes these profiles, not the set of things extracted.
+    documented = md.log_profile_fields()
+    family = {
+        frozenset(documented[name])
+        for name in ("generic-json-v1", "generic-logfmt-v1", "mixed-v1")
+    }
+    assert len(family) == 1, f"parsing profiles disagree on fields: {family}"
+
+
+def test_multiline_profiles_bound_a_block_explicitly() -> None:
+    # The firstline anchor is a premise about the application: without an
+    # ISO-8601 prefix NO line opens a block, so the whole stream folds
+    # into blocks bounded by max_lines alone. e2e cannot catch it -- the
+    # mini-app prints timestamps -- so the bound is at least stated.
+    stages = ac.multiline_stages()
+    assert set(stages) == {"python-stacktrace-v1", "java-stacktrace-v1"}
+    for profile, arguments in stages.items():
+        assert "max_lines" in arguments, (
+            f"{profile} inherits max_lines from Alloy"
+        )
+        assert arguments["firstline"].startswith("^\\\\d{4}"), (
+            f"{profile} anchors on something other than an ISO-8601 prefix"
+        )
+    premise = md.section("8.3")
+    assert "ISO-8601" in premise, "8.3 does not state the multiline premise"
+    for profile in stages:
+        assert f"`{profile}`" in premise, (
+            f"8.3 states the premise without naming {profile}"
+        )

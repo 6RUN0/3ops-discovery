@@ -388,6 +388,21 @@ python-stacktrace-v1
   A multiline pipeline for Python tracebacks.
 ```
 
+Extracted fields. The set of fields that reach structured metadata is part of the profile definition rather than an implementation detail: the versioning promise of section [8.1](#81-general-rules) means two independent implementations of one profile name produce the same metadata. Otherwise `generic-json-v1` from one vendor and from another are different things under one name.
+
+| Profile | Fields in structured metadata |
+|---|---|
+| `raw-v1` | -- |
+| `generic-json-v1` | `level`, `status`, `trace_id`, `request_id` |
+| `generic-logfmt-v1` | `level`, `status`, `trace_id`, `request_id` |
+| `mixed-v1` | `level`, `status`, `trace_id`, `request_id` (both branches) |
+| `java-stacktrace-v1` | -- |
+| `python-stacktrace-v1` | -- |
+
+The sets of `generic-json-v1` and `generic-logfmt-v1` coincide deliberately: the profiles differ in input format, not in what is extracted. A field absent from a line simply does not appear -- that is not a parse error.
+
+The premise of the multiline profiles. `java-stacktrace-v1` and `python-stacktrace-v1` recognize the start of a record by an ISO-8601 timestamp prefix (`2026-07-27T12:00:00`, or with a space instead of `T`) at the beginning of the line. An application that does not print such a prefix produces NOT A SINGLE line recognized as a start: the whole stream is glued into blocks bounded by `max_lines` (128), whose boundaries have nothing to do with the content. This is a limitation of the profile rather than a failure: an application without an ISO-8601 prefix is served by `raw-v1` or by a specialized profile with an anchor of its own. The raw fallback of section [10.3.3](#1033-raw-fallback) does not help here -- it is meant for a parser error, and gluing is not an error.
+
 ### 8.4. Database profiles
 
 ```text

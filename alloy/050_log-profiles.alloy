@@ -20,6 +20,7 @@ loki.process "docker_profiles" {
 
 			expressions = {
 				level      = "level",
+				status     = "status",
 				trace_id   = "trace_id",
 				request_id = "request_id",
 			}
@@ -28,6 +29,7 @@ loki.process "docker_profiles" {
 		stage.structured_metadata {
 			values = {
 				level      = "",
+				status     = "",
 				trace_id   = "",
 				request_id = "",
 			}
@@ -66,6 +68,7 @@ loki.process "docker_profiles" {
 
 			expressions = {
 				level      = "level",
+				status     = "status",
 				trace_id   = "trace_id",
 				request_id = "request_id",
 			}
@@ -74,6 +77,7 @@ loki.process "docker_profiles" {
 		stage.structured_metadata {
 			values = {
 				level      = "",
+				status     = "",
 				trace_id   = "",
 				request_id = "",
 			}
@@ -115,8 +119,13 @@ loki.process "docker_profiles" {
 		// "  File ..." frames lack that prefix, so multiline folds them
 		// into the entry that opened with the preceding normal line
 		// (manifest 8.3). RE2 has no lookahead, so this is a plain anchor.
+		// The premise is the prefix: an application that does not print
+		// one has no line matching firstline, so every line folds into a
+		// single growing block and max_lines becomes the only thing
+		// ending it. Pinned rather than inherited for that reason.
 		stage.multiline {
 			firstline     = "^\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}"
+			max_lines     = 128
 			max_wait_time = "10s"
 		}
 	}
@@ -125,11 +134,13 @@ loki.process "docker_profiles" {
 		selector      = `{log_profile="java-stacktrace-v1"}`
 		pipeline_name = "java-stacktrace-v1"
 
-		// Same anchor: the exception header line is timestamp-prefixed and
-		// opens the block; the "\tat ...", "Caused by:" and "... N more"
-		// frames are not and get folded in.
+		// Same anchor and the same premise as the python profile above:
+		// the exception header line is timestamp-prefixed and opens the
+		// block; the "\tat ...", "Caused by:" and "... N more" frames
+		// are not and get folded in.
 		stage.multiline {
 			firstline     = "^\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}"
+			max_lines     = 128
 			max_wait_time = "10s"
 		}
 	}

@@ -159,6 +159,19 @@ def log_profiles() -> set[str]:
     return names
 
 
+def log_profile_fields() -> dict[str, set[str]]:
+    """Return the section 8.3 table: log profile -> structured metadata."""
+    fields = {
+        _plain(row["Профиль"]): set(
+            re.findall(r"`(\w+)`", row["Поля в structured metadata"])
+        )
+        for row in table("8.3")
+    }
+    if not fields:
+        raise AnchorError("no log profile fields parsed from section 8.3")
+    return fields
+
+
 def db_profiles() -> set[str]:
     """Section 8.4: database profile names."""
     return set(code_block("8.4").split())

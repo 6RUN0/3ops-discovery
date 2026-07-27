@@ -481,6 +481,86 @@ def log_profile_allowlist() -> set[str]:
     raise AssertionError("log_profile allowlist rule not found in 040")
 
 
+def structured_metadata_fields() -> dict[str, set[str]]:
+    """
+    Return log profile -> the fields its stages put into structured metadata.
+
+    Keyed by profile, not by stage: mixed-v1 has two branches, and the
+    contract promise is about the profile, so the branches are unioned
+    and the gate compares one set per name. A branch that extracts less
+    than its sibling therefore shows up as a mismatch with the manifest,
+    which is exactly how the json/logfmt asymmetry stayed invisible.
+    """
+    text = sources()["050_log-profiles.alloy"]
+    found: dict[str, set[str]] = {}
+    for block in re.findall(r"(?ms)^\tstage\.match \{\n(.*?)^\t\}$", text):
+        selector = re.search(r'log_profile="([\w-]+)"', block)
+        if selector is None:
+            continue
+        values = re.search(
+            r"(?ms)stage\.structured_metadata \{\n\s*values = \{\n(.*?)^\s*\}",
+            block,
+        )
+        fields = found.setdefault(selector.group(1), set())
+        if values:
+            fields.update(
+                re.findall(r"^\s*(\w+)\s*=", values.group(1), re.MULTILINE)
+            )
+    if not found:
+        raise AssertionError("no dispatcher stages found in 050")
+    return found
+
+
+def parsed_fields() -> dict[str, set[str]]:
+    """
+    Return log profile -> the fields its parser stage actually extracts.
+
+    The companion of structured_metadata_fields(): declaring a field in
+    structured_metadata while the parser never extracts it produces an
+    empty value, and comparing only the declaration would call that
+    agreement.
+    """
+    text = sources()["050_log-profiles.alloy"]
+    found: dict[str, set[str]] = {}
+    for block in re.findall(r"(?ms)^\tstage\.match \{\n(.*?)^\t\}$", text):
+        selector = re.search(r'log_profile="([\w-]+)"', block)
+        if selector is None:
+            continue
+        fields = found.setdefault(selector.group(1), set())
+        for body in re.findall(
+            r"(?ms)stage\.(?:json|logfmt) \{\n(.*?)^\t\t\}", block
+        ):
+            mapping = re.search(
+                r"(?ms)(?:expressions|mapping) = \{\n(.*?)^\s*\}", body
+            )
+            if mapping:
+                fields.update(
+                    re.findall(
+                        r"^\s*(\w+)\s*=", mapping.group(1), re.MULTILINE
+                    )
+                )
+    if not found:
+        raise AssertionError("no dispatcher stages found in 050")
+    return found
+
+
+def multiline_stages() -> dict[str, dict[str, str]]:
+    """Return log profile -> the arguments of its stage.multiline block."""
+    text = sources()["050_log-profiles.alloy"]
+    stages: dict[str, dict[str, str]] = {}
+    for block in re.findall(r"(?ms)^\tstage\.match \{\n(.*?)^\t\}$", text):
+        selector = re.search(r'log_profile="([\w-]+)"', block)
+        multiline = re.search(r"(?ms)stage\.multiline \{\n(.*?)^\s*\}", block)
+        if selector and multiline:
+            stages[selector.group(1)] = dict(
+                re.findall(
+                    r'(?m)^\s*(\w+)\s*=\s*"?([^"\n]+?)"?\s*$',
+                    multiline.group(1),
+                )
+            )
+    return stages
+
+
 def dispatcher_profiles() -> set[str]:
     """Profiles addressed by stage.match selectors in 050."""
     text = sources()["050_log-profiles.alloy"]
