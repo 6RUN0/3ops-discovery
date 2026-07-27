@@ -1,7 +1,11 @@
 // Metrics domain: containers that expose a Prometheus-compatible endpoint.
-// This relabel/scrape pair implements the normal-v1 scrape profile; create
-// one such pair per profile from the allowlist instead of accepting
-// arbitrary interval/timeout values from labels.
+// The shared relabel below carries validation and provenance only, so its
+// output means "reached profile routing", not "will be scraped": a target
+// declaring an unknown profile is still visible here and is dropped by
+// every profile filter downstream. One thin filter/scrape pair per
+// profile from the manifest 8.2 allowlist routes targets to the pair's
+// interval; the pair's component labels derive from the full profile
+// name (fast-v1 -> metrics_fast_v1), which a static gate asserts.
 
 discovery.relabel "metrics" {
 	targets = discovery.docker.containers.targets
@@ -19,18 +23,6 @@ discovery.relabel "metrics" {
 			"__meta_docker_container_label_ru_3ops_discovery_metrics_type",
 		]
 		regex  = "prometheus"
-		action = "keep"
-	}
-
-	// Profile allowlist: this pair serves normal-v1, the default when the
-	// label is unset. Targets declaring another profile are left to that
-	// profile's own relabel/scrape pair, so one endpoint is never scraped
-	// by two pairs at once.
-	rule {
-		source_labels = [
-			"__meta_docker_container_label_ru_3ops_discovery_metrics_profile",
-		]
-		regex  = "(normal-v1)?"
 		action = "keep"
 	}
 
@@ -162,10 +154,70 @@ discovery.relabel "metrics" {
 	}
 }
 
-prometheus.scrape "docker_metrics" {
-	targets         = discovery.relabel.metrics.output
+// Profile allowlist (manifest 8.2): each thin filter below serves exactly
+// one profile; normal-v1 is the default when the label is unset, so only
+// its regex also accepts the empty value.
+
+discovery.relabel "metrics_normal_v1" {
+	targets = discovery.relabel.metrics.output
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_profile",
+		]
+		regex  = "(normal-v1)?"
+		action = "keep"
+	}
+}
+
+prometheus.scrape "metrics_normal_v1" {
+	targets         = discovery.relabel.metrics_normal_v1.output
 	scrape_interval = "30s"
 	scrape_timeout  = "10s"
+
+	forward_to = [
+		prometheus.remote_write.default.receiver,
+	]
+}
+
+discovery.relabel "metrics_fast_v1" {
+	targets = discovery.relabel.metrics.output
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_profile",
+		]
+		regex  = "(fast-v1)"
+		action = "keep"
+	}
+}
+
+prometheus.scrape "metrics_fast_v1" {
+	targets         = discovery.relabel.metrics_fast_v1.output
+	scrape_interval = "15s"
+	scrape_timeout  = "10s"
+
+	forward_to = [
+		prometheus.remote_write.default.receiver,
+	]
+}
+
+discovery.relabel "metrics_slow_v1" {
+	targets = discovery.relabel.metrics.output
+
+	rule {
+		source_labels = [
+			"__meta_docker_container_label_ru_3ops_discovery_metrics_profile",
+		]
+		regex  = "(slow-v1)"
+		action = "keep"
+	}
+}
+
+prometheus.scrape "metrics_slow_v1" {
+	targets         = discovery.relabel.metrics_slow_v1.output
+	scrape_interval = "60s"
+	scrape_timeout  = "15s"
 
 	forward_to = [
 		prometheus.remote_write.default.receiver,

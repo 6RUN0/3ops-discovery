@@ -139,27 +139,63 @@ def _keep_regex(rule: str, label_suffix: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _profile_pairs(
+    text: str, label_suffix: str, domain: str
+) -> dict[str, dict[str, str]]:
+    """
+    Pair every prometheus.scrape with the profile filter it references.
+
+    Reference-based on purpose: the scrape's ``targets`` expression names
+    the filter relabel whose keep-rule defines the profile, so a fast
+    filter wired into a slow scrape fails here -- positional pairing
+    would only compare counts. Component labels must derive from the
+    full profile name (``fast-v1`` -> ``<domain>_fast_v1``) so profile
+    successors (8.1) never collide with taken names.
+    """
+    relabels = dict(
+        re.findall(r'(?ms)^discovery\.relabel "(\w+)" \{\n(.*?)^\}$', text)
+    )
+    pairs: dict[str, dict[str, str]] = {}
+    for scrape_name, body in re.findall(
+        r'(?ms)^prometheus\.scrape "(\w+)" \{\n(.*?)^\}$', text
+    ):
+        ref = re.search(
+            r"targets\s*=\s*discovery\.relabel\.(\w+)\.output", body
+        )
+        interval = re.search(r'scrape_interval\s*=\s*"(\S+?)"', body)
+        timeout = re.search(r'scrape_timeout\s*=\s*"(\S+?)"', body)
+        if ref is None or interval is None or timeout is None:
+            raise AssertionError(
+                f"scrape {scrape_name}: no relabel reference or interval"
+            )
+        profile = None
+        for rule in _rules(relabels.get(ref.group(1), "")):
+            regex = _keep_regex(rule, label_suffix)
+            if regex is not None:
+                profile = regex.strip("()?")
+        if profile is None:
+            raise AssertionError(
+                f"scrape {scrape_name}: referenced relabel {ref.group(1)} "
+                f"has no {label_suffix} keep-rule"
+            )
+        expected = f"{domain}_{profile.replace('-', '_')}"
+        if scrape_name != expected or ref.group(1) != expected:
+            raise AssertionError(
+                f"profile {profile}: components {ref.group(1)}/"
+                f"{scrape_name} do not follow the {expected} naming"
+            )
+        pairs[profile] = {
+            "interval": interval.group(1),
+            "timeout": timeout.group(1),
+        }
+    return pairs
+
+
 def scrape_pairs() -> dict[str, dict[str, str]]:
     """Return implemented scrape profiles: name -> {interval, timeout}."""
-    text = sources()["020_metrics.alloy"]
-    profiles = []
-    for rule in _rules(text):
-        regex = _keep_regex(rule, "metrics_profile")
-        if regex is not None:
-            # "(normal-v1)?" -> normal-v1 (the ? makes it the default).
-            profiles.append(regex.strip("()?"))
-    intervals = re.findall(r'scrape_interval\s*=\s*"(\S+?)"', text)
-    timeouts = re.findall(r'scrape_timeout\s*=\s*"(\S+?)"', text)
-    if not (len(profiles) == len(intervals) == len(timeouts)):
-        raise AssertionError(
-            "profile keep-rules and scrape blocks in 020 do not pair up"
-        )
-    return {
-        name: {"interval": interval, "timeout": timeout}
-        for name, interval, timeout in zip(
-            profiles, intervals, timeouts, strict=True
-        )
-    }
+    return _profile_pairs(
+        sources()["020_metrics.alloy"], "metrics_profile", "metrics"
+    )
 
 
 def snmp_relabel_modules() -> set[str]:

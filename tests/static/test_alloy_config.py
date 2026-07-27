@@ -33,8 +33,13 @@ def test_no_env_call_lacks_a_default() -> None:
 
 
 def test_scrape_pairs() -> None:
+    # Values come from manifest 8.2; the extractor itself enforces that
+    # each scrape references the filter whose keep-rule names the
+    # profile and that component labels derive from the profile name.
     assert ac.scrape_pairs() == {
         "normal-v1": {"interval": "30s", "timeout": "10s"},
+        "fast-v1": {"interval": "15s", "timeout": "10s"},
+        "slow-v1": {"interval": "60s", "timeout": "15s"},
     }
 
 

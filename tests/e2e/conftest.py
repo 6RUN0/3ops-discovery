@@ -153,13 +153,16 @@ class Stack:
         resp.raise_for_status()
         return list(resp.json())
 
-    def relabel_project_targets(self, component: str) -> int:
+    def relabel_target_labels(self, component: str) -> list[dict[str, str]]:
         """
-        Count a relabel output's targets belonging to this project.
+        Label maps of a relabel output's targets belonging to this project.
 
         The shared Docker daemon exposes foreign enabled=true containers
-        to discovery too, so the count is scoped to this run's
-        compose_project label -- an unscoped count would be flaky.
+        to discovery too, so the result is scoped to this run's
+        compose_project label -- an unscoped read would be flaky. Unlike
+        the counting helpers, this returns the raw label dicts so tests
+        can assert on label VALUES (profile routing, provenance) and on
+        container-name membership.
         """
         resp = requests.get(
             f"{self.alloy_url}/api/v0/web/components/{component}", timeout=10
@@ -168,7 +171,7 @@ class Stack:
         project_label = (
             "__meta_docker_container_label_com_docker_compose_project"
         )
-        count = 0
+        found = []
         for export in resp.json().get("exports", []):
             if export.get("name") != "output":
                 continue
@@ -177,8 +180,12 @@ class Stack:
                     p["key"]: p["value"]["value"] for p in target["value"]
                 }
                 if labels.get(project_label) == self.project:
-                    count += 1
-        return count
+                    found.append(labels)
+        return found
+
+    def relabel_project_targets(self, component: str) -> int:
+        """Count a relabel output's targets belonging to this project."""
+        return len(self.relabel_target_labels(component))
 
     def relabel_targets_by_env(self, component: str, environment: str) -> int:
         """

@@ -95,6 +95,36 @@ def test_provenance_labels_on_native_series(stack: Stack) -> None:
     assert labels["host"]
 
 
+def test_fast_profile_target_is_routed_to_fast_pair(stack: Stack) -> None:
+    # Manifest 8.2 routing: rabbitmq declares fast-v1, so its target must
+    # carry the raw profile label through the shared relabel and land in
+    # the fast filter -- and ONLY there. The normal filter's "(normal-v1)?"
+    # regex accepts the empty value, so a profile label lost en route
+    # would silently reroute the target to the default pair; asserting
+    # membership on both filters makes that failure mode visible.
+    profile_label = (
+        "__meta_docker_container_label_ru_3ops_discovery_metrics_profile"
+    )
+    name_label = "__meta_docker_container_name"
+    rabbitmq = "/" + stack.compose_container("rabbitmq")
+
+    def _shared_sees_profile() -> bool:
+        return any(
+            t.get(name_label) == rabbitmq and t.get(profile_label) == "fast-v1"
+            for t in stack.relabel_target_labels("discovery.relabel.metrics")
+        )
+
+    wait_until(
+        _shared_sees_profile,
+        timeout=METRICS_BUDGET,
+        desc="profile label on the shared metrics relabel output",
+    )
+    fast = stack.relabel_target_labels("discovery.relabel.metrics_fast_v1")
+    normal = stack.relabel_target_labels("discovery.relabel.metrics_normal_v1")
+    assert any(t.get(name_label) == rabbitmq for t in fast)
+    assert not any(t.get(name_label) == rabbitmq for t in normal)
+
+
 def test_badsecret_target_is_dropped(stack: Stack) -> None:
     # The path-traversal secret-id ("bad/../id") must fail the manifest
     # section 9 keep-rule in 030, so the database relabel keeps ONLY the

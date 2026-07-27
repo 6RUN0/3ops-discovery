@@ -7,8 +7,7 @@ code block after a marker line"). A missing anchor raises AnchorError
 loudly, naming the section -- restructuring the manifest breaks the
 gate explicitly instead of silently skipping a check. Deliberate
 counterexamples (the forbidden profile in 8.1, the path traversal in
-13.4, the fast-v1 illustration in 10.1.2) are never extracted because
-no anchor addresses them.
+13.4) are never extracted because no anchor addresses them.
 """
 
 from __future__ import annotations

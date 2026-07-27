@@ -310,10 +310,10 @@ services:
       ru.3ops.discovery.database.secret-id: "mongodb-docs"
 
   rabbitmq:
-    # Native prometheus endpoint (manifest example 10.1.2), but with
-    # profile normal-v1: the example's fast-v1 is deliberately NOT
-    # implemented by the reference (manifest 14), so a copied fast-v1
-    # would never be scraped.
+    # Native prometheus endpoint reproducing manifest example 10.1.2,
+    # fast-v1 profile included: the reference implements every 8.2
+    # profile pair, and the e2e asserts this target is routed to the
+    # fast filter, not swallowed by the normal-v1 default.
     image: rabbitmq:4.3.2-management
     volumes:
       - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
@@ -336,7 +336,7 @@ services:
       ru.3ops.discovery.metrics.port: "15692"
       ru.3ops.discovery.metrics.path: "/metrics"
       ru.3ops.discovery.metrics.job: "rabbitmq"
-      ru.3ops.discovery.metrics.profile: "normal-v1"
+      ru.3ops.discovery.metrics.profile: "fast-v1"
 
   app-metrics:
     build: ./app

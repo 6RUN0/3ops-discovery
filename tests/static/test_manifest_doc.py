@@ -65,10 +65,11 @@ def test_alloy_image_tag_anchor() -> None:
 
 
 def test_counterexamples_not_extracted() -> None:
-    # The fast-v1 illustration in 10.1.2 and the forbidden profile in
-    # 8.1 are addressed by no anchor: extraction functions above touch
-    # only their own sections, so nothing to assert beyond exactness
-    # already pinned; this test documents the property.
+    # The forbidden profile in 8.1 (and any other in-prose example, like
+    # the 10.1.2 labels illustration) is addressed by no anchor:
+    # extraction functions above touch only their own sections, so
+    # nothing to assert beyond exactness already pinned; this test
+    # documents the property.
     assert "fast-v1" in md.scrape_profiles()  # normative, from 8.2
 
 

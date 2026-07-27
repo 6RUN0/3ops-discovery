@@ -11,10 +11,8 @@ overlay names (manifest customization section) are legal by pattern
 and are not checked by these gates.
 """
 
-SCRAPE_PROFILES_UNIMPLEMENTED: dict[str, str] = {
-    "fast-v1": "reference ships only the normal-v1 pair (manifest 14)",
-    "slow-v1": "reference ships only the normal-v1 pair (manifest 14)",
-}
+#: All manifest 8.2 scrape profiles are implemented in 020_metrics.
+SCRAPE_PROFILES_UNIMPLEMENTED: dict[str, str] = {}
 
 LOG_PROFILES_UNIMPLEMENTED: dict[str, str] = {
     "app-type-1-v1": "named example of a specialized pipeline, not a "

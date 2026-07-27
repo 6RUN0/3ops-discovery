@@ -498,7 +498,7 @@ services:
       ru.3ops.discovery.metrics.profile: "fast-v1"
 ```
 
-Профиль `fast-v1` требует соответствующей relabel/scrape-пары в конфигурации Alloy; референсная конфигурация включает только пару `normal-v1` (см. раздел [14](#14-reference-implementation)).
+Профиль выбирает одну из relabel/scrape-пар конфигурации Alloy; референсная конфигурация включает пары всех базовых профилей раздела [8.2](#82-scrape-профили) (см. раздел [14](#14-reference-implementation)).
 
 ### 10.2. Domain: database
 
@@ -979,14 +979,14 @@ docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.17.1 \
 | Файл | Содержимое |
 |---|---|
 | [`010_discovery.alloy`](../alloy/010_discovery.alloy) | `discovery.docker`: opt-in discovery для metrics/database и discovery всех контейнеров для логов |
-| [`020_metrics.alloy`](../alloy/020_metrics.alloy) | Домен metrics: relabel-правила и `prometheus.scrape` (профиль `normal-v1`) |
+| [`020_metrics.alloy`](../alloy/020_metrics.alloy) | Домен metrics: общий relabel (валидация + провенанс) и пара `discovery.relabel`/`prometheus.scrape` на каждый профиль раздела 8.2 |
 | [`030_database.alloy`](../alloy/030_database.alloy) | Домен database: `foreach`-pipeline для postgres, DSN из файла секрета |
 | [`035_blackbox.alloy`](../alloy/035_blackbox.alloy) | Домен blackbox: `discovery.relabel` + `prometheus.exporter.blackbox` (модуль `http_2xx`, профиль `normal-v1`) |
 | [`040_logs.alloy`](../alloy/040_logs.alloy) | Домен logs: relabel-правила и `loki.source.docker` |
 | [`050_log-profiles.alloy`](../alloy/050_log-profiles.alloy) | Profile dispatcher: `loki.process` с базовыми log-профилями |
 | [`090_outputs.alloy`](../alloy/090_outputs.alloy) | Выходы: `prometheus.remote_write` и `loki.write` |
 
-Референсная конфигурация включает только scrape-пару `normal-v1`: targets, объявившие другой профиль, ею сознательно не скрейпятся. Дополнительный профиль подключается копией пары из `020_metrics.alloy` с изменёнными regex profile-правила, `scrape_interval` и `scrape_timeout`.
+Профильные scrape-пары устроены слоисто: общий relabel домена несёт валидацию и провенанс, тонкая пара `discovery.relabel`/`prometheus.scrape` на профиль — только маршрутизацию на свой интервал. Имена профильных компонентов механически выводятся из полного имени профиля (`fast-v1` → `metrics_fast_v1`). Targets, объявившие профиль вне allowlist, сознательно не скрейпятся ни одной парой. Дополнительный профиль подключается копией тонкой пары (фильтр + scrape) с изменёнными regex profile-правила, `scrape_interval` и `scrape_timeout`.
 
 Известное ограничение референсной конфигурации: `discovery.docker` создаёт отдельный target на каждую комбинацию контейнер+сеть+порт. Fan-out по портам схлопывается `keepequal`-правилами (metrics, database), но контейнер, подключённый к нескольким Docker-сетям, даёт дублирующиеся targets: для metrics — двойной scrape одного endpoint, для database — дублирующиеся exporters с одинаковыми сериями. Контейнеры с telemetry рекомендуется подключать к одной сети, видимой Alloy. Логи от этого не страдают: `loki.source.docker` дедуплицирует targets по container ID.
 
