@@ -1,4 +1,4 @@
-"""Host telemetry delivery (spec 5.4): node_* metrics, journal logs."""
+"""Host telemetry delivery (manifest 14.5): node_* metrics, journal logs."""
 
 import pytest
 

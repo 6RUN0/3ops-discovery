@@ -17,10 +17,16 @@ import yaml
 from tools import snmp_fixtures
 from tools.secret_files import write_secret
 
-#: Fixed SNMPv3 passphrases for the ephemeral e2e/demo snmp-agent. Unlike the
-#: DB credentials (randomised per run), these MUST equal the static
-#: snmp-agent/snmpd.conf createUser line, so they are constants, not
-#: token_hex. Throwaway test values for a local agent, never real secrets.
+#: Fixed SNMPv3 passphrases for the ephemeral e2e/demo snmp-agent.
+#:
+#: A deliberate, documented exception to the project rule "no secrets in
+#: git, not even fakes" -- the pragma below silences detect-secrets, so
+#: the reason belongs next to it rather than in a commit message. Unlike
+#: the DB credentials (randomised per run), these MUST equal the
+#: createUser line of snmp-agent/snmpd.conf, which is baked into the
+#: image at build time: both sides need the value before either process
+#: starts, so there is no run to generate it in. Throwaway values for a
+#: local agent holding no data, torn down with the stack.
 _SNMP_AUTH_PASS = "netmon-auth-pass"  # pragma: allowlist secret
 _SNMP_PRIV_PASS = "netmon-priv-pass"  # pragma: allowlist secret
 

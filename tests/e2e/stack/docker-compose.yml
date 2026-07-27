@@ -291,6 +291,36 @@ services:
       ru.3ops.discovery.database.type: "postgres"
       ru.3ops.discovery.database.secret-id: "bad/../id"
 
+  db-nosecret:
+    # A secret-id that PASSES the manifest section 9 regex with no file
+    # behind it -- an untrusted label doing the worst it can to the
+    # collector. Behind a compose profile because the blast radius makes
+    # it destructive: it takes down the WHOLE foreach block of its
+    # database type, mongodb-docs included, so leaving it running would
+    # silently delete the mongodb coverage of every other test. The
+    # dedicated fixture starts it, asserts, and removes it again.
+    #
+    # The mini-app image is reused (already built): the pipeline fails at
+    # local.file and never reaches a connection, so what actually listens
+    # on the port is irrelevant.
+    profiles: ["nosecret"]
+    build: ./app
+    environment:
+      APP_LOG_FORMAT: json
+    networks:
+      - telemetry
+    expose:
+      - "27017"
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "data"
+      ru.3ops.discovery.database.enabled: "true"
+      ru.3ops.discovery.database.type: "mongodb"
+      ru.3ops.discovery.database.secret-id: "mongodb-missing"
+      ru.3ops.discovery.database.port: "27017"
+
   mariadb:
     image: mariadb:12.3.2
     environment:
