@@ -1,8 +1,14 @@
-// Opt-in host logs (spec 5.4). Reads the systemd journal mounted at
+// Opt-in host logs (manifest 14.5). Reads the systemd journal mounted at
 // /var/log/journal and forwards to the base loki.write (090). The static
-// labels are within the manifest 6.2 allowlist (host/collector/source);
-// journal fields stay in the line, not in stream labels. Requires a
-// persistent journal on the host (/var/log/journal) plus /etc/machine-id;
+// labels are within the manifest 6.2 allowlist (host/collector/source).
+// format_as_json = false reduces each record to its MESSAGE field: the
+// journal metadata (_SYSTEMD_UNIT, PRIORITY, _PID) is dropped outright,
+// not moved into structured metadata, so a host line cannot be attributed
+// to the unit that emitted it. The contract promises only
+// host/collector/source (manifest 14.5), so this keeps it -- carrying the
+// metadata would change behaviour and is decided on its own.
+// Requires a persistent journal on the host (/var/log/journal) plus
+// /etc/machine-id;
 // the e2e stack mounts them conditionally (docker-compose.host-logs.yml).
 
 loki.source.journal "host" {

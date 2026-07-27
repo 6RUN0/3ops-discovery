@@ -1,5 +1,5 @@
-// Opt-in host metrics (spec 5.4). Lives in alloy-optional/, outside the
-// base alloy/: the base config is valid without it, and the only
+// Opt-in host metrics (manifest 14.5). Lives in alloy-optional/, outside
+// the base alloy/: the base config is valid without it, and the only
 // reference points INTO a base output (090). The exporter reads the host
 // procfs/sysfs/rootfs mounted into the collector container at the paths
 // below; deployments relocate the mounts via the RU_3OPS_DISCOVERY_HOST_*

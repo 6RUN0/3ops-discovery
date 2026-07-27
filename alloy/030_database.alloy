@@ -1,10 +1,10 @@
 // Database domain: exporters driven by discovery. foreach identifies
 // child pipelines by secret id but does NOT deduplicate: every
-// discovered target yields its own exporter. The keepequal rule below
-// collapses the per-port target fan-out of discovery.docker; a
-// container attached to several Docker networks still produces
-// duplicate targets and therefore duplicate exporters (reference
-// limitation, see manifest section 14).
+// discovered target yields its own exporter, so the relabel below must
+// reduce discovery.docker to exactly one target per container: the
+// keepequal rule collapses the per-port fan-out, and several Docker
+// networks do not fan out at all (match_first_network keeps the first
+// network by name, manifest section 14).
 // The DSN is read from a secret file via local.file; labels carry only
 // the logical secret id, never credentials.
 // The foreach block is experimental as of Alloy v1.17: run and validate

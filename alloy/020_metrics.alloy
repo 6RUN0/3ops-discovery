@@ -66,10 +66,12 @@ discovery.relabel "metrics" {
 		target_label = "__tmp_metrics_port"
 	}
 
-	// discovery.docker emits one target per container+network+port
-	// combination; keep only targets whose private port matches the
-	// declared metrics port (the network dimension is not collapsible in
-	// relabel, see manifest section 14).
+	// discovery.docker emits one target per exposed port of the container,
+	// on one network only (match_first_network keeps the first by name),
+	// so the port is the whole fan-out; keep the target whose private port
+	// matches the declared metrics port. The multi-network risk is not
+	// duplication but reachability: the chosen network is arbitrary, and
+	// an unreachable one shows up as up == 0 (manifest section 14).
 	rule {
 		source_labels = ["__meta_docker_port_private"]
 		target_label  = "__tmp_metrics_port"

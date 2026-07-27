@@ -42,6 +42,15 @@ def section(number: str) -> str:
     return body[: stop.start()] if stop else body
 
 
+@cache
+def section_numbers() -> frozenset[str]:
+    """Every section number that carries a heading, e.g. {"9", "10.6.1"}."""
+    numbers = frozenset(re.findall(r"(?m)^#+ (\d+(?:\.\d+)*)\. ", _text()))
+    if not numbers:
+        raise AnchorError("no numbered headings found in the manifest")
+    return numbers
+
+
 def _code_blocks(body: str) -> list[str]:
     return re.findall(r"(?ms)^```[\w-]*\n(.*?)^```$", body)
 
