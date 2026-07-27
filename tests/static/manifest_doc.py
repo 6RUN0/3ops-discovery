@@ -247,6 +247,18 @@ def domain_labels(number: str) -> dict[str, bool]:
     return labels
 
 
+def series_identity() -> dict[str, dict[str, str]]:
+    """Return the section 6.1 identity table: domain -> its row."""
+    rows = {
+        _plain(row["Домен"]): row
+        for row in table("6.1")
+        if "Домен" in row and "`job`" in row
+    }
+    if not rows:
+        raise AnchorError("series identity table not found in section 6.1")
+    return rows
+
+
 def default_profile(number: str, label: str) -> str:
     """Return the default profile a 10.x labels table names for ``label``."""
     for row in table(number):

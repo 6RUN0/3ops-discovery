@@ -33,7 +33,13 @@ discovery.relabel "host_metrics" {
 }
 
 prometheus.scrape "host" {
+	// Stated, not inherited: a host overlay has no per-target profile, but
+	// the cadence a consumer observes must not be whatever the Alloy
+	// default happens to be in the next release. These are the values the
+	// component defaulted to when they were written down.
 	targets          = discovery.relabel.host_metrics.output
+	scrape_interval  = "60s"
+	scrape_timeout   = "10s"
 	follow_redirects = false
 	forward_to       = [prometheus.remote_write.default.receiver]
 }

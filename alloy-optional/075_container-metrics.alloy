@@ -46,9 +46,11 @@ discovery.relabel "cadvisor" {
 }
 
 prometheus.scrape "cadvisor" {
-	// Default interval on purpose (like 070): a host overlay, not a
-	// docker-label domain with a per-target profile.
+	// No per-target profile (a host overlay, not a docker-label domain),
+	// but the cadence is pinned rather than inherited -- see 070.
 	targets          = discovery.relabel.cadvisor.output
+	scrape_interval  = "60s"
+	scrape_timeout   = "10s"
 	follow_redirects = false
 	forward_to       = [prometheus.relabel.cadvisor.receiver]
 }

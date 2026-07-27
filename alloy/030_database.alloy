@@ -194,6 +194,8 @@ foreach "postgres" {
 
 		prometheus.scrape "db" {
 			targets          = discovery.relabel.enrich_postgres.output
+			scrape_interval  = "60s"
+			scrape_timeout   = "10s"
 			follow_redirects = false
 
 			forward_to = [
@@ -362,6 +364,8 @@ foreach "mysql" {
 
 		prometheus.scrape "db" {
 			targets          = discovery.relabel.enrich_mysql.output
+			scrape_interval  = "60s"
+			scrape_timeout   = "10s"
 			follow_redirects = false
 
 			forward_to = [
@@ -534,6 +538,8 @@ foreach "redis" {
 
 		prometheus.scrape "db" {
 			targets          = discovery.relabel.enrich_redis.output
+			scrape_interval  = "60s"
+			scrape_timeout   = "10s"
 			follow_redirects = false
 
 			forward_to = [
@@ -694,6 +700,8 @@ foreach "mongodb" {
 
 		prometheus.scrape "db" {
 			targets          = discovery.relabel.enrich_mongodb.output
+			scrape_interval  = "60s"
+			scrape_timeout   = "10s"
 			follow_redirects = false
 
 			forward_to = [

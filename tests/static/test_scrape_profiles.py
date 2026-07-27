@@ -29,6 +29,20 @@ def test_job_keep_is_fail_closed() -> None:
     assert ac.job_presence_keep_regex() == "(.+)"
 
 
+def test_manifest_states_that_an_empty_mandatory_label_drops() -> None:
+    # The two keeps below are the implementation of a rule that lived
+    # only in their comments. Section 11 said "an empty value equals an
+    # absent label, the domain default applies" -- vacuous for mandatory
+    # labels, which have no default. A second implementer reading only
+    # the manifest would have let the target through.
+    body = md.section("11")
+    assert "fail-closed" in body
+    for label in ("metrics.port", "metrics.job", "blackbox.port"):
+        assert f"`{label}`" in body, (
+            f"section 11 does not name {label} among the presence checks"
+        )
+
+
 def test_port_keep_is_fail_closed() -> None:
     # Without a presence keep, a container that declares metrics.enabled
     # but no TCP ports rides the discovery.docker fallback target (no

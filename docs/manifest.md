@@ -215,7 +215,18 @@ compose_service
 
 The `container` label comes from the Docker engine metadata and `host` from the hostname of the Alloy collector; neither is set by container labels, so a container cannot forge their values. The remaining labels are declared by the container itself (see section [13.5](#135-trust-in-labels)). For logs the set is additionally constrained by the allowlist of section [6.2](#62-loki-label-cardinality).
 
-The `instance` label belongs to metrics; for logs its counterpart is `service_name` (see section [10.3.5](#1035-labels)).
+The `instance` label belongs to metrics; for logs its counterpart is `service_name` (see section [10.3.5](#1035-labels)). The analogy is incomplete and must not be leaned on as a rule: `service_name` is derived from `logs.service` alone, whereas the global `instance` does not extend to logs.
+
+Series identity per domain. Dashboards and alert rules bind to exactly these values, so they are part of the contract rather than an implementation detail:
+
+| Domain | `job` | `instance` | Additionally |
+|---|---|---|---|
+| metrics | from `metrics.job` (mandatory) | the target address; overridden by `instance` | -- |
+| database | the database type (`database.type`) | `database.instance`, else the global `instance`, else `secret-id` | -- |
+| blackbox | the constant `blackbox` | the probe address (`blackbox.address` or the container address) | `module` -- the probe type |
+| snmp | the constant `snmp` | the device address | `device` -- the device name; `snmp_profile` -- the profile name of section [8.5](#85-snmp-profiles) |
+
+The blackbox domain is a documented exception to the global `instance` rule of section [5](#5-global-labels): for a probe the instance is the probe target itself, so the global value does not apply here and does not override the address. An `instance` declared on a container with a blackbox probe belongs to its own metrics, not to its probes.
 
 ### 6.2. Loki label cardinality
 
@@ -383,7 +394,7 @@ extended-v1
 
 The profiles make it possible to control the load without accepting arbitrary settings from labels. They are selected through `ru.3ops.discovery.database.profile`; the default is `standard-v1`.
 
-A database profile governs the collection volume of the exporter -- which collectors query the database -- rather than the scrape cadence: the scrape profiles of section [8.2](#82-scrape-profiles) apply to the `metrics` and `blackbox` domains only. The load is monotonic: basic <= standard <= extended. `standard-v1` matches the default collector set of the exporter; an incompatible change of the set requires a new profile name (section [8.1](#81-general-rules)). A value outside the allowlist drops the target entirely (fail-closed) -- as in the metrics and blackbox domains. The `logs` domain is the single exception and the only domain where an unknown profile does not drop the target: logs are not lost, `raw-v1` applies (section [10.3.4](#1034-unknown-profile)). The fail-closed rule holds for every domain except logs.
+A database profile governs the collection volume of the exporter -- which collectors query the database -- rather than the scrape cadence: the scrape profiles of section [8.2](#82-scrape-profiles) apply to the `metrics` and `blackbox` domains only. The cadence of the database domain is fixed and not chosen by a profile: `interval: 60s`, `timeout: 10s`. The value is set by the contract and stated explicitly in the configuration -- a value a consumer observes cannot be the default of a third-party product, which moves when that product is updated. The load is monotonic: basic <= standard <= extended. `standard-v1` matches the default collector set of the exporter; an incompatible change of the set requires a new profile name (section [8.1](#81-general-rules)). A value outside the allowlist drops the target entirely (fail-closed) -- as in the metrics and blackbox domains. The `logs` domain is the single exception and the only domain where an unknown profile does not drop the target: logs are not lost, `raw-v1` applies (section [10.3.4](#1034-unknown-profile)). The fail-closed rule holds for every domain except logs.
 
 The mapping of profiles onto collectors in the reference configuration ([alloy/030_database.alloy](../alloy/030_database.alloy)); the extended sets only include collectors that work on a vanilla database without extensions or special server settings:
 
@@ -924,6 +935,8 @@ The minimal checks before a pipeline is created:
 An unknown `type` value drops the target entirely (fail-closed) and is reflected in the Alloy log where possible.
 
 An empty value of any label is equivalent to the label being absent: the default of the corresponding domain applies (during relabeling a label with an empty value is removed, so empty values never reach the series).
+
+A mandatory label has no default, so for those the same rule means dropping: an empty mandatory label = an absent mandatory label = the target is dropped (fail-closed). This is a consequence rather than a special case: an implementation must check the presence of a non-empty value separately, because comparing an empty declared port against empty metadata (`keepequal`) succeeds and lets the target through. The reference implements it with explicit presence keep rules for `metrics.port`, `metrics.job` and `blackbox.port`.
 
 The reference configuration implements the `path`, `scheme`, `profile` and `secret-id` checks with relabel rules. The `port` check is implicit and fail-closed: `keepequal` matches the declared port against the real private ports of the container, so a non-numeric, out-of-range or non-existent value drops the target.
 

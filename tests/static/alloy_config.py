@@ -325,6 +325,18 @@ def default_blackbox_scrape_profiles() -> frozenset[str]:
     )[1]
 
 
+def constant_job(file: str) -> str | None:
+    """Return the literal ``job`` a file stamps, or None if it stamps none."""
+    text = {**sources(), **optional_sources()}[file]
+    for rule in _rules(text):
+        if not re.search(r'target_label\s*=\s*"job"', rule):
+            continue
+        literal = re.search(r'replacement\s*=\s*"([\w-]+)"', rule)
+        if literal:
+            return literal.group(1)
+    return None
+
+
 def metrics_type_allowlist() -> set[str]:
     """
     Values accepted by the metrics.type keep-rule in 020.

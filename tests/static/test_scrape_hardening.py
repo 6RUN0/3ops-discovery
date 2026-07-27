@@ -54,6 +54,25 @@ def test_scrape_does_not_follow_redirects(
     )
 
 
+@pytest.mark.parametrize(
+    ("file", "label", "body"),
+    [(f, label, body) for f, label, body in ac.scrape_blocks()],
+    ids=[f"{f}:{label}" for f, label, _ in ac.scrape_blocks()],
+)
+def test_scrape_states_its_own_cadence(
+    file: str, label: str, body: str
+) -> None:
+    # The four database blocks set neither, so the cadence of a whole
+    # contract domain was whatever prometheus.scrape defaults to -- an
+    # upstream release could have moved it without a line changing here.
+    # A value a consumer observes belongs to us, not to the version of
+    # Alloy that happens to be installed.
+    for argument in ("scrape_interval", "scrape_timeout"):
+        assert re.search(rf'{argument}\s*=\s*"\S+"', body), (
+            f"{file}: scrape {label} inherits {argument} from Alloy"
+        )
+
+
 def test_manifest_states_why_ssrf_is_excluded() -> None:
     # Binding the text to the config: the guarantee and the setting that
     # earns it must be written down together, or the next reader takes
