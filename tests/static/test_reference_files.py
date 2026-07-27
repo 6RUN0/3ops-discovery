@@ -3,7 +3,8 @@
 import re
 from pathlib import Path
 
-from noxfile import ALLOY_IMAGE
+import pytest
+from noxfile import ALLOY_IMAGE, AlloyFmtError, alloy_fmt_verdict
 
 from tests.static import alloy_config as ac
 from tests.static import manifest_doc as md
@@ -35,3 +36,22 @@ def test_e2e_compose_alloy_image_matches_pin() -> None:
     assert images == {ALLOY_IMAGE}, (
         f"compose alloy image(s) {images} != pinned {ALLOY_IMAGE!r}"
     )
+
+
+def test_fmt_verdict_separates_a_diff_from_a_docker_failure() -> None:
+    # CI once reported every base file as unformatted because the runner
+    # could not obtain the image and 125 was read as "needs reformatting".
+    # A verdict may only be drawn from the codes the formatter defines.
+    assert alloy_fmt_verdict(0, "") is False
+    assert alloy_fmt_verdict(1, "is not formatted correctly") is True
+    with pytest.raises(AlloyFmtError, match="docker exited 125"):
+        alloy_fmt_verdict(125, "Unable to find image locally")
+
+
+def test_fmt_verdict_reports_the_cause_it_was_given() -> None:
+    # The stderr was captured and dropped before, which is why the CI log
+    # named no cause at all; it must reach the failure message.
+    with pytest.raises(AlloyFmtError, match="toomanyrequests"):
+        alloy_fmt_verdict(125, "Error response from daemon: toomanyrequests")
+    with pytest.raises(AlloyFmtError, match="<no stderr>"):
+        alloy_fmt_verdict(126, "   ")

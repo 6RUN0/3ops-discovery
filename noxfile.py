@@ -67,12 +67,39 @@ def docs_lint(session: nox.Session) -> None:
         session.run(tool, *args, external=True)
 
 
+#: `alloy fmt -t` exits 0 when the file is already canonical and 1 when
+#: it is not. Anything else is docker never running the check at all --
+#: 125 for an image it cannot pull, for one.
+_FMT_CANONICAL = 0
+_FMT_NEEDS_CHANGE = 1
+
+
+class AlloyFmtError(RuntimeError):
+    """docker could not run the formatter, so the file was never checked."""
+
+
+def alloy_fmt_verdict(returncode: int, stderr: str) -> bool:
+    """
+    Return True if the file needs reformatting; raise if docker failed.
+
+    Reading every non-zero code as "unformatted" once made CI report all
+    seven base files as broken on a runner that never obtained the
+    image: an infrastructure failure wearing a formatting failure's
+    clothes, with the real cause captured and dropped.
+    """
+    if returncode in (_FMT_CANONICAL, _FMT_NEEDS_CHANGE):
+        return returncode == _FMT_NEEDS_CHANGE
+    raise AlloyFmtError(
+        f"docker exited {returncode} running `alloy fmt -t`, so nothing "
+        f"was verified: {stderr.strip() or '<no stderr>'}"
+    )
+
+
 def _alloy_fmt_would_change(config_dir: Path, name: str) -> bool:
     """
     Return True if ``alloy fmt`` would reformat the named file.
 
-    Uses ``fmt -t`` (non-mutating): the image exits non-zero when the
-    file is not already in canonical format, so nothing is written back.
+    Uses ``fmt -t`` (non-mutating): nothing is written back.
     """
     result = subprocess.run(
         [
@@ -88,8 +115,9 @@ def _alloy_fmt_would_change(config_dir: Path, name: str) -> bool:
         ],
         capture_output=True,
         check=False,
+        text=True,
     )
-    return result.returncode != 0
+    return alloy_fmt_verdict(result.returncode, result.stderr)
 
 
 @nox.session
@@ -106,6 +134,10 @@ def alloy_check(session: nox.Session) -> None:
 
     if shutil.which("docker") is None:
         session.error("docker is required for alloy_check")
+    # Pull once, up front and visibly. The fmt checks capture their
+    # output, so an image fetched lazily inside them would fail with the
+    # reason hidden; here a registry problem is reported as one.
+    session.run("docker", "pull", ALLOY_IMAGE, external=True)
     for combo, optional in COMBOS.items():
         config_dir = materialize(Path(session.create_tmp()) / combo, optional)
         docker_env: list[str] = []
