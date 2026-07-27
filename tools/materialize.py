@@ -26,12 +26,14 @@ OPTIONAL_DIR = REPO / "alloy-optional"
 _ALL_OVERLAYS = (
     "060_otel.alloy",
     "070_host-metrics.alloy",
+    "075_container-metrics.alloy",
     "080_host-logs.alloy",
 )
 COMBOS: dict[str, tuple[str, ...]] = {
     "base": (),
     "otel": ("060_otel.alloy",),
     "host-metrics": ("070_host-metrics.alloy",),
+    "container-metrics": ("075_container-metrics.alloy",),
     "host-logs": ("080_host-logs.alloy",),
     "snmp": ("037_snmp.alloy",),
     "all": _ALL_OVERLAYS,

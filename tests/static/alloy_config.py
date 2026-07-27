@@ -392,3 +392,106 @@ def blackbox_scrape_pairs() -> dict[str, dict[str, str]]:
             profiles, intervals, timeouts, strict=True
         )
     }
+
+
+def _cadvisor_text() -> str:
+    return optional_sources()["075_container-metrics.alloy"]
+
+
+def _cadvisor_relabel_block() -> str:
+    # The series-side assertions are about rules INSIDE
+    # prometheus.relabel (cut its body first, like db_default_ports),
+    # not about component order in the file.
+    block = re.search(
+        r'(?ms)^prometheus\.relabel "cadvisor" \{\n(.*?)^\}',
+        _cadvisor_text(),
+    )
+    if block is None:
+        raise AssertionError("prometheus.relabel block not found in 075")
+    return block.group(1)
+
+
+def cadvisor_allowlisted_labels() -> set[str]:
+    """Docker label keys 075 allowlists onto cadvisor series."""
+    block = re.search(
+        r"(?ms)allowlisted_container_labels\s*=\s*\[\n(.*?)^\s*\]",
+        _cadvisor_text(),
+    )
+    if block is None:
+        raise AssertionError(
+            "allowlisted_container_labels block not found in 075"
+        )
+    return set(re.findall(r'"([^"]+)"', block.group(1)))
+
+
+def cadvisor_store_container_labels() -> str:
+    """Literal store_container_labels value in 075."""
+    m = re.search(r"store_container_labels\s*=\s*(\w+)", _cadvisor_text())
+    if m is None:
+        raise AssertionError("store_container_labels not found in 075")
+    return m.group(1)
+
+
+def cadvisor_disable_root_cgroup_stats() -> str:
+    """Literal disable_root_cgroup_stats value in 075."""
+    m = re.search(r"disable_root_cgroup_stats\s*=\s*(\w+)", _cadvisor_text())
+    if m is None:
+        raise AssertionError("disable_root_cgroup_stats not found in 075")
+    return m.group(1)
+
+
+def cadvisor_docker_only() -> str:
+    """Literal docker_only value in 075."""
+    m = re.search(r"docker_only\s*=\s*(\w+)", _cadvisor_text())
+    if m is None:
+        raise AssertionError("docker_only not found in 075")
+    return m.group(1)
+
+
+def cadvisor_relabel_target_labels() -> set[str]:
+    """Every non-internal target_label 075 sets (both relabel stages)."""
+    labels = {
+        name
+        for name in re.findall(r'target_label\s*=\s*"(\w+)"', _cadvisor_text())
+        if not name.startswith("__")
+    }
+    if not labels:
+        raise AssertionError("no relabel target_labels found in 075")
+    return labels
+
+
+def cadvisor_copy_rule_sources() -> set[str]:
+    """source_labels of the copy rules in 075's prometheus.relabel."""
+    sources = set()
+    for rule in _rules(_cadvisor_relabel_block()):
+        m = re.search(r'source_labels\s*=\s*\["([^"]+)"\]', rule)
+        if m:
+            sources.add(m.group(1))
+    if not sources:
+        raise AssertionError("no copy rules found in 075")
+    return sources
+
+
+def cadvisor_relabel_rule_kinds() -> list[str]:
+    """Ordered rule kinds in 075's prometheus.relabel block."""
+    kinds = []
+    for rule in _rules(_cadvisor_relabel_block()):
+        if re.search(r'action\s*=\s*"labeldrop"', rule):
+            kinds.append("labeldrop")
+        elif "source_labels" in rule:
+            kinds.append("copy")
+        else:
+            kinds.append("target")
+    if not kinds:
+        raise AssertionError("no relabel rules found in 075")
+    return kinds
+
+
+def cadvisor_labeldrop_regex() -> str:
+    """Mandatory raw-label labeldrop regex in 075."""
+    for rule in _rules(_cadvisor_relabel_block()):
+        if re.search(r'action\s*=\s*"labeldrop"', rule):
+            m = re.search(r'regex\s*=\s*"(.*)"', rule)
+            if m:
+                return m.group(1)
+    raise AssertionError("labeldrop rule not found in 075")

@@ -1,0 +1,96 @@
+// Opt-in per-container metrics (manifest 14.5). Host-overlay like 070:
+// cadvisor observes EVERY docker container on the host (docker_only),
+// not the discovery-scoped set -- per-container opt-out is not
+// supported. Docker API is reached only via the contract env (the
+// socket-proxy in the e2e stack); the metrics themselves come from
+// cgroupfs, so the collector container needs the host cgroup namespace
+// (manifest 14.3, deployment privilege). With the Docker API
+// unreachable, docker_only filters everything out: the output is
+// near-empty, not "metrics without enrichment".
+
+prometheus.exporter.cadvisor "containers" {
+	docker_host = coalesce(sys.env("RU_3OPS_DISCOVERY_DOCKER_HOST"), "unix:///var/run/docker.sock")
+	docker_only = true
+
+	// Root-cgroup stats off: after the mandatory id drop below the root
+	// series would be indistinguishable from an unlabeled container and
+	// would double count the host, which 070_host-metrics covers.
+	disable_root_cgroup_stats = true
+
+	// Cardinality discipline (manifest 6.1): the default true would dump
+	// every docker label and env var into series labels. The allowlist
+	// only takes effect when store_container_labels is false.
+	store_container_labels       = false
+	allowlisted_container_labels = [
+		"ru.3ops.discovery.environment",
+		"ru.3ops.discovery.team",
+		"com.docker.compose.project",
+		"com.docker.compose.service",
+	]
+}
+
+// Target-side provenance (manifest 6.1), as in blackbox 035 / snmp 037:
+// collector and host are constants of the target, not per-series work.
+discovery.relabel "cadvisor" {
+	targets = prometheus.exporter.cadvisor.containers.targets
+
+	rule {
+		target_label = "collector"
+		replacement  = "alloy"
+	}
+
+	rule {
+		target_label = "host"
+		replacement  = constants.hostname
+	}
+}
+
+prometheus.scrape "cadvisor" {
+	// Default interval on purpose (like 070): a host overlay, not a
+	// docker-label domain with a per-target profile.
+	targets    = discovery.relabel.cadvisor.output
+	forward_to = [prometheus.relabel.cadvisor.receiver]
+}
+
+// Series-side provenance: the allowlisted docker labels surface as
+// container_label_* ON SERIES (not targets), so the contract names are
+// lifted by metric-relabel after the scrape, never by discovery.relabel.
+prometheus.relabel "cadvisor" {
+	forward_to = [prometheus.remote_write.default.receiver]
+
+	// name is Docker-engine metadata (manifest 13.5): the container
+	// cannot forge it -- same trust as __meta_docker_container_name in
+	// 020. image stays (low-cardinality, useful); id is dropped below.
+	rule {
+		source_labels = ["name"]
+		target_label  = "container"
+	}
+
+	rule {
+		source_labels = ["container_label_ru_3ops_discovery_environment"]
+		target_label  = "environment"
+	}
+
+	rule {
+		source_labels = ["container_label_ru_3ops_discovery_team"]
+		target_label  = "team"
+	}
+
+	rule {
+		source_labels = ["container_label_com_docker_compose_project"]
+		target_label  = "compose_project"
+	}
+
+	rule {
+		source_labels = ["container_label_com_docker_compose_service"]
+		target_label  = "compose_service"
+	}
+
+	// Mandatory, strictly after the copy rules: raw container_label_*,
+	// high-cardinality id, and name (now duplicated by container; 6.1
+	// forbids semantically equal labels).
+	rule {
+		regex  = "container_label_.*|id|name"
+		action = "labeldrop"
+	}
+}

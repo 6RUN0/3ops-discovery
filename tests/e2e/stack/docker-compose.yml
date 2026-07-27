@@ -34,6 +34,14 @@ services:
 
   alloy:
     image: grafana/alloy:v1.17.1
+    # Host cgroup namespace for 075_container-metrics (cadvisor): on
+    # cgroup v2 a private namespace shows only the container's own
+    # subtree, hiding every sibling. Inline on purpose (not a
+    # conditional -f overlay like host-logs): /sys/fs/cgroup always
+    # exists, the privilege is harmless for runs that do not load 075,
+    # and the demo (single -f in noxfile) picks it up automatically.
+    # Needs docker compose >= v2.15.0 (the `cgroup` service key).
+    cgroup: host
     command:
       - run
       - --stability.level=experimental
@@ -66,6 +74,11 @@ services:
       - /sys:/host/sys:ro
       - /:/rootfs:ro
       - /dev/null:/rootfs/var/run/docker.sock:ro
+      # Canonical cgroupfs for cadvisor (075): the component has no
+      # sysfs_path-style relocation argument. The raw docker.sock stays
+      # masked above; /var/lib/docker is deliberately NOT mounted
+      # (container_fs_* out of scope).
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
     networks:
       - telemetry
       - docker-socket

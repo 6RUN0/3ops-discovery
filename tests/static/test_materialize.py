@@ -23,3 +23,11 @@ def test_materialize_rejects_an_optional_shadowing_a_base_file(
 ) -> None:
     with pytest.raises(FileExistsError, match="collides with a base file"):
         mz.materialize(tmp_path / "cfg", optional=["090_outputs.alloy"])
+
+
+def test_combos_cover_every_overlay_on_disk() -> None:
+    # Nothing else ties COMBOS to the directory: an overlay could sit
+    # on disk (and in manifest 14.5) yet never reach alloy_check.
+    covered = set().union(*mz.COMBOS.values())
+    on_disk = {p.name for p in mz.OPTIONAL_DIR.glob("*.alloy")}
+    assert covered == on_disk

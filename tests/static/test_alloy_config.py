@@ -107,3 +107,21 @@ def test_snmp_scrape_pairs_from_overlay() -> None:
 
 def test_snmp_relabel_modules_allowlist() -> None:
     assert ac.snmp_relabel_modules() == {"if_mib"}
+
+
+def test_cadvisor_relabel_target_labels() -> None:
+    assert ac.cadvisor_relabel_target_labels() == {
+        "collector",
+        "host",
+        "container",
+        "environment",
+        "team",
+        "compose_project",
+        "compose_service",
+    }
+
+
+def test_cadvisor_allowlist_extractor() -> None:
+    labels = ac.cadvisor_allowlisted_labels()
+    assert "ru.3ops.discovery.environment" in labels
+    assert len(labels) == 4
