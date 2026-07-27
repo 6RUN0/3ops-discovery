@@ -48,3 +48,19 @@ def test_dispatcher_covers_allowlist_except_raw_passthrough() -> None:
     # stages, so sets (not counts) are compared.
     expected = ac.log_profile_allowlist() - {"raw-v1"}
     assert ac.dispatcher_profiles() == expected
+
+
+def test_fail_closed_rule_names_the_logs_exception() -> None:
+    # The reference is right and the text was wrong: 8.4 said a profile
+    # outside the allowlist drops the target "as in every other domain",
+    # while 10.3.4 requires that logs never be lost and fall back to
+    # raw-v1. Letting the more specific rule win rescued the meaning,
+    # but a normative document must not need rescuing. Both places that state
+    # the fail-closed rule now have to name the exception.
+    for number in ("8.4", "11"):
+        body = md.section(number)
+        assert "fail-closed" in body, f"section {number} lost the rule"
+        assert "10.3.4" in body, (
+            f"section {number} states fail-closed without the logs "
+            f"exception of 10.3.4"
+        )

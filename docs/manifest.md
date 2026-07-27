@@ -116,7 +116,9 @@ Only the first spelling may be used.
 
 ### `ru.3ops.discovery.enabled`
 
-The mandatory flag that opts a container into discovery for the metrics, database, blackbox, otel and ipmi domains.
+The mandatory flag that opts a container into discovery for the metrics, database and blackbox domains: without `enabled == true` a container does not enter the pipeline of those domains.
+
+Declaring and reading are different things, and they do not coincide everywhere. For the otel and ipmi domains the label is declared by the same rule, but neither the reference nor any implementation reads it: the OTLP receiver of otel is shared and static and cannot relate a push to the container that declared the label (section [10.5](#105-domain-otel)), while ipmi has no domain pipeline on the Alloy side at all (section [10.7](#107-domain-ipmi)). For those two domains `enabled` is an inventory declaration of intent rather than a control flag; the contract cannot require an implementation to read it.
 
 Exception: the `logs` domain collects stdout/stderr of every container by default and does not require this label (see section [10.3.1](#1031-default-collection-policy)). The `snmp` domain is driven by a device file rather than by Docker labels (section [10.6](#106-domain-snmp)), so the global `enabled` does not apply to it.
 
@@ -381,7 +383,7 @@ extended-v1
 
 The profiles make it possible to control the load without accepting arbitrary settings from labels. They are selected through `ru.3ops.discovery.database.profile`; the default is `standard-v1`.
 
-A database profile governs the collection volume of the exporter -- which collectors query the database -- rather than the scrape cadence: the scrape profiles of section [8.2](#82-scrape-profiles) apply to the `metrics` and `blackbox` domains only. The load is monotonic: basic <= standard <= extended. `standard-v1` matches the default collector set of the exporter; an incompatible change of the set requires a new profile name (section [8.1](#81-general-rules)). A value outside the allowlist drops the target entirely (fail-closed), as in every other domain with profiles.
+A database profile governs the collection volume of the exporter -- which collectors query the database -- rather than the scrape cadence: the scrape profiles of section [8.2](#82-scrape-profiles) apply to the `metrics` and `blackbox` domains only. The load is monotonic: basic <= standard <= extended. `standard-v1` matches the default collector set of the exporter; an incompatible change of the set requires a new profile name (section [8.1](#81-general-rules)). A value outside the allowlist drops the target entirely (fail-closed) -- as in the metrics and blackbox domains. The `logs` domain is the single exception and the only domain where an unknown profile does not drop the target: logs are not lost, `raw-v1` applies (section [10.3.4](#1034-unknown-profile)). The fail-closed rule holds for every domain except logs.
 
 The mapping of profiles onto collectors in the reference configuration ([alloy/030_database.alloy](../alloy/030_database.alloy)); the extended sets only include collectors that work on a vanilla database without extensions or special server settings:
 
@@ -909,12 +911,12 @@ The reference configuration ships no ipmi overlay (unlike [`037_snmp.alloy`](../
 
 The minimal checks before a pipeline is created:
 
-- `enabled == true` -- except for the logs domain (see section [10.3.1](#1031-default-collection-policy));
+- `enabled == true` -- except for the logs domain (see section [10.3.1](#1031-default-collection-policy)); for the otel and ipmi domains the check does not apply: their labels are declarative and no pipeline is created from them (section [5](#5-global-labels));
 - `version` is supported (in `0.2` the check is reserved -- see section [5](#5-global-labels));
 - `domain.enabled == true`;
 - `type` belongs to the allowlist;
 - `port` is a number in 1..65535;
-- `profile` belongs to the profile allowlist of the domain (section [8](#8-profiles));
+- `profile` belongs to the profile allowlist of the domain (section [8](#8-profiles)) -- except for the logs domain, where an unknown profile does not drop the container but results in `raw-v1` (section [10.3.4](#1034-unknown-profile));
 - `secret-id` matches the allowlist regex;
 - `path` starts with `/`;
 - `scheme` belongs to the allowlist.
