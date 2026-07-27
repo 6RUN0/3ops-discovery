@@ -373,7 +373,11 @@ def stack(
         pytest.skip("docker daemon is not available; e2e needs it")
 
     host_journal = Path("/var/log/journal").is_dir()
-    optional = ["060_otel.alloy", "070_host-metrics.alloy"]
+    optional = [
+        "060_otel.alloy",
+        "070_host-metrics.alloy",
+        "075_container-metrics.alloy",
+    ]
     extra_compose_files: list[str] = []
     if host_journal:
         optional.append("080_host-logs.alloy")
