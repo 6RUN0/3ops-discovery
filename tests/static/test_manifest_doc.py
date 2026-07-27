@@ -77,3 +77,9 @@ def test_snmp_scrape_profiles_anchor() -> None:
     assert profiles == {
         "snmp-standard-v1": {"interval": "60s", "timeout": "30s"}
     }
+
+
+def test_provenance_labels_anchor() -> None:
+    labels = md.provenance_labels()
+    assert {"container", "collector", "instance"} <= labels
+    assert len(labels) == 8

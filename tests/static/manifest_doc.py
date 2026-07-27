@@ -197,6 +197,18 @@ def loki_label_allowlist() -> set[str]:
     return set(code_block("6.2").split())
 
 
+def provenance_labels() -> set[str]:
+    """Section 6.1: label names Alloy must attach when available."""
+    names = {
+        line.split("=")[0].strip()
+        for line in code_block("6.1").splitlines()
+        if line.strip()
+    }
+    if not names:
+        raise AnchorError("no provenance labels parsed from section 6.1")
+    return names
+
+
 def env_defaults() -> dict[str, str]:
     """Section 14.1: RU_3OPS_DISCOVERY_* variable -> literal default."""
     return {
