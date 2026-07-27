@@ -43,3 +43,47 @@ def test_checker_flags_broken_fragment_and_path(tmp_path: Path) -> None:
 def test_repo_markdown_links_resolve() -> None:
     for md in dl.markdown_files():
         assert dl.broken_links(md) == [], f"broken links in {md}"
+
+
+def test_checker_flags_a_section_number_spilling_out_of_a_link(
+    tmp_path: Path,
+) -> None:
+    # The exact defect this check exists for, as it shipped in the
+    # changelog: the reader sees "§10.x" but only "§1" is clickable and
+    # it lands on section 1. Both links resolve, so broken_links -- which
+    # only asks whether an anchor exists -- stays silent on it.
+    md = tmp_path / "doc.md"
+    md.write_text(
+        "## 10. Домены\n\n"
+        "shipped defect: [§1](#10-домены)0.x\n"
+        "fine: [§10](#10-домены), and a sentence ending in "
+        "[§10](#10-домены).\n",
+        encoding="utf-8",
+    )
+    assert dl.spilled_section_links(md) == ["[§1](#10-домены)"]
+    assert dl.broken_links(md) == []
+
+
+def test_links_quoted_as_inline_code_are_not_checked(tmp_path: Path) -> None:
+    # The changelog quotes a broken link on purpose to describe the
+    # defect a gate catches. Backticked markdown is never rendered, so
+    # it is documentation, not a reference -- while a heading titled
+    # entirely in backticks must keep its anchor (manifest 5 does that).
+    md = tmp_path / "doc.md"
+    md.write_text(
+        "### `ru.3ops.discovery.enabled`\n\n"
+        "quoted defect: `[§1](#1-purpose)0.x` is what went wrong\n"
+        "quoted dead link: `[x](no/such.md)`\n"
+        "real link: [here](#ru3opsdiscoveryenabled)\n",
+        encoding="utf-8",
+    )
+    assert dl.broken_links(md) == []
+    assert dl.spilled_section_links(md) == []
+    assert "ru3opsdiscoveryenabled" in dl.heading_slugs(md)
+
+
+def test_no_section_number_spills_out_of_a_link() -> None:
+    for md in dl.markdown_files():
+        assert dl.spilled_section_links(md) == [], (
+            f"a section number continues past the link in {md}"
+        )

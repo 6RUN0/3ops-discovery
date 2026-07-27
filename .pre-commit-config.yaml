@@ -38,7 +38,7 @@ repos:
           (?x)^tests/(
             .*__init__\.py$|
             .*conftest\.py$|
-            static/(manifest_doc|alloy_config|asymmetries|doc_links)\.py$|
+            static/(manifest_doc|alloy_config|asymmetries|doc_links|translation)\.py$|
             e2e/stack/
           )
 

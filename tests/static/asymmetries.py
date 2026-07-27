@@ -80,3 +80,10 @@ SNMP_SCRAPE_PROFILES_UNIMPLEMENTED: dict[str, str] = {}
 #: (cisco_device was deliberately cut from the manifest, see the 0.1.x
 #: changelog, so its entry left this table with it).
 SNMP_MODULES_UNIMPLEMENTED: dict[str, str] = {}
+
+#: Table rows a translation carries beyond its Russian original, keyed by
+#: the translated file. README.md documents docs/manifest.md itself, a row
+#: the Russian README has no reason to carry. test_translation.py demands
+#: exact equality against this number in both directions, so a phantom
+#: entry fails the gate just as a new undeclared row does.
+TRANSLATION_EXTRA_TABLE_ROWS: dict[str, int] = {"README.md": 1}
