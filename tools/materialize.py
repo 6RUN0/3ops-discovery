@@ -40,6 +40,27 @@ COMBOS: dict[str, tuple[str, ...]] = {
     "all-snmp": (*_ALL_OVERLAYS, "037_snmp.alloy"),
 }
 
+#: Files that are NOT *.alloy but without which an overlay cannot load.
+#: A top-level local.file is resolved when the graph is built, so a
+#: missing path makes the component unhealthy at load time -- `validate`
+#: fails, never mind a scrape. The requirement is a property of the
+#: overlay, so it is declared beside the overlay list rather than as a
+#: branch in whoever happens to materialize a directory; it used to live
+#: in three unconnected places (the alloy_check session, the e2e
+#: fixture, the demo session) held together by a comment.
+PROVIDER_FILES: dict[str, tuple[str, ...]] = {
+    "037_snmp.alloy": ("snmp_targets.yaml", "snmp_auths.yaml"),
+}
+
+
+def provider_files(optional: Iterable[str]) -> tuple[str, ...]:
+    """Return the non-.alloy files a chosen set of overlays requires."""
+    return tuple(
+        name
+        for overlay in optional
+        for name in PROVIDER_FILES.get(overlay, ())
+    )
+
 
 def materialize(dest: Path, optional: Iterable[str] = ()) -> Path:
     """
@@ -53,8 +74,12 @@ def materialize(dest: Path, optional: Iterable[str] = ()) -> Path:
     # A reused dest (alloy_check materializes into nox's persistent tmp)
     # must not keep files deleted or deselected since the last run:
     # validate would silently bless a graph that no longer exists.
-    for stale in dest.glob("*.alloy"):
-        stale.unlink()
+    stale_names = {*(p.name for p in dest.glob("*.alloy"))}
+    stale_names |= {
+        name for names in PROVIDER_FILES.values() for name in names
+    }
+    for name in stale_names:
+        (dest / name).unlink(missing_ok=True)
     base_files = sorted(BASE_DIR.glob("*.alloy"))
     if not base_files:
         raise FileNotFoundError(f"no *.alloy files in {BASE_DIR}")

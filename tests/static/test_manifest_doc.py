@@ -84,3 +84,28 @@ def test_provenance_labels_anchor() -> None:
     labels = md.provenance_labels()
     assert {"container", "collector", "instance"} <= labels
     assert len(labels) == 8
+
+
+def test_an_anchor_addresses_its_own_section_not_the_subtree() -> None:
+    # section() keeps subsections, because a gate reading prose wants the
+    # whole domain; table() and code_block() must not, because they
+    # address by POSITION. Section 10.1 has no table of its own -- the
+    # labels table belongs to 10.1.1 -- so a subtree-wide anchor would
+    # hand back the subsection's table under the parent's number.
+    assert "10.1.1" in md.section("10.1")
+    assert "10.1.1" not in md.section("10.1", subsections=False)
+    with pytest.raises(md.AnchorError):
+        md.table("10.1")
+
+
+def test_a_numbered_document_title_fails_as_a_missing_anchor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The stop-regex is built as "#{2,level}"; at level 1 that is invalid
+    # rather than merely unmatched, so it raised re.error instead of the
+    # error type every caller handles. The real manifest has no numbered
+    # level-1 heading, which is why this needs a substitute document
+    # rather than an anchor into the real one.
+    monkeypatch.setattr(md, "_text", lambda: "# 1. Title\n\nbody\n")
+    with pytest.raises(md.AnchorError, match="document title"):
+        md.section("1")

@@ -25,7 +25,7 @@ from typing import Any
 import pytest
 import requests
 
-from tools.materialize import materialize
+from tools.materialize import COMBOS, materialize
 from tools.snmp_fixtures import write_snmp_fixtures
 from tools.stack_secrets import write_secrets
 
@@ -104,10 +104,35 @@ class Stack:
         assert payload["status"] == "success", payload
         return list(payload["data"]["result"])
 
+    def _check_scope(self, logql: str, scoped: bool) -> None:
+        """
+        Refuse a query that could read another stack's data.
+
+        Both session-scoped stacks share one Docker daemon, and log
+        discovery is unfiltered by contract (logs are collected by
+        default). So Alloy of stack A really does read the containers of
+        stack B into its own Loki, and both stacks are built from the
+        SAME compose file -- the container names are identical. Isolation
+        therefore rests on the promoted compose_project label, and that
+        is a discipline worth enforcing at the door rather than
+        remembering at each call site.
+        """
+        if scoped and "compose_project=" not in logql:
+            raise AssertionError(
+                f"unscoped LogQL selector {logql!r}: add compose_project, "
+                f"or pass scoped=False if the stream has no compose labels"
+            )
+
     def loki_entries(
-        self, logql: str, *, since: str = "30m", limit: int = 5000
+        self,
+        logql: str,
+        *,
+        since: str = "30m",
+        limit: int = 5000,
+        scoped: bool = True,
     ) -> list[tuple[str, str]]:
         """All (timestamp, line) entries for a LogQL query, paginated."""
+        self._check_scope(logql, scoped)
         end_ns = time.time_ns()
         start_ns = end_ns - int(_to_seconds(since) * 1e9)
         entries: list[tuple[str, str]] = []
@@ -135,8 +160,11 @@ class Stack:
             # Advance past the newest returned timestamp.
             start_ns = max(int(ts) for ts, _line in batch) + 1
 
-    def loki_series(self, match: str) -> list[dict[str, str]]:
+    def loki_series(
+        self, match: str, *, scoped: bool = True
+    ) -> list[dict[str, str]]:
         """Label sets of all streams matching the selector."""
+        self._check_scope(match, scoped)
         resp = requests.get(
             f"{self.loki_url}/loki/api/v1/series",
             params={"match[]": match, "since": "30m"},
@@ -457,16 +485,31 @@ def snmp_stack(
         ],
         auths={},
     )
+    # The all-snmp combination, not 037 alone: it is the exact merged
+    # graph `nox -s demo` hands a reader, and it had no runtime coverage
+    # at all -- the main fixture runs 060+070+075, this one ran 037 by
+    # itself, and nothing ever loaded the two together outside `validate`.
+    host_journal = Path("/var/log/journal").is_dir()
+    optional = [
+        name
+        for name in COMBOS["all-snmp"]
+        if name != "080_host-logs.alloy" or host_journal
+    ]
+    extra_compose_files = (
+        ["-f", str(STACK_DIR / "docker-compose.host-logs.yml")]
+        if host_journal
+        else []
+    )
     spec = _StackSpec(
         project=f"xad-snmp-{uuid.uuid4().hex[:8]}",
-        optional=["037_snmp.alloy"],
+        optional=optional,
         secrets_dir=secrets_dir,
         extra_env={
             "RU_3OPS_DISCOVERY_E2E_SNMP_DIR": str(snmp_dir),
             **write_secrets(secrets_dir),
         },
-        extra_compose_files=[],
-        host_journal=False,
+        extra_compose_files=extra_compose_files,
+        host_journal=host_journal,
     )
     yield from _bring_up(
         spec, request=request, tmp_path_factory=tmp_path_factory

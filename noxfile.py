@@ -145,7 +145,7 @@ def alloy_check(session: nox.Session) -> None:
     materialized into a temp dir and mounted as one read-only volume,
     exercising the same overlay mechanism the e2e stack uses.
     """
-    from tools.materialize import COMBOS, materialize
+    from tools.materialize import COMBOS, materialize, provider_files
     from tools.snmp_fixtures import write_snmp_fixtures
 
     if shutil.which("docker") is None:
@@ -161,12 +161,13 @@ def alloy_check(session: nox.Session) -> None:
             (Path(session.create_tmp()) / combo).resolve(), optional
         )
         docker_env: list[str] = []
-        if "037_snmp.alloy" in optional:
-            # 037's top-level local.file components need the device + auth
-            # files present even to `validate`. Empty stubs are enough: an
-            # empty device list is 0 targets (healthy-idle) and `auths: {}`
-            # merges cleanly over the built-in snmp.yml. Both files live inside
-            # the single /etc/alloy mount, so point SECRETS_DIR there too.
+        if provider_files(optional):
+            # An overlay whose top-level local.file needs a side-car file
+            # cannot even be validated without it. Empty stubs are
+            # enough: an empty device list is 0 targets (healthy-idle)
+            # and `auths: {}` merges cleanly over the built-in snmp.yml.
+            # Both files live inside the single /etc/alloy mount, so
+            # point SECRETS_DIR there too.
             write_snmp_fixtures(config_dir, config_dir, devices=[], auths={})
             docker_env = ["-e", "RU_3OPS_DISCOVERY_SECRETS_DIR=/etc/alloy"]
         unformatted = [

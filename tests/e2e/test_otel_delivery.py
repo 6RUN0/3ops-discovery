@@ -27,7 +27,14 @@ def test_otlp_logs_reach_loki_only_via_otlp(stack: Stack) -> None:
     # entry proves the OTLP logs path.
     wait_until(
         lambda: (
-            stack.loki_entries('{service_name="app-otel"}', since="30m")
+            stack.loki_entries(
+                # The OTLP path produces no provenance (manifest 10.5),
+                # so an OTLP stream has no compose_project to scope by --
+                # and both stacks run an app-otel of the same name.
+                '{service_name="app-otel"}',
+                since="30m",
+                scoped=False,
+            )
             or None
         ),
         timeout=LOGS_BUDGET + 30,
@@ -37,7 +44,10 @@ def test_otlp_logs_reach_loki_only_via_otlp(stack: Stack) -> None:
 
 def test_otlp_stream_labels_within_allowlist(stack: Stack) -> None:
     streams = wait_until(
-        lambda: stack.loki_series('{service_name="app-otel"}') or None,
+        lambda: (
+            stack.loki_series('{service_name="app-otel"}', scoped=False)
+            or None
+        ),
         timeout=LOGS_BUDGET + 30,
         desc="app-otel stream present",
     )

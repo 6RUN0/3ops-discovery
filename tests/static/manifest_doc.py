@@ -29,15 +29,30 @@ def _text() -> str:
     return MANIFEST.read_text(encoding="utf-8")
 
 
-def section(number: str) -> str:
-    """Return the body of the section numbered ``number`` (e.g. "8.2")."""
+def section(number: str, *, subsections: bool = True) -> str:
+    """
+    Return the body of the section numbered ``number`` (e.g. "8.2").
+
+    With ``subsections=False`` the body stops at the first heading of any
+    deeper level, so a positional anchor addresses THIS section's own
+    tables and blocks and cannot be redirected by a table added to a
+    subsection below it.
+    """
     heading = re.search(rf"(?m)^(#+) {re.escape(number)}\. .*$", _text())
     if heading is None:
         raise AnchorError(f"manifest section {number} not found")
     level = len(heading.group(1))
     body = _text()[heading.end() :]
+    if not subsections:
+        # Any heading at all ends the section's own body.
+        stop = re.search(r"(?m)^#+ ", body)
+        return body[: stop.start()] if stop else body
     # A section ends at the next heading of the same or higher level;
-    # deeper subsections stay inside the body.
+    # deeper subsections stay inside the body. Level 1 has nothing above
+    # it, so the "{2,level}" quantifier would be invalid rather than
+    # merely unmatched -- guard it instead of raising re.error.
+    if level < 2:
+        raise AnchorError(f"section {number} is a document title, not a body")
     stop = re.search(rf"(?m)^#{{2,{level}}} ", body)
     return body[: stop.start()] if stop else body
 
@@ -58,8 +73,8 @@ def _code_blocks(body: str) -> list[str]:
 def code_block(
     number: str, index: int = 0, *, after: str | None = None
 ) -> str:
-    """Fenced block #index of a section, optionally after a marker line."""
-    body = section(number)
+    """Fenced block #index of a section's own body, after a marker line."""
+    body = section(number, subsections=False)
     if after is not None:
         pos = body.find(after)
         if pos < 0:
@@ -83,11 +98,29 @@ def yaml_blocks(number: str) -> list[str]:
     return blocks
 
 
-def table(number: str, index: int = 0) -> list[dict[str, str]]:
-    """Pipe table #index of a section as a list of row dicts."""
+def table(
+    number: str, index: int = 0, *, after: str | None = None
+) -> list[dict[str, str]]:
+    """
+    Pipe table #index of a section's OWN body, as a list of row dicts.
+
+    Own body, not the whole subtree: a positional anchor over the subtree
+    silently follows a table inserted into a subsection above the
+    intended one, and a one-sided check survives that quietly. ``after``
+    names the table by a preceding marker line where position alone is
+    too weak an address.
+    """
+    body = section(number, subsections=False)
+    if after is not None:
+        pos = body.find(after)
+        if pos < 0:
+            raise AnchorError(
+                f"marker {after!r} not found in manifest section {number}"
+            )
+        body = body[pos:]
     rows: list[list[str]] = []
     tables: list[list[list[str]]] = []
-    for line in section(number).splitlines():
+    for line in body.splitlines():
         if line.startswith("|"):
             rows.append([c.strip() for c in line.strip("|").split("|")])
         elif rows:
@@ -99,8 +132,8 @@ def table(number: str, index: int = 0) -> list[dict[str, str]]:
         raise AnchorError(
             f"table #{index} not found in manifest section {number}"
         )
-    header, _separator, *body = tables[index]
-    return [dict(zip(header, row, strict=True)) for row in body]
+    header, _separator, *data_rows = tables[index]
+    return [dict(zip(header, row, strict=True)) for row in data_rows]
 
 
 def _plain(cell: str) -> str:

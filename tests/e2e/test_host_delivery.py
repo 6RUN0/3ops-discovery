@@ -36,7 +36,9 @@ def test_journal_logs_delivered(stack: Stack) -> None:
     # host/collector/source. The ephemeral Loki receives only from this
     # stack, so an unscoped selector on source="journal" is sound.
     streams = wait_until(
-        lambda: stack.loki_series('{source="journal"}'),
+        # Journal streams come from the host, not from a container, so
+        # they carry no compose labels to scope by (manifest 14.5).
+        lambda: stack.loki_series('{source="journal"}', scoped=False),
         timeout=LOGS_BUDGET,
         desc="journal streams in Loki",
     )

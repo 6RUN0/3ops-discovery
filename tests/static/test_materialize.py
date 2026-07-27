@@ -1,9 +1,11 @@
 """tools.materialize: overlay composition and collision guard."""
 
+import re
 from pathlib import Path
 
 import pytest
 
+from tests.static import alloy_config as ac
 from tools import materialize as mz
 
 
@@ -51,3 +53,49 @@ def test_combos_cover_every_overlay_on_disk() -> None:
     covered = set().union(*mz.COMBOS.values())
     on_disk = {p.name for p in mz.OPTIONAL_DIR.glob("*.alloy")}
     assert covered == on_disk
+
+
+def test_every_file_provider_overlay_declares_its_side_cars() -> None:
+    # The completeness half of PROVIDER_FILES. A top-level local.file is
+    # resolved when the graph is built, so an overlay that grows one and
+    # is not listed here fails `validate` with a missing path -- but only
+    # in the combination that selects it, and only once someone runs the
+    # Docker gate. Derived from the config so the table cannot lag.
+    needing: set[str] = set()
+    for name, text in ac.optional_sources().items():
+        if re.search(r'(?m)^local\.file "', text):
+            needing.add(name)
+    assert set(mz.PROVIDER_FILES) == needing, (
+        "PROVIDER_FILES disagrees with the overlays that declare a "
+        "top-level local.file"
+    )
+
+
+def test_provider_files_are_collected_per_combination() -> None:
+    assert mz.provider_files(()) == ()
+    assert mz.provider_files(("060_otel.alloy",)) == ()
+    snmp = mz.provider_files(("037_snmp.alloy",))
+    assert set(snmp) == {"snmp_targets.yaml", "snmp_auths.yaml"}
+    # And every combination that selects the overlay gets them, which is
+    # what the alloy_check session now branches on instead of matching a
+    # file name it happens to know.
+    for combo, optional in mz.COMBOS.items():
+        expected = "037_snmp.alloy" in optional
+        assert bool(mz.provider_files(optional)) is expected, (
+            f"combo {combo} disagrees about needing provider files"
+        )
+
+
+def test_materialize_clears_stale_provider_files(tmp_path: Path) -> None:
+    # A reused directory that keeps a device file from a previous run
+    # would let a combination WITHOUT the snmp overlay validate against
+    # files it does not declare -- the same class as the stale *.alloy
+    # the glob already handled.
+    dest = tmp_path / "cfg"
+    mz.materialize(dest, ("037_snmp.alloy",))
+    (dest / "snmp_targets.yaml").write_text("[]", encoding="utf-8")
+    (dest / "snmp_auths.yaml").write_text("auths: {}", encoding="utf-8")
+    mz.materialize(dest, ())
+    assert not (dest / "snmp_targets.yaml").exists()
+    assert not (dest / "snmp_auths.yaml").exists()
+    assert not (dest / "037_snmp.alloy").exists()
