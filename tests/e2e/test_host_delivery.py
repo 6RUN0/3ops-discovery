@@ -43,7 +43,7 @@ def test_journal_logs_delivered(stack: Stack) -> None:
             LogQuery(stream={"source": "journal"}, scoped=False)
         ),
         timeout=LOGS_BUDGET,
-        desc="journal streams in Loki",
+        desc="journal streams in the log store",
     )
     labels = streams[0]
     assert labels["collector"] == "alloy"

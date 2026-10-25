@@ -106,7 +106,7 @@ def test_burst_no_loss(stack: Stack) -> None:
     seqs = wait_until(
         _all_delivered,
         timeout=LOGS_BUDGET * 3,
-        desc=f"all {BURST_TOTAL} burst lines in Loki",
+        desc=f"all {BURST_TOTAL} burst lines in the log store",
         interval=5.0,
     )
     assert seqs == list(range(BURST_TOTAL)), (

@@ -34,7 +34,7 @@ def test_otlp_logs_reach_loki_only_via_otlp(stack: Stack) -> None:
     wait_until(
         lambda: stack.log_entries(_OTEL_STREAM, since="30m") or None,
         timeout=LOGS_BUDGET + 30,
-        desc="otlp log entries in loki",
+        desc="otlp log entries in the log store",
     )
 
 

@@ -1,4 +1,4 @@
-"""Loki delivery assertions: profiles, structured metadata, allowlist."""
+"""Log delivery assertions: profiles, structured metadata, allowlist."""
 
 import json
 import subprocess
@@ -101,7 +101,15 @@ def test_multiport_container_has_one_alloy_tailer(stack: Stack) -> None:
 
 
 def test_multiport_container_lines_are_not_duplicated(stack: Stack) -> None:
-    """Pins: a multi-port container's lines reach storage exactly once."""
+    """
+    Pins: a multi-port container's lines reach storage exactly once.
+
+    Loki drops entries with an identical timestamp and line within one
+    stream at ingest (pkg/chunkenc/unordered.go, v3.6.12), so a duplicate
+    tailer is visible in storage only on VictoriaLogs. On Loki the
+    alloy_internals twin test_multiport_container_has_one_alloy_tailer is
+    the pinned check.
+    """
     entries = wait_until(
         lambda: (
             stack.log_entries(
@@ -240,10 +248,15 @@ def test_unknown_profile_degrades_to_raw(stack: Stack) -> None:
 
 
 def test_silent_optout_is_not_delivered(stack: Stack) -> None:
-    """Pins: an opted-out container has no stream; the control is live."""
-    # Positive control FIRST: prove the container wrote to stdout in the
-    # test window, otherwise "no data" would prove a crash, not the
-    # opt-out.
+    """
+    Pins: an opted-out container has no stream in storage.
+
+    Two positive controls make the absence meaningful: the container
+    wrote to stdout (docker logs), and a collect-by-default container
+    of this compose project has a stream in the same store.
+    """
+    # Positive controls FIRST: otherwise "no data" would prove a crash or
+    # a misdirected store, not the opt-out.
     host_logs = subprocess.run(
         [
             "docker",
@@ -257,6 +270,18 @@ def test_silent_optout_is_not_delivered(stack: Stack) -> None:
         check=True,
     )
     assert host_logs.stdout.strip(), "app-silent produced no stdout"
+    wait_until(
+        lambda: stack.log_streams(
+            LogQuery(
+                stream={
+                    "compose_service": "app-logs-raw",
+                    "compose_project": stack.project,
+                }
+            )
+        ),
+        LOGS_BUDGET,
+        "positive control: a collect-by-default container has a stream",
+    )
     assert not stack.log_streams(
         LogQuery(
             stream={

@@ -33,7 +33,7 @@ map-, и в list-форме.
 | [`docs/manifest.ru.md`](docs/manifest.ru.md) | Нормативный контракт (русскоязычный). Единственный источник истины: имена меток, домены, профили, secret-контракт, требования безопасности, пин версии Alloy. |
 | `alloy/*.alloy` | Референсная конфигурация Alloy: discovery, metrics, database, logs, log-profiles, outputs. |
 | `tests/static/` | Статические гейты: сверяют нормативные факты манифеста с фактической конфигурацией в обе стороны. |
-| `tests/e2e/` | End-to-end стек (`docker compose`): метрики и логи реально доходят до Prometheus и Loki; alloy/prometheus/loki мониторят сами себя через контракт (dogfooding). |
+| `tests/e2e/` | End-to-end стек (`docker compose`): метрики и логи реально доходят до настроенного хранилища (по умолчанию Prometheus + Loki); alloy/prometheus/loki мониторят сами себя через контракт (dogfooding). |
 | [`tools/materialize.py`](tools/materialize.py) | Сборка каталога конфигурации (base ∪ optional) для `alloy_check` и e2e. |
 | `LICENSE` | Лицензия MIT. |
 

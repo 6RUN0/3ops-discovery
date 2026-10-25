@@ -42,7 +42,7 @@ def test_no_generated_credential_reaches_loki(stack: Stack) -> None:
     entries = wait_until(
         lambda: stack.log_entries(query),
         LOGS_BUDGET,
-        "alloy's own logs never arrived in Loki",
+        "alloy's own logs never arrived in the log store",
     )
 
     leaked = {
@@ -51,4 +51,6 @@ def test_no_generated_credential_reaches_loki(stack: Stack) -> None:
         for _ts, line in entries
         if secret in line
     }
-    assert not leaked, f"a generated credential reached Loki: {sorted(leaked)}"
+    assert not leaked, (
+        f"a generated credential reached the log store: {sorted(leaked)}"
+    )

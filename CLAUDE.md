@@ -20,6 +20,9 @@ them together.
   minutes). Subset: `uv run nox -s e2e -- -k logs_delivery` (a file
   path after `--` does not narrow the run: the session always passes
   the whole `tests/e2e` directory to pytest, so filter with `-k`).
+- `uv run nox -s e2e -- -m "not alloy_internals"` - contract conformance
+  subset: checks that do not read Alloy internals, so a second
+  implementation can run them.
 - `uv run nox -s e2e_victoria` - the same e2e suite with VictoriaMetrics +
   VictoriaLogs as the storage (`tests/e2e/stack/docker-compose.victoria.yml`
   overlay); takes `-- -k ...` like `e2e`.
@@ -66,7 +69,10 @@ them together.
   makes `alloy` depend on them) but receive nothing.
 - `@pytest.mark.alloy_internals` marks e2e checks that read Alloy internals
   (UI API, component graph) rather than the contract's output; they run on
-  both storage variants, since Alloy is the collector in both.
+  both storage variants, since Alloy is the collector in both. Loki drops
+  entries with identical timestamp and line in one stream at ingest, so a
+  duplicate tailer is visible in storage only on VictoriaLogs; on Loki the
+  `alloy_internals` twin is the pinned check.
 
 ## Hard rules
 
