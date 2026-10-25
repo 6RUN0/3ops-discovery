@@ -24,6 +24,8 @@ quietly vanish.
 
 import subprocess
 
+import pytest
+
 from tests.e2e.conftest import METRICS_BUDGET, Stack, wait_until
 
 _SERVICE = "db-nosecret"
@@ -59,6 +61,7 @@ def _block_health(stack: Stack) -> dict[str, str]:
     }
 
 
+@pytest.mark.alloy_internals
 def test_a_missing_secret_takes_down_its_whole_database_type(
     stack: Stack,
 ) -> None:

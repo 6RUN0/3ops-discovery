@@ -8,6 +8,7 @@ from tests.e2e.conftest import (
     Stack,
     wait_until,
 )
+from tools.backends import LogQuery
 
 
 def test_node_metrics_delivered(stack: Stack) -> None:
@@ -38,9 +39,11 @@ def test_journal_logs_delivered(stack: Stack) -> None:
     streams = wait_until(
         # Journal streams come from the host, not from a container, so
         # they carry no compose labels to scope by (manifest 14.5).
-        lambda: stack.loki_series('{source="journal"}', scoped=False),
+        lambda: stack.log_streams(
+            LogQuery(stream={"source": "journal"}, scoped=False)
+        ),
         timeout=LOGS_BUDGET,
-        desc="journal streams in Loki",
+        desc="journal streams in the log store",
     )
     labels = streams[0]
     assert labels["collector"] == "alloy"

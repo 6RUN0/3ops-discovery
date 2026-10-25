@@ -36,7 +36,7 @@ the gates that bind the two together and keep them from drifting apart.
 | [`docs/manifest.md`](docs/manifest.md) | English translation of the manifest. Provided for readers; not normative and not covered by the gates. |
 | `alloy/*.alloy` | The reference Alloy configuration: discovery, metrics, database, logs, log profiles, outputs. |
 | `tests/static/` | Static gates: they check the normative facts of the manifest against the actual configuration in both directions. |
-| `tests/e2e/` | End-to-end stack (`docker compose`): metrics and logs really do reach Prometheus and Loki; alloy/prometheus/loki monitor themselves through the contract (dogfooding). |
+| `tests/e2e/` | End-to-end stack (`docker compose`): metrics and logs really do reach the configured storage (Prometheus + Loki by default); alloy/prometheus/loki monitor themselves through the contract (dogfooding). |
 | [`tools/materialize.py`](tools/materialize.py) | Assembles the configuration directory (base union optional) for `alloy_check` and e2e. |
 | `LICENSE` | MIT license. |
 
@@ -63,6 +63,7 @@ Everything runs through `uv run nox`.
 | `uv run nox -s alloy_check` | `alloy fmt -t` + `validate` for every directory combination inside the pinned image. | Docker |
 | `uv run nox -s tests` | Static manifest-vs-config gates plus mini-app units. | no |
 | `uv run nox -s e2e` | Delivery checks against a live compose stack (minutes). | Docker |
+| `uv run nox -s e2e_victoria` | The same delivery checks with VictoriaMetrics + VictoriaLogs as the storage (minutes). | Docker |
 | `uv run nox -s preflight` | Everything at once. | yes |
 
 The Alloy image is pinned **by the manifest** (section [14](docs/manifest.md#14-reference-implementation));

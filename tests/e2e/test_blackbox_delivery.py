@@ -2,6 +2,8 @@
 
 from typing import Any
 
+import pytest
+
 from tests.e2e.conftest import METRICS_BUDGET, Stack, wait_until
 
 #: module -> compose service its probe targets. Service names deliberately
@@ -90,6 +92,7 @@ def test_tls_probe_performed_a_real_handshake(stack: Stack) -> None:
     assert float(series[0]["value"][1]) > 0
 
 
+@pytest.mark.alloy_internals
 def test_only_valid_probe_targets_survive_the_shared_relabel(
     stack: Stack,
 ) -> None:
@@ -119,6 +122,7 @@ def test_only_valid_probe_targets_survive_the_shared_relabel(
     assert _names() == expected
 
 
+@pytest.mark.alloy_internals
 def test_fast_profile_probe_is_routed_to_fast_pair(stack: Stack) -> None:
     # Manifest 8.2 routing across the exporter: probe-tcp declares fast-v1;
     # the raw profile label must survive prometheus.exporter.blackbox up to

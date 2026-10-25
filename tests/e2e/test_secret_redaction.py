@@ -14,6 +14,7 @@ diagnostic it would travel straight into Loki.
 """
 
 from tests.e2e.conftest import LOGS_BUDGET, Stack, wait_until
+from tools.backends import LogQuery
 
 #: Env keys of the per-run generated credentials. Randomised by
 #: tools.stack_secrets, so a match cannot be a coincidence of wording.
@@ -34,11 +35,14 @@ def test_no_generated_credential_reaches_loki(stack: Stack) -> None:
     # Wait for the collector's own stream first: asserting absence over an
     # empty result set proves nothing, so the delivery path has to be
     # demonstrably live before the search means anything.
-    selector = f'{{compose_project="{stack.project}", container=~".*alloy.*"}}'
+    query = LogQuery(
+        stream={"compose_project": stack.project},
+        stream_regex={"container": ".*alloy.*"},
+    )
     entries = wait_until(
-        lambda: stack.loki_entries(selector),
+        lambda: stack.log_entries(query),
         LOGS_BUDGET,
-        "alloy's own logs never arrived in Loki",
+        "alloy's own logs never arrived in the log store",
     )
 
     leaked = {
@@ -47,4 +51,6 @@ def test_no_generated_credential_reaches_loki(stack: Stack) -> None:
         for _ts, line in entries
         if secret in line
     }
-    assert not leaked, f"a generated credential reached Loki: {sorted(leaked)}"
+    assert not leaked, (
+        f"a generated credential reached the log store: {sorted(leaked)}"
+    )

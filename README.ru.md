@@ -33,7 +33,7 @@ map-, и в list-форме.
 | [`docs/manifest.ru.md`](docs/manifest.ru.md) | Нормативный контракт (русскоязычный). Единственный источник истины: имена меток, домены, профили, secret-контракт, требования безопасности, пин версии Alloy. |
 | `alloy/*.alloy` | Референсная конфигурация Alloy: discovery, metrics, database, logs, log-profiles, outputs. |
 | `tests/static/` | Статические гейты: сверяют нормативные факты манифеста с фактической конфигурацией в обе стороны. |
-| `tests/e2e/` | End-to-end стек (`docker compose`): метрики и логи реально доходят до Prometheus и Loki; alloy/prometheus/loki мониторят сами себя через контракт (dogfooding). |
+| `tests/e2e/` | End-to-end стек (`docker compose`): метрики и логи реально доходят до настроенного хранилища (по умолчанию Prometheus + Loki); alloy/prometheus/loki мониторят сами себя через контракт (dogfooding). |
 | [`tools/materialize.py`](tools/materialize.py) | Сборка каталога конфигурации (base ∪ optional) для `alloy_check` и e2e. |
 | `LICENSE` | Лицензия MIT. |
 
@@ -60,6 +60,7 @@ map-, и в list-форме.
 | `uv run nox -s alloy_check` | `alloy fmt -t` + `validate` для каждой комбинации каталогов внутри запиненного образа. | Docker |
 | `uv run nox -s tests` | Статические гейты манифест↔конфиг + юниты мини-приложения. | нет |
 | `uv run nox -s e2e` | Проверки доставки на живом compose-стеке (минуты). | Docker |
+| `uv run nox -s e2e_victoria` | Те же проверки доставки с VictoriaMetrics + VictoriaLogs в роли хранилища (минуты). | Docker |
 | `uv run nox -s preflight` | Всё сразу. | да |
 
 Образ Alloy запинен **манифестом** (раздел [14](docs/manifest.ru.md#14-reference-implementation)); `noxfile.ALLOY_IMAGE`

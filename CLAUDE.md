@@ -20,6 +20,12 @@ them together.
   minutes). Subset: `uv run nox -s e2e -- -k logs_delivery` (a file
   path after `--` does not narrow the run: the session always passes
   the whole `tests/e2e` directory to pytest, so filter with `-k`).
+- `uv run nox -s e2e -- -m "not alloy_internals"` - contract conformance
+  subset: checks that do not read Alloy internals, so a second
+  implementation can run them.
+- `uv run nox -s e2e_victoria` - the same e2e suite with VictoriaMetrics +
+  VictoriaLogs as the storage (`tests/e2e/stack/docker-compose.victoria.yml`
+  overlay); takes `-- -k ...` like `e2e`.
 - `uv run nox -s preflight` — everything.
 - `uv run nox -s release` — build `dist/<name>-<version>.tar.gz` +
   `SHA256SUMS` (contract + reference config + overlays + deployment
@@ -55,6 +61,18 @@ them together.
   labels (dogfooding).
 - `tools/materialize.py` — builds the config dir (base + optional)
   for both alloy_check and the e2e mount.
+- e2e storage: `RU_3OPS_DISCOVERY_E2E_BACKEND` (`prometheus-loki`, the
+  default, or `victoria`; anything else is a usage error before docker
+  starts) picks the `BackendSpec` in `tests/e2e/conftest.py`; checks query
+  logs through `tools.backends.LogQuery`, so one test runs on either store.
+  In the victoria variant Prometheus and Loki still run (the base compose
+  makes `alloy` depend on them) but receive nothing.
+- `@pytest.mark.alloy_internals` marks e2e checks that read Alloy internals
+  (UI API, component graph) rather than the contract's output; they run on
+  both storage variants, since Alloy is the collector in both. Loki drops
+  entries with identical timestamp and line in one stream at ingest, so a
+  duplicate tailer is visible in storage only on VictoriaLogs; on Loki the
+  `alloy_internals` twin is the pinned check.
 
 ## Hard rules
 
@@ -83,4 +101,11 @@ them together.
   valid.
 - The manifest is Russian-only by design; code, comments, commits and
   shipped markdown are English.
+- VictoriaLogs in e2e runs with `-loki.disableMessageParsing`: without it
+  a JSON line pushed over the Loki API is unpacked into fields and `_msg`
+  no longer holds the line, so the structured-metadata checks would pass
+  on fields the store made up rather than on what Alloy sent.
+- VictoriaMetrics in e2e runs with `-search.latencyOffset=1s`: the default
+  30s offset hides fresh samples from queries for 30s, longer than the
+  delivery budgets allow.
 - Conventional Commits; no AI-attribution trailers.

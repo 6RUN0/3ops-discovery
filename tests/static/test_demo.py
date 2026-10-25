@@ -51,10 +51,20 @@ def test_the_alloy_api_is_not_published_beyond_loopback() -> None:
     # collector shares a network with what it scrapes (manifest 13.3).
     # The host boundary is the one that IS enforceable, so it is the one
     # pinned here: loopback, ephemeral port, never 0.0.0.0.
-    text = _COMPOSE.read_text("utf-8")
-    published = re.findall(r'^\s*- "([^"]*:\d+|\d+):\d+"', text, re.MULTILINE)
-    assert published, "no published ports found in compose"
-    for mapping in published:
+    files = sorted(_STACK.glob("docker-compose*.yml"))
+    assert _STACK / "docker-compose.victoria.yml" in files
+    published = [
+        (path.name, mapping)
+        for path in files
+        for mapping in re.findall(
+            r'^\s*- "([^"]*:\d+|\d+):\d+"',
+            path.read_text("utf-8"),
+            re.MULTILINE,
+        )
+    ]
+    names = {name for name, _ in published}
+    assert {"docker-compose.yml", "docker-compose.victoria.yml"} <= names
+    for name, mapping in published:
         assert mapping.startswith("127.0.0.1:"), (
-            f"port {mapping} is published beyond loopback"
+            f"{name}: port {mapping} is published beyond loopback"
         )

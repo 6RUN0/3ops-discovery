@@ -12,6 +12,7 @@ fails loudly without them -- the fully offline set is
     uv run nox -s lint          # pre-commit hooks on all files
     uv run nox -s tests         # static consistency + mini-app units
     uv run nox -s e2e           # docker compose delivery checks
+    uv run nox -s e2e_victoria  # the same on VictoriaMetrics + VictoriaLogs
     uv run nox -s preflight     # everything
 """
 
@@ -210,13 +211,28 @@ def e2e(session: nox.Session) -> None:
     healthchecks, the mini-app image build, and a metrics budget of
     RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL + 30s scrape + flush.
     """
+    session.env["RU_3OPS_DISCOVERY_E2E_BACKEND"] = "prometheus-loki"
+    _uv(session, "pytest", "tests/e2e", "-o", "timeout=900", *session.posargs)
+
+
+@nox.session
+def e2e_victoria(session: nox.Session) -> None:
+    """Run the e2e suite against VictoriaMetrics + VictoriaLogs."""
+    session.env["RU_3OPS_DISCOVERY_E2E_BACKEND"] = "victoria"
     _uv(session, "pytest", "tests/e2e", "-o", "timeout=900", *session.posargs)
 
 
 @nox.session
 def preflight(session: nox.Session) -> None:
     """Queue every gate except interactive ones."""
-    for name in ("lint", "docs_lint", "alloy_check", "tests", "e2e"):
+    for name in (
+        "lint",
+        "docs_lint",
+        "alloy_check",
+        "tests",
+        "e2e",
+        "e2e_victoria",
+    ):
         session.notify(name)
 
 
