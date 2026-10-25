@@ -25,7 +25,15 @@ from typing import Any
 import pytest
 import requests
 
-from tools.backends import LogQuery, LogRecord, LogsBackend, LokiBackend
+from tools.backends import (
+    BACKEND_NAMES,
+    LogQuery,
+    LogRecord,
+    LogsBackend,
+    LokiBackend,
+    VictoriaLogsBackend,
+    selected_backend,
+)
 from tools.materialize import COMBOS, materialize
 from tools.snmp_fixtures import write_snmp_fixtures
 from tools.stack_secrets import write_secrets
@@ -38,6 +46,67 @@ ARTIFACTS_DIR = Path(__file__).parent / "_artifacts"
 METRICS_BUDGET = 120.0
 #: Logs stream continuously; their budget is tens of seconds.
 LOGS_BUDGET = 60.0
+
+
+@dataclass(frozen=True)
+class BackendSpec:
+    """
+    How one storage variant plugs into the compose stack.
+
+    compose_files: extra `-f` arguments layered over the base compose file.
+    metrics_service / logs_service: compose services whose published ports
+        serve the Prometheus query API and the log query API.
+    *_ready_path: HTTP path answering 2xx once the store accepts queries.
+    logs_factory: builds the `LogsBackend` from the logs base URL.
+    """
+
+    compose_files: tuple[str, ...]
+    metrics_service: str
+    metrics_port: int
+    metrics_ready_path: str
+    logs_service: str
+    logs_port: int
+    logs_ready_path: str
+    logs_factory: Callable[[str], LogsBackend]
+
+
+BACKENDS: dict[str, BackendSpec] = {
+    "prometheus-loki": BackendSpec(
+        compose_files=(),
+        metrics_service="prometheus",
+        metrics_port=9090,
+        metrics_ready_path="/-/ready",
+        logs_service="loki",
+        logs_port=3100,
+        logs_ready_path="/ready",
+        logs_factory=LokiBackend,
+    ),
+    "victoria": BackendSpec(
+        compose_files=("-f", str(STACK_DIR / "docker-compose.victoria.yml")),
+        metrics_service="victoriametrics",
+        metrics_port=8428,
+        metrics_ready_path="/health",
+        logs_service="victorialogs",
+        logs_port=9428,
+        logs_ready_path="/health",
+        logs_factory=VictoriaLogsBackend,
+    ),
+}
+if set(BACKENDS) != set(BACKEND_NAMES):
+    raise RuntimeError(
+        f"conftest BACKENDS {sorted(BACKENDS)} != "
+        f"tools.backends.BACKEND_NAMES {sorted(BACKEND_NAMES)}"
+    )
+
+_BACKEND_KEY = pytest.StashKey[str]()
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Resolve the storage variant once, before collection touches docker."""
+    try:
+        config.stash[_BACKEND_KEY] = selected_backend(os.environ)
+    except ValueError as exc:
+        raise pytest.UsageError(str(exc)) from exc
 
 
 def _docker_ready() -> bool:
@@ -253,6 +322,24 @@ def _collect_diagnostics(stack: Stack, out_dir: Path) -> None:
             )
         except requests.RequestException as exc:
             (out_dir / name).write_text(str(exc), encoding="utf-8")
+    if stack.backend == "victoria":
+        _write_victorialogs_streams(
+            stack, out_dir / "victorialogs-streams.json"
+        )
+
+
+def _write_victorialogs_streams(stack: Stack, path: Path) -> None:
+    """Dump this project's VictoriaLogs streams for a failed run."""
+    try:
+        streams = stack.log_streams(
+            LogQuery(stream={"compose_project": stack.project})
+        )
+        path.write_text(
+            json.dumps(streams, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except (requests.RequestException, ValueError) as exc:
+        path.write_text(str(exc), encoding="utf-8")
 
 
 @dataclass(frozen=True)
@@ -271,6 +358,7 @@ class _StackSpec:
     extra_env: dict[str, str]
     extra_compose_files: list[str]
     host_journal: bool
+    backend: str
 
 
 def _bring_up(
@@ -296,9 +384,11 @@ def _bring_up(
         "RU_3OPS_DISCOVERY_E2E_SECRETS_DIR": str(spec.secrets_dir),
         **spec.extra_env,
     }
+    backend = BACKENDS[spec.backend]
     compose_files = [
         "-f",
         str(STACK_DIR / "docker-compose.yml"),
+        *backend.compose_files,
         *spec.extra_compose_files,
     ]
     compose_cmd = ("docker", "compose", "-p", spec.project, *compose_files)
@@ -328,21 +418,28 @@ def _bring_up(
         )
         pytest.fail(f"compose up failed:\n{up.stdout}\n{up.stderr}")
 
-    metrics_url = _compose_port(compose_cmd, env, "prometheus", 9090)
-    logs_url = _compose_port(compose_cmd, env, "loki", 3100)
+    metrics_url = _compose_port(
+        compose_cmd, env, backend.metrics_service, backend.metrics_port
+    )
+    logs_url = _compose_port(
+        compose_cmd, env, backend.logs_service, backend.logs_port
+    )
     instance = Stack(
         project=spec.project,
         compose_cmd=compose_cmd,
         env=env,
         metrics_url=metrics_url,
-        logs=LokiBackend(logs_url),
-        backend="prometheus-loki",
+        logs=backend.logs_factory(logs_url),
+        backend=spec.backend,
         alloy_url=_compose_port(compose_cmd, env, "alloy", 12345),
         host_journal=spec.host_journal,
     )
     for name, url in (
-        ("prometheus", f"{metrics_url}/-/ready"),
-        ("loki", f"{logs_url}/ready"),
+        (
+            backend.metrics_service,
+            f"{metrics_url}{backend.metrics_ready_path}",
+        ),
+        (backend.logs_service, f"{logs_url}{backend.logs_ready_path}"),
         ("alloy", f"{instance.alloy_url}/-/ready"),
     ):
         wait_until(
@@ -391,6 +488,7 @@ def stack(
         extra_env=write_secrets(secrets_dir),
         extra_compose_files=extra_compose_files,
         host_journal=host_journal,
+        backend=request.config.stash[_BACKEND_KEY],
     )
     yield from _bring_up(
         spec, request=request, tmp_path_factory=tmp_path_factory
@@ -473,6 +571,7 @@ def snmp_stack(
         },
         extra_compose_files=extra_compose_files,
         host_journal=host_journal,
+        backend=request.config.stash[_BACKEND_KEY],
     )
     yield from _bring_up(
         spec, request=request, tmp_path_factory=tmp_path_factory

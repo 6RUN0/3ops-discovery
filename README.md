@@ -63,6 +63,7 @@ Everything runs through `uv run nox`.
 | `uv run nox -s alloy_check` | `alloy fmt -t` + `validate` for every directory combination inside the pinned image. | Docker |
 | `uv run nox -s tests` | Static manifest-vs-config gates plus mini-app units. | no |
 | `uv run nox -s e2e` | Delivery checks against a live compose stack (minutes). | Docker |
+| `uv run nox -s e2e_victoria` | The same delivery checks with VictoriaMetrics + VictoriaLogs as the storage (minutes). | Docker |
 | `uv run nox -s preflight` | Everything at once. | yes |
 
 The Alloy image is pinned **by the manifest** (section [14](docs/manifest.md#14-reference-implementation));

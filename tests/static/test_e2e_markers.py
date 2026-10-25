@@ -64,9 +64,7 @@ def _module_is_marked(tree: ast.Module) -> bool:
 
 def _function_is_marked(node: ast.FunctionDef) -> bool:
     """Whether a function carries the marker as a decorator."""
-    return any(
-        _is_marker(n) for d in node.decorator_list for n in ast.walk(d)
-    )
+    return any(_is_marker(n) for d in node.decorator_list for n in ast.walk(d))
 
 
 def _reads_alloy(
@@ -130,8 +128,7 @@ def test_every_alloy_ui_reader_is_marked() -> None:
     unmarked, found = _unmarked_readers()
     assert found > 0, "positive control: no Alloy-reading test found"
     assert not unmarked, (
-        f"tests reading Alloy internals lack @pytest.mark.{MARKER}: "
-        f"{unmarked}"
+        f"tests reading Alloy internals lack @pytest.mark.{MARKER}: {unmarked}"
     )
 
 

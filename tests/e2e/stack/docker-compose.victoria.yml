@@ -1,0 +1,49 @@
+---
+services:
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.154.1
+    command: ["-retentionPeriod=1d", "-search.latencyOffset=1s"]
+    networks:
+      - telemetry
+    expose:
+      - "8428"
+    ports:
+      - "127.0.0.1:0:8428"
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+      ru.3ops.discovery.metrics.enabled: "true"
+      ru.3ops.discovery.metrics.type: "prometheus"
+      ru.3ops.discovery.metrics.port: "8428"
+      ru.3ops.discovery.metrics.job: "victoriametrics"
+
+  victorialogs:
+    image: victoriametrics/victoria-logs:v1.53.0
+    command: ["-retentionPeriod=1d", "-loki.disableMessageParsing"]
+    networks:
+      - telemetry
+    expose:
+      - "9428"
+    ports:
+      - "127.0.0.1:0:9428"
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+      ru.3ops.discovery.metrics.enabled: "true"
+      ru.3ops.discovery.metrics.type: "prometheus"
+      ru.3ops.discovery.metrics.port: "9428"
+      ru.3ops.discovery.metrics.job: "victorialogs"
+
+  alloy:
+    environment:
+      RU_3OPS_DISCOVERY_REMOTE_WRITE_URL: http://victoriametrics:8428/api/v1/write
+      RU_3OPS_DISCOVERY_LOKI_PUSH_URL: http://victorialogs:9428/insert/loki/api/v1/push
+    depends_on:
+      victoriametrics:
+        condition: service_started
+      victorialogs:
+        condition: service_started

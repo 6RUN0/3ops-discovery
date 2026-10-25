@@ -19,11 +19,30 @@ from typing import Any, Protocol
 import requests
 
 _SCOPE_LABEL = "compose_project"
+#: Storage variants the e2e suite can run against; the first is the default.
+BACKEND_NAMES: tuple[str, ...] = ("prometheus-loki", "victoria")
+_BACKEND_ENV = "RU_3OPS_DISCOVERY_E2E_BACKEND"
 _SIMPLE_ESCAPES = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t"}
 _UNESCAPES = {"\\": "\\", '"': '"', "n": "\n", "t": "\t"}
 #: Code points below this, and DEL, are written as `\xNN`.
 _FIRST_PRINTABLE = 0x20
 _DEL = 0x7F
+
+
+def selected_backend(env: Mapping[str, str]) -> str:
+    """
+    Return the e2e storage variant named by `RU_3OPS_DISCOVERY_E2E_BACKEND`.
+
+    Unset means `prometheus-loki`; an unknown name raises ValueError, so a
+    typo fails the run instead of silently testing the default store.
+    """
+    name = env.get(_BACKEND_ENV, BACKEND_NAMES[0])
+    if name not in BACKEND_NAMES:
+        raise ValueError(
+            f"{_BACKEND_ENV}={name!r} is not one of: "
+            + ", ".join(BACKEND_NAMES)
+        )
+    return name
 
 
 @dataclass(frozen=True)
@@ -333,6 +352,26 @@ def _rfc3339_to_ns(stamp: str) -> str:
     return str(seconds * 10**_NS_DIGITS + int(frac.ljust(_NS_DIGITS, "0")))
 
 
+def parse_json_lines(text: str) -> list[dict[str, Any]]:
+    """
+    Parse a JSON-lines body, one object per non-empty line.
+
+    A bad line raises ValueError naming its 1-based number and text: the
+    bare decoder error gives only a character offset into the whole body.
+    """
+    rows = []
+    for number, line in enumerate(text.splitlines(), start=1):
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"bad JSON on line {number} of the response: {line!r}"
+            ) from exc
+    return rows
+
+
 def victorialogs_rows_to_records(
     rows: Iterable[Mapping[str, str]],
 ) -> list[LogRecord]:
@@ -378,8 +417,7 @@ class VictoriaLogsBackend:
             timeout=30,
         )
         resp.raise_for_status()
-        rows = [json.loads(line) for line in resp.text.splitlines() if line]
-        return victorialogs_rows_to_records(rows)
+        return victorialogs_rows_to_records(parse_json_lines(resp.text))
 
     def entries(
         self, query: LogQuery, *, since: str = "30m"

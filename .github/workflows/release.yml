@@ -23,7 +23,8 @@ jobs:
   release:
     name: verify, build and publish
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # timeout = 1.5 x measured preflight
+    timeout-minutes: 19
     permissions:
       # Creating the release and uploading its assets.
       contents: write

@@ -60,6 +60,7 @@ map-, и в list-форме.
 | `uv run nox -s alloy_check` | `alloy fmt -t` + `validate` для каждой комбинации каталогов внутри запиненного образа. | Docker |
 | `uv run nox -s tests` | Статические гейты манифест↔конфиг + юниты мини-приложения. | нет |
 | `uv run nox -s e2e` | Проверки доставки на живом compose-стеке (минуты). | Docker |
+| `uv run nox -s e2e_victoria` | Те же проверки доставки с VictoriaMetrics + VictoriaLogs в роли хранилища (минуты). | Docker |
 | `uv run nox -s preflight` | Всё сразу. | да |
 
 Образ Alloy запинен **манифестом** (раздел [14](docs/manifest.ru.md#14-reference-implementation)); `noxfile.ALLOY_IMAGE`
