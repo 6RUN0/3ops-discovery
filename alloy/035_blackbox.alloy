@@ -16,7 +16,7 @@
 // the three stay equal); add a profile by copying a thin filter/scrape
 // pair.
 //
-// prometheus.exporter.blackbox is GA in v1.17.1: no experimental flag.
+// prometheus.exporter.blackbox is GA in v1.21.2: no experimental flag.
 
 discovery.relabel "blackbox" {
 	targets = discovery.docker.containers.targets

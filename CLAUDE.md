@@ -59,7 +59,7 @@ them together.
 ## Hard rules
 
 - The Alloy image tag is pinned BY THE MANIFEST (section 14, currently
-  v1.17.1); `noxfile.ALLOY_IMAGE` must match — a static test enforces
+  v1.21.2); `noxfile.ALLOY_IMAGE` must match - a static test enforces
   it. `foreach` is experimental: always `--stability.level=experimental`.
 - Contract values (scrape intervals, label names, defaults) are never
   changed to make a test pass; e2e accelerates only

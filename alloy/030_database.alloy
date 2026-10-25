@@ -7,7 +7,7 @@
 // network by name, manifest section 14).
 // The DSN is read from a secret file via local.file; labels carry only
 // the logical secret id, never credentials.
-// The foreach block is experimental as of Alloy v1.17: run and validate
+// The foreach block is experimental as of Alloy v1.21: run and validate
 // with --stability.level=experimental.
 //
 // Every exporter's own targets carry only __address__, so the discovery

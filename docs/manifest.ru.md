@@ -1076,10 +1076,10 @@ Labels декларируются самим контейнером, поэто�
 alloy run --stability.level=experimental alloy/
 ```
 
-Флаг `--stability.level=experimental` необходим для блока `foreach` (experimental в Alloy v1.17). Синтаксическая проверка без запуска:
+Флаг `--stability.level=experimental` необходим для блока `foreach` (experimental в Alloy v1.21). Синтаксическая проверка без запуска:
 
 ```sh
-docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.17.1 \
+docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.21.2 \
   validate --stability.level=experimental /etc/alloy
 ```
 

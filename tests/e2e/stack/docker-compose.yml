@@ -45,7 +45,7 @@ services:
       - docker-socket
 
   alloy:
-    image: grafana/alloy:v1.17.1
+    image: grafana/alloy:v1.21.2
     # Host cgroup namespace for 075_container-metrics (cadvisor): on
     # cgroup v2 a private namespace shows only the container's own
     # subtree, hiding every sibling. Inline on purpose (not a

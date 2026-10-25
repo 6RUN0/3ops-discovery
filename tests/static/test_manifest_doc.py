@@ -61,7 +61,7 @@ def test_base_files_anchor() -> None:
 
 
 def test_alloy_image_tag_anchor() -> None:
-    assert md.alloy_image_tag() == "v1.17.1"
+    assert md.alloy_image_tag() == "v1.21.2"
 
 
 def test_counterexamples_not_extracted() -> None:

@@ -33,7 +33,7 @@ The `--stability.level=experimental` flag is required by the `foreach`
 block used by the database domain. Check the syntax without running:
 
 ```sh
-docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.17.1 \
+docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.21.2 \
   validate --stability.level=experimental /etc/alloy
 ```
 
