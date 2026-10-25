@@ -46,6 +46,17 @@ ARTIFACTS_DIR = Path(__file__).parent / "_artifacts"
 METRICS_BUDGET = 120.0
 #: Logs stream continuously; their budget is tens of seconds.
 LOGS_BUDGET = 60.0
+#: systemd in journal-host reaches `running` in about a second on an idle
+#: host; the rest is headroom for a loaded runner.
+JOURNAL_HOST_BOOT_BUDGET = 120.0
+#: One `is-system-running --wait` call; well below the budget, so a hung
+#: call is retried and reported instead of eating the whole budget.
+JOURNAL_HOST_ATTEMPT_TIMEOUT = 30.0
+#: Service that runs systemd as PID 1 and owns the journal 080 reads.
+JOURNAL_HOST = "journal-host"
+#: e2e-only overlay adding journal-host (read-write host cgroup mount);
+#: every e2e fixture passes it, `nox -s demo` never does.
+JOURNAL_HOST_COMPOSE = STACK_DIR / "docker-compose.journal-host.yml"
 
 
 @dataclass(frozen=True)
@@ -171,7 +182,6 @@ class Stack:
     logs: LogsBackend
     backend: str
     alloy_url: str
-    host_journal: bool
 
     def prom_query(self, expr: str) -> list[dict[str, Any]]:
         """Instant PromQL query; returns data.result (possibly empty)."""
@@ -273,6 +283,19 @@ class Stack:
         """Container name of a compose service."""
         return f"{self.project}-{service}-1"
 
+    def compose_exec(
+        self, service: str, *argv: str, timeout: float = 60.0
+    ) -> subprocess.CompletedProcess[str]:
+        """Run ``argv`` in a running service; output captured, no check."""
+        return subprocess.run(
+            [*self.compose_cmd, "exec", "-T", service, *argv],
+            env=self.env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+
 
 def _compose_port(
     compose_cmd: tuple[str, ...],
@@ -326,6 +349,140 @@ def _collect_diagnostics(stack: Stack, out_dir: Path) -> None:
         _write_victorialogs_streams(
             stack, out_dir / "victorialogs-streams.json"
         )
+    _write_journal_host_state(stack, out_dir)
+
+
+def _write_journal_host_state(stack: Stack, out_dir: Path) -> None:
+    """Dump journal-host container state, failed units and journal tail."""
+    (out_dir / "journal-host-container.txt").write_text(
+        _journal_host_container_report(stack), encoding="utf-8"
+    )
+    for name, argv in (
+        (
+            "journal-host-failed-units.txt",
+            ("systemctl", "--failed", "--no-pager"),
+        ),
+        (
+            "journal-host-journal.txt",
+            ("journalctl", "--no-pager", "-n", "300"),
+        ),
+    ):
+        try:
+            proc = stack.compose_exec(JOURNAL_HOST, *argv, timeout=30)
+            text = proc.stdout + proc.stderr
+        except subprocess.TimeoutExpired as exc:
+            text = str(exc)
+        (out_dir / name).write_text(text, encoding="utf-8")
+
+
+class JournalHostBootError(AssertionError):
+    """journal-host exited or did not finish booting within budget."""
+
+
+def _journal_host_status(stack: Stack) -> tuple[str, str]:
+    """Return (state status, exit code) of the journal-host container."""
+    try:
+        proc = subprocess.run(
+            [
+                "docker",
+                "inspect",
+                "--format",
+                "{{.State.Status}} {{.State.ExitCode}}",
+                stack.compose_container(JOURNAL_HOST),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        # Called from boot readiness and diagnostics: a hung daemon must
+        # surface as a status, not replace the boot error being reported.
+        return ("unknown (docker inspect timed out after 30s)", "?")
+    status, _, code = proc.stdout.strip().partition(" ")
+    return (status or f"unknown ({proc.stderr.strip()})", code or "?")
+
+
+def _journal_host_container_report(stack: Stack) -> str:
+    """Container status, exit code and `docker logs` tail as one text."""
+    status, code = _journal_host_status(stack)
+    try:
+        logs = subprocess.run(
+            [
+                "docker",
+                "logs",
+                "--tail=50",
+                stack.compose_container(JOURNAL_HOST),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        tail = logs.stdout + logs.stderr
+    except subprocess.TimeoutExpired:
+        tail = "docker logs timed out after 30s\n"
+    return (
+        f"status={status} exit_code={code}\n"
+        f"--- docker logs --tail=50 ---\n{tail}"
+    )
+
+
+def _journal_host_state(stack: Stack, last_error: list[str]) -> str | None:
+    """
+    Return the boot state once startup settles; None to retry.
+
+    Raises JournalHostBootError at once when the container is not running:
+    an exec into an exited container fails instantly and would otherwise
+    spin until the budget runs out.
+    """
+    # Right after `up` the manager's private socket may not exist yet and
+    # systemctl fails at once; `--wait` then blocks until startup finishes.
+    try:
+        proc = stack.compose_exec(
+            JOURNAL_HOST,
+            "systemctl",
+            "is-system-running",
+            "--wait",
+            timeout=JOURNAL_HOST_ATTEMPT_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        last_error[:] = [
+            f"is-system-running --wait timed out after "
+            f"{JOURNAL_HOST_ATTEMPT_TIMEOUT}s"
+        ]
+        return None
+    state = proc.stdout.strip()
+    if state in ("running", "degraded"):
+        return state
+    last_error[:] = [f"state={state!r} stderr={proc.stderr.strip()!r}"]
+    status, _code = _journal_host_status(stack)
+    if status != "running":
+        raise JournalHostBootError(
+            f"{JOURNAL_HOST} is not running; {last_error[0]}\n"
+            + _journal_host_container_report(stack)
+        )
+    return None
+
+
+def _wait_journal_host(stack: Stack) -> None:
+    """Block until journal-host booted; record failed units if degraded."""
+    last_error: list[str] = []
+    try:
+        state = wait_until(
+            partial(_journal_host_state, stack, last_error),
+            timeout=JOURNAL_HOST_BOOT_BUDGET,
+            desc=f"{JOURNAL_HOST} systemd boot finished",
+        )
+    except ReadinessTimeoutError as exc:
+        raise JournalHostBootError(
+            f"{exc}; last attempt: {last_error[0] if last_error else '-'}\n"
+            + _journal_host_container_report(stack)
+        ) from exc
+    if state == "degraded":
+        out_dir = ARTIFACTS_DIR / stack.project
+        out_dir.mkdir(parents=True, exist_ok=True)
+        _write_journal_host_state(stack, out_dir)
 
 
 def _write_victorialogs_streams(stack: Stack, path: Path) -> None:
@@ -356,8 +513,6 @@ class _StackSpec:
     optional: list[str]
     secrets_dir: Path
     extra_env: dict[str, str]
-    extra_compose_files: list[str]
-    host_journal: bool
     backend: str
 
 
@@ -371,9 +526,9 @@ def _bring_up(
     Bring the compose stack up, yield a ``Stack``, tear it down.
 
     Shared lifecycle for every e2e stack variant (main + snmp): ``spec``
-    carries the overlay set, extra compose files, and extra env (secrets,
-    device-dir); this owns materialize -> pre-clean -> up --build -d --wait ->
-    readiness -> yield -> diagnostics-on-failure -> down -v.
+    carries the overlay set and extra env (secrets, device-dir); this owns
+    materialize -> pre-clean -> up --build -d --wait -> readiness (journal-host
+    boot included) -> yield -> diagnostics-on-failure -> down -v.
     """
     config_dir = materialize(
         tmp_path_factory.mktemp("alloy-config"), optional=spec.optional
@@ -388,8 +543,9 @@ def _bring_up(
     compose_files = [
         "-f",
         str(STACK_DIR / "docker-compose.yml"),
+        "-f",
+        str(JOURNAL_HOST_COMPOSE),
         *backend.compose_files,
-        *spec.extra_compose_files,
     ]
     compose_cmd = ("docker", "compose", "-p", spec.project, *compose_files)
     # Pre-clean leftovers of a crashed previous run.
@@ -418,45 +574,53 @@ def _bring_up(
         )
         pytest.fail(f"compose up failed:\n{up.stdout}\n{up.stderr}")
 
-    metrics_url = _compose_port(
-        compose_cmd, env, backend.metrics_service, backend.metrics_port
-    )
-    logs_url = _compose_port(
-        compose_cmd, env, backend.logs_service, backend.logs_port
-    )
-    instance = Stack(
-        project=spec.project,
-        compose_cmd=compose_cmd,
-        env=env,
-        metrics_url=metrics_url,
-        logs=backend.logs_factory(logs_url),
-        backend=spec.backend,
-        alloy_url=_compose_port(compose_cmd, env, "alloy", 12345),
-        host_journal=spec.host_journal,
-    )
-    for name, url in (
-        (
-            backend.metrics_service,
-            f"{metrics_url}{backend.metrics_ready_path}",
-        ),
-        (backend.logs_service, f"{logs_url}{backend.logs_ready_path}"),
-        ("alloy", f"{instance.alloy_url}/-/ready"),
-    ):
-        wait_until(
-            partial(_endpoint_ok, url),
-            timeout=60,
-            desc=f"{name} readiness endpoint",
+    # From here on the stack runs: any failure, before or after the yield,
+    # must still reach `down -v`, or the privileged journal-host leaks.
+    try:
+        metrics_url = _compose_port(
+            compose_cmd, env, backend.metrics_service, backend.metrics_port
         )
-    failures_before = request.session.testsfailed
-    yield instance
-    if request.session.testsfailed > failures_before:
-        _collect_diagnostics(instance, ARTIFACTS_DIR / spec.project)
-    subprocess.run(
-        [*compose_cmd, "down", "-v"],
-        env=env,
-        capture_output=True,
-        check=False,
-    )
+        logs_url = _compose_port(
+            compose_cmd, env, backend.logs_service, backend.logs_port
+        )
+        instance = Stack(
+            project=spec.project,
+            compose_cmd=compose_cmd,
+            env=env,
+            metrics_url=metrics_url,
+            logs=backend.logs_factory(logs_url),
+            backend=spec.backend,
+            alloy_url=_compose_port(compose_cmd, env, "alloy", 12345),
+        )
+        try:
+            for name, url in (
+                (
+                    backend.metrics_service,
+                    f"{metrics_url}{backend.metrics_ready_path}",
+                ),
+                (backend.logs_service, f"{logs_url}{backend.logs_ready_path}"),
+                ("alloy", f"{instance.alloy_url}/-/ready"),
+            ):
+                wait_until(
+                    partial(_endpoint_ok, url),
+                    timeout=60,
+                    desc=f"{name} readiness endpoint",
+                )
+            _wait_journal_host(instance)
+        except BaseException:
+            _collect_diagnostics(instance, ARTIFACTS_DIR / spec.project)
+            raise
+        failures_before = request.session.testsfailed
+        yield instance
+        if request.session.testsfailed > failures_before:
+            _collect_diagnostics(instance, ARTIFACTS_DIR / spec.project)
+    finally:
+        subprocess.run(
+            [*compose_cmd, "down", "-v"],
+            env=env,
+            capture_output=True,
+            check=False,
+        )
 
 
 @pytest.fixture(scope="session")
@@ -467,27 +631,18 @@ def stack(
     if not _docker_ready():
         pytest.skip("docker daemon is not available; e2e needs it")
 
-    host_journal = Path("/var/log/journal").is_dir()
     optional = [
         "060_otel.alloy",
         "070_host-metrics.alloy",
         "075_container-metrics.alloy",
+        "080_host-logs.alloy",
     ]
-    extra_compose_files: list[str] = []
-    if host_journal:
-        optional.append("080_host-logs.alloy")
-        extra_compose_files = [
-            "-f",
-            str(STACK_DIR / "docker-compose.host-logs.yml"),
-        ]
     secrets_dir = tmp_path_factory.mktemp("alloy-secrets")
     spec = _StackSpec(
         project=f"xad-e2e-{uuid.uuid4().hex[:8]}",
         optional=optional,
         secrets_dir=secrets_dir,
         extra_env=write_secrets(secrets_dir),
-        extra_compose_files=extra_compose_files,
-        host_journal=host_journal,
         backend=request.config.stash[_BACKEND_KEY],
     )
     yield from _bring_up(
@@ -550,27 +705,14 @@ def snmp_stack(
     # graph `nox -s demo` hands a reader, and it had no runtime coverage
     # at all -- the main fixture runs 060+070+075, this one ran 037 by
     # itself, and nothing ever loaded the two together outside `validate`.
-    host_journal = Path("/var/log/journal").is_dir()
-    optional = [
-        name
-        for name in COMBOS["all-snmp"]
-        if name != "080_host-logs.alloy" or host_journal
-    ]
-    extra_compose_files = (
-        ["-f", str(STACK_DIR / "docker-compose.host-logs.yml")]
-        if host_journal
-        else []
-    )
     spec = _StackSpec(
         project=f"xad-snmp-{uuid.uuid4().hex[:8]}",
-        optional=optional,
+        optional=list(COMBOS["all-snmp"]),
         secrets_dir=secrets_dir,
         extra_env={
             "RU_3OPS_DISCOVERY_E2E_SNMP_DIR": str(snmp_dir),
             **write_secrets(secrets_dir),
         },
-        extra_compose_files=extra_compose_files,
-        host_journal=host_journal,
         backend=request.config.stash[_BACKEND_KEY],
     )
     yield from _bring_up(

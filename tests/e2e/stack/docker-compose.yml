@@ -49,9 +49,9 @@ services:
     # Host cgroup namespace for 075_container-metrics (cadvisor): on
     # cgroup v2 a private namespace shows only the container's own
     # subtree, hiding every sibling. Inline on purpose (not a
-    # conditional -f overlay like host-logs): /sys/fs/cgroup always
-    # exists, the privilege is harmless for runs that do not load 075,
-    # and the demo (single -f in noxfile) picks it up automatically.
+    # conditional -f overlay like journal-host): /sys/fs/cgroup always
+    # exists, the privilege is read-only and harmless for runs that do
+    # not load 075, and the demo (single -f in noxfile) picks it up.
     # Needs docker compose >= v2.15.0 (the `cgroup` service key).
     cgroup: host
     command:

@@ -9,7 +9,7 @@
 // metadata would change behaviour and is decided on its own.
 // Requires a persistent journal on the host (/var/log/journal) plus
 // /etc/machine-id;
-// the e2e stack mounts them conditionally (docker-compose.host-logs.yml).
+// the e2e stack supplies one from a systemd container (journal-host).
 
 loki.source.journal "host" {
 	path           = "/var/log/journal"

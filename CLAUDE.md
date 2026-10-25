@@ -51,14 +51,33 @@ them together.
   `060_otel` (OTLP receiver), `070_host-metrics`
   (`prometheus.exporter.unix`, `node_*` series), `080_host-logs`
   (`loki.source.journal`). Composed via `tools.materialize.COMBOS`
-  (alloy_check validates every combination) and the e2e fixture; 080 only
-  when the host has a persistent journal.
+  (alloy_check validates every combination) and the e2e fixture, which
+  loads all of them (080 reads the journal of `journal-host`, below).
 - `tests/static/` — manifest vs config consistency; allowed gaps live
   in `asymmetries.py` as one explicit table.
 - `tests/e2e/stack/` — compose stack: Alloy reaches the Docker API
   only through docker-socket-proxy (GET-only, internal network);
   alloy/prometheus/loki monitor themselves through the contract
   labels (dogfooding).
+- `tests/e2e/stack/journal-host/` + `docker-compose.journal-host.yml` -
+  e2e-only overlay: systemd as PID 1 (debian:trixie-slim, `tmp.mount`
+  masked) writing a persistent journal into the named volume `journal`,
+  which alloy mounts read-only for 080. It exists because CI runners and
+  many dev hosts keep no persistent journal, so a host mount left 080
+  unproven. Run conditions: `cgroup: host`, `/sys/fs/cgroup` read-write,
+  tmpfs `/run` and `/run/lock`; missing any of them, it exits 255 at once
+  with empty `docker logs`. `cgroup: host` plus the rw cgroup mount grant
+  the container write access to the host cgroup tree, so only the e2e
+  fixtures pass the overlay (`-f`); `nox -s demo` uses
+  `noxfile.DEMO_COMPOSE_FILES` without it and drops 080
+  (`DEMO_EXCLUDED_OVERLAYS`), pinned by `tests/static/test_demo.py`. The
+  fixture blocks on `systemctl is-system-running --wait` (via
+  `docker compose exec`) before tests run and fails at once if the
+  container exited; diagnostics (container status, exit code, `docker
+  logs`, `systemctl --failed`, journal tail) land in
+  `tests/e2e/_artifacts/<project>/journal-host-*.txt`. An e2e run without
+  a cached image needs network: the build runs `apt-get` against
+  deb.debian.org (about 2.5 min cold).
 - `tools/materialize.py` — builds the config dir (base + optional)
   for both alloy_check and the e2e mount.
 - e2e storage: `RU_3OPS_DISCOVERY_E2E_BACKEND` (`prometheus-loki`, the

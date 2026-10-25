@@ -261,15 +261,33 @@ def release(session: nox.Session) -> None:
 
 
 COMPOSE_FILE = REPO / "tests" / "e2e" / "stack" / "docker-compose.yml"
+#: Every compose file `nox -s demo` passes with -f. The journal-host overlay
+#: is e2e-only: its read-write host cgroup mount must not reach the
+#: long-lived demo (tests/static/test_demo.py pins this).
+DEMO_COMPOSE_FILES = (COMPOSE_FILE,)
+#: 080 reads the journal only the e2e journal-host overlay provides; the
+#: demo mounts no journal, so 080 would have nothing to read there.
+DEMO_EXCLUDED_OVERLAYS = ("080_host-logs.alloy",)
+
+
+def demo_optional() -> tuple[str, ...]:
+    """Return the optional files the demo loads: all-snmp minus exclusions."""
+    from tools.materialize import COMBOS
+
+    return tuple(
+        name
+        for name in COMBOS["all-snmp"]
+        if name not in DEMO_EXCLUDED_OVERLAYS
+    )
 
 
 def _materialize_demo(dest: Path) -> Path:
-    """Materialize base + every optional file + snmp for the demo."""
-    from tools.materialize import COMBOS, materialize
+    """Materialize base + the demo's optional files + snmp for the demo."""
+    from tools.materialize import materialize
 
     if dest.exists():
         shutil.rmtree(dest)
-    return materialize(dest, COMBOS["all-snmp"])
+    return materialize(dest, demo_optional())
 
 
 @nox.session
@@ -298,8 +316,7 @@ def demo(session: nox.Session) -> None:
         project,
         "--profile",
         "demo",
-        "-f",
-        str(COMPOSE_FILE),
+        *(arg for path in DEMO_COMPOSE_FILES for arg in ("-f", str(path))),
     )
     demo_dir = REPO / ".demo"
     secrets_dir = demo_dir / "secrets"

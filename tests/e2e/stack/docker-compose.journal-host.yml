@@ -1,0 +1,45 @@
+---
+# e2e-only overlay: a host with a persistent systemd journal for
+# 080_host-logs. The e2e fixtures add it with -f; `nox -s demo` does not,
+# so the read-write host cgroup mount never reaches the long-lived demo.
+#
+# systemd runs as PID 1 and journald writes /var/log/journal/<machine-id>
+# into the shared volume. Run conditions of systemd in a container: host
+# cgroup namespace, /sys/fs/cgroup read-write, tmpfs /run and /run/lock;
+# without any of them it exits 255 at once. The rw cgroup mount lets this
+# container write to the host cgroup tree -- acceptable for the ephemeral
+# e2e stack only, never a deployment pattern.
+
+volumes:
+  journal:
+
+services:
+  journal-host:
+    build: ./journal-host
+    cgroup: host
+    tmpfs:
+      - /run
+      - /run/lock
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - journal:/var/log/journal
+    networks:
+      - telemetry
+    labels:
+      # Not a workload under test: its console output stays out of the
+      # docker log path (manifest 10.3.7); version as on every labeled
+      # service of the stack.
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.logs.enabled: "false"
+
+  alloy:
+    volumes:
+      # Not the runner host's journal: CI runners keep none persistently.
+      - journal:/var/log/journal:ro
+    depends_on:
+      # journal-host mounts the empty volume first, so docker seeds it from
+      # that image's /var/log/journal (systemd-journal group, setgid).
+      # service_started is enough: 080 picks up the journal directory as
+      # journald creates it, and the fixture waits for the boot anyway.
+      journal-host:
+        condition: service_started
