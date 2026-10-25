@@ -3,8 +3,14 @@
 import re
 from pathlib import Path
 
+import yaml
+from noxfile import DEMO_COMPOSE_FILES, demo_optional
+
+from tools.materialize import COMBOS
+
 _STACK = Path(__file__).resolve().parents[2] / "tests" / "e2e" / "stack"
 _COMPOSE = _STACK / "docker-compose.yml"
+_JOURNAL_HOST_OVERLAY = _STACK / "docker-compose.journal-host.yml"
 _DATASOURCES = (
     _STACK / "grafana" / "provisioning" / "datasources" / "datasources.yaml"
 )
@@ -68,3 +74,44 @@ def test_the_alloy_api_is_not_published_beyond_loopback() -> None:
         assert mapping.startswith("127.0.0.1:"), (
             f"{name}: port {mapping} is published beyond loopback"
         )
+
+
+def _rw_cgroup_mounts(path: Path) -> list[str]:
+    """Return services of a compose file mounting /sys/fs/cgroup writable."""
+    doc = yaml.safe_load(path.read_text("utf-8"))
+    found = []
+    for name, service in (doc.get("services") or {}).items():
+        for volume in service.get("volumes") or []:
+            if isinstance(volume, dict):
+                target = volume.get("target")
+                writable = not volume.get("read_only", False)
+            else:
+                parts = volume.split(":")
+                target = parts[1] if len(parts) > 1 else parts[0]
+                modes = parts[2].split(",") if len(parts) > 2 else []
+                writable = "ro" not in modes
+            if target == "/sys/fs/cgroup" and writable:
+                found.append(name)
+    return found
+
+
+def test_demo_never_mounts_the_host_cgroup_tree_writable() -> None:
+    # A writable /sys/fs/cgroup lets a container write to the host cgroup
+    # tree. The e2e stack is torn down within minutes; the demo runs for
+    # hours on a developer machine, so journal-host stays out of it.
+    # Positive control: the overlay really carries the mount this gate
+    # looks for, so the check below cannot pass by parsing nothing.
+    assert _rw_cgroup_mounts(_JOURNAL_HOST_OVERLAY) == ["journal-host"]
+    assert _JOURNAL_HOST_OVERLAY not in DEMO_COMPOSE_FILES
+    for path in DEMO_COMPOSE_FILES:
+        assert _rw_cgroup_mounts(path) == [], (
+            f"{path.name}: demo compose mounts /sys/fs/cgroup writable"
+        )
+
+
+def test_demo_does_not_load_host_logs_without_a_journal() -> None:
+    # 080 reads the journal only the e2e journal-host overlay provides;
+    # the control proves the demo's source combination does contain 080,
+    # so its absence below is the exclusion, not a missing overlay.
+    assert "080_host-logs.alloy" in COMBOS["all-snmp"]
+    assert "080_host-logs.alloy" not in demo_optional()
