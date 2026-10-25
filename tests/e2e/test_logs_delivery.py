@@ -1,12 +1,15 @@
 """Loki delivery assertions: profiles, structured metadata, allowlist."""
 
+import json
 import subprocess
+from dataclasses import replace
 from typing import Any
 
 import requests
 
 from tests.e2e.conftest import LOGS_BUDGET, Stack, wait_until
 from tests.static import manifest_doc as md
+from tools.backends import LogQuery, LogRecord
 
 
 def _source_target_containers(stack: Stack) -> set[str]:
@@ -94,9 +97,13 @@ def test_multiport_container_is_tailed_once(stack: Stack) -> None:
     )
     entries = wait_until(
         lambda: (
-            stack.loki_entries(
-                f'{{service_name="app-logs-multiport",'
-                f'compose_project="{stack.project}"}}'
+            stack.log_entries(
+                LogQuery(
+                    stream={
+                        "service_name": "app-logs-multiport",
+                        "compose_project": stack.project,
+                    }
+                )
             )
             or None
         ),
@@ -111,30 +118,55 @@ def test_multiport_container_is_tailed_once(stack: Stack) -> None:
 def test_json_profile_parses_into_structured_metadata(
     stack: Stack,
 ) -> None:
-    base = (
-        f'{{service_name="app-logs-json",compose_project="{stack.project}"}}'
+    base = LogQuery(
+        stream={
+            "service_name": "app-logs-json",
+            "compose_project": stack.project,
+        }
     )
     wait_until(
-        lambda: stack.loki_entries(base),
+        lambda: stack.log_entries(base),
         timeout=LOGS_BUDGET,
         desc="json stream present",
     )
     parsed = wait_until(
-        lambda: stack.loki_entries(base + ' | trace_id=~".+"'),
+        lambda: stack.log_entries(replace(base, field_present="trace_id")),
         timeout=LOGS_BUDGET,
         desc="json structured metadata",
     )
     assert parsed
 
+    # The field arrived as metadata AND the line stayed untouched: the
+    # profile must parse, never rewrite, the body.
+    def _with_trace_id() -> list[LogRecord] | None:
+        return [
+            r for r in stack.log_records(base) if '"trace_id"' in r.line
+        ] or None
+
+    records = wait_until(
+        _with_trace_id,
+        timeout=LOGS_BUDGET,
+        desc="json record with trace_id in the body",
+    )
+    record = records[0]
+    assert "trace_id" in record.fields, record
+    body = json.loads(record.line)
+    assert isinstance(body, dict), record.line
+    assert body["trace_id"] == record.fields["trace_id"], record
+
 
 def test_logfmt_profile_parses_into_structured_metadata(
     stack: Stack,
 ) -> None:
-    base = (
-        f'{{service_name="app-logs-logfmt",compose_project="{stack.project}"}}'
+    base = LogQuery(
+        stream={
+            "service_name": "app-logs-logfmt",
+            "compose_project": stack.project,
+        },
+        field_present="status",
     )
     parsed = wait_until(
-        lambda: stack.loki_entries(base + ' | status=~".+"'),
+        lambda: stack.log_entries(base),
         timeout=LOGS_BUDGET,
         desc="logfmt structured metadata",
     )
@@ -144,11 +176,14 @@ def test_logfmt_profile_parses_into_structured_metadata(
 def test_mixed_stream_is_complete_and_partially_parsed(
     stack: Stack,
 ) -> None:
-    base = (
-        f'{{service_name="app-logs-mixed",compose_project="{stack.project}"}}'
+    base = LogQuery(
+        stream={
+            "service_name": "app-logs-mixed",
+            "compose_project": stack.project,
+        }
     )
     entries = wait_until(
-        lambda: e if len(e := stack.loki_entries(base)) >= 8 else None,
+        lambda: e if len(e := stack.log_entries(base)) >= 8 else None,
         timeout=LOGS_BUDGET,
         desc="mixed stream flowing",
     )
@@ -159,15 +194,19 @@ def test_mixed_stream_is_complete_and_partially_parsed(
     assert any("msg=tick" in line for line in lines)
     assert any("plain tick number" in line for line in lines)
     assert any("operator note" in line for line in lines)
-    parsed = stack.loki_entries(base + ' | trace_id=~".+"')
+    parsed = stack.log_entries(replace(base, field_present="trace_id"))
     assert parsed, "no mixed line gained structured metadata"
 
 
 def test_unlabeled_container_collected_as_raw(stack: Stack) -> None:
     series = wait_until(
-        lambda: stack.loki_series(
-            f'{{compose_service="app-logs-raw",'
-            f'compose_project="{stack.project}"}}'
+        lambda: stack.log_streams(
+            LogQuery(
+                stream={
+                    "compose_service": "app-logs-raw",
+                    "compose_project": stack.project,
+                }
+            )
         ),
         timeout=LOGS_BUDGET,
         desc="raw default stream",
@@ -176,19 +215,21 @@ def test_unlabeled_container_collected_as_raw(stack: Stack) -> None:
 
 
 def test_unknown_profile_degrades_to_raw(stack: Stack) -> None:
+    query = LogQuery(
+        stream={
+            "compose_service": "app-logs-unknown",
+            "compose_project": stack.project,
+        }
+    )
     series = wait_until(
-        lambda: stack.loki_series(
-            f'{{compose_service="app-logs-unknown",'
-            f'compose_project="{stack.project}"}}'
-        ),
+        lambda: stack.log_streams(query),
         timeout=LOGS_BUDGET,
         desc="unknown-profile stream",
     )
     assert all(s["log_profile"] == "raw-v1" for s in series)
-    assert stack.loki_entries(
-        f'{{compose_service="app-logs-unknown",'
-        f'compose_project="{stack.project}"}}',
-    ), "logs were lost instead of degrading to raw-v1"
+    assert stack.log_entries(query), (
+        "logs were lost instead of degrading to raw-v1"
+    )
 
 
 def test_silent_optout_with_positive_control(stack: Stack) -> None:
@@ -208,9 +249,14 @@ def test_silent_optout_with_positive_control(stack: Stack) -> None:
         check=True,
     )
     assert host_logs.stdout.strip(), "app-silent produced no stdout"
-    assert not stack.loki_series(
-        f'{{compose_service="app-silent",compose_project="{stack.project}"}}'
-    ), "opt-out container has a Loki stream"
+    assert not stack.log_streams(
+        LogQuery(
+            stream={
+                "compose_service": "app-silent",
+                "compose_project": stack.project,
+            }
+        )
+    ), "opt-out container has a log stream"
     # The opt-out must exclude the container BEFORE the source (manifest
     # 10.3.1): fed raw discovery targets, the tailer still reads the
     # opt-out container and ships its lines as the empty stream {},
@@ -228,9 +274,13 @@ def test_silent_optout_with_positive_control(stack: Stack) -> None:
 
 def test_python_traceback_is_one_entry(stack: Stack) -> None:
     def _joined() -> list[tuple[str, str]] | None:
-        entries = stack.loki_entries(
-            f'{{service_name="app-logs-pytrace",'
-            f'compose_project="{stack.project}"}}',
+        entries = stack.log_entries(
+            LogQuery(
+                stream={
+                    "service_name": "app-logs-pytrace",
+                    "compose_project": stack.project,
+                }
+            ),
             since="30m",
         )
         joined = [
@@ -255,9 +305,13 @@ def test_python_traceback_is_one_entry(stack: Stack) -> None:
 
 def test_java_traceback_is_one_entry(stack: Stack) -> None:
     def _joined() -> list[tuple[str, str]] | None:
-        entries = stack.loki_entries(
-            f'{{service_name="app-logs-jtrace",'
-            f'compose_project="{stack.project}"}}',
+        entries = stack.log_entries(
+            LogQuery(
+                stream={
+                    "service_name": "app-logs-jtrace",
+                    "compose_project": stack.project,
+                }
+            ),
             since="30m",
         )
         joined = [
@@ -281,7 +335,9 @@ def test_all_stream_labels_within_manifest_allowlist(
 ) -> None:
     allowlist = md.loki_label_allowlist()
     series = wait_until(
-        lambda: stack.loki_series(f'{{compose_project="{stack.project}"}}'),
+        lambda: stack.log_streams(
+            LogQuery(stream={"compose_project": stack.project})
+        ),
         timeout=LOGS_BUDGET,
         desc="any stream for this project",
     )

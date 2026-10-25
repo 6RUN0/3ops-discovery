@@ -25,6 +25,7 @@ from typing import Any
 import pytest
 import requests
 
+from tools.backends import LogQuery, LogRecord, LogsBackend, LokiBackend
 from tools.materialize import COMBOS, materialize
 from tools.snmp_fixtures import write_snmp_fixtures
 from tools.stack_secrets import write_secrets
@@ -82,20 +83,31 @@ def wait_until[T](
 
 @dataclass
 class Stack:
-    """Handles to the running e2e stack."""
+    """
+    Handles to the running e2e stack.
+
+    Both session-scoped stacks share one Docker daemon, and log discovery
+    is unfiltered by contract (logs are collected by default). So Alloy of
+    stack A really does read the containers of stack B into its own log
+    store, and both stacks are built from the SAME compose file -- the
+    container names are identical. Isolation therefore rests on the
+    promoted compose_project label, which `logs` enforces at the door
+    (`tools.backends.check_scope`) rather than at each call site.
+    """
 
     project: str
     compose_cmd: tuple[str, ...]
     env: dict[str, str]
-    prometheus_url: str
-    loki_url: str
+    metrics_url: str
+    logs: LogsBackend
+    backend: str
     alloy_url: str
     host_journal: bool
 
     def prom_query(self, expr: str) -> list[dict[str, Any]]:
-        """Instant query; returns data.result (possibly empty)."""
+        """Instant PromQL query; returns data.result (possibly empty)."""
         resp = requests.get(
-            f"{self.prometheus_url}/api/v1/query",
+            f"{self.metrics_url}/api/v1/query",
             params={"query": expr},
             timeout=10,
         )
@@ -104,74 +116,23 @@ class Stack:
         assert payload["status"] == "success", payload
         return list(payload["data"]["result"])
 
-    def _check_scope(self, logql: str, scoped: bool) -> None:
-        """
-        Refuse a query that could read another stack's data.
+    def log_records(
+        self, query: LogQuery, *, since: str = "30m"
+    ) -> list[LogRecord]:
+        """All records matching the query, ascending by timestamp."""
+        return self.logs.records(query, since=since)
 
-        Both session-scoped stacks share one Docker daemon, and log
-        discovery is unfiltered by contract (logs are collected by
-        default). So Alloy of stack A really does read the containers of
-        stack B into its own Loki, and both stacks are built from the
-        SAME compose file -- the container names are identical. Isolation
-        therefore rests on the promoted compose_project label, and that
-        is a discipline worth enforcing at the door rather than
-        remembering at each call site.
-        """
-        if scoped and "compose_project=" not in logql:
-            raise AssertionError(
-                f"unscoped LogQL selector {logql!r}: add compose_project, "
-                f"or pass scoped=False if the stream has no compose labels"
-            )
-
-    def loki_entries(
-        self,
-        logql: str,
-        *,
-        since: str = "30m",
-        limit: int = 5000,
-        scoped: bool = True,
+    def log_entries(
+        self, query: LogQuery, *, since: str = "30m"
     ) -> list[tuple[str, str]]:
-        """All (timestamp, line) entries for a LogQL query, paginated."""
-        self._check_scope(logql, scoped)
-        end_ns = time.time_ns()
-        start_ns = end_ns - int(_to_seconds(since) * 1e9)
-        entries: list[tuple[str, str]] = []
-        while True:
-            resp = requests.get(
-                f"{self.loki_url}/loki/api/v1/query_range",
-                params={
-                    "query": logql,
-                    "start": str(start_ns),
-                    "end": str(end_ns),
-                    "limit": str(limit),
-                    "direction": "forward",
-                },
-                timeout=30,
-            )
-            resp.raise_for_status()
-            batch = [
-                (value[0], value[1])
-                for stream in resp.json()["data"]["result"]
-                for value in stream["values"]
-            ]
-            entries.extend(batch)
-            if len(batch) < limit:
-                return entries
-            # Advance past the newest returned timestamp.
-            start_ns = max(int(ts) for ts, _line in batch) + 1
+        """All (timestamp, line) entries matching the query."""
+        return self.logs.entries(query, since=since)
 
-    def loki_series(
-        self, match: str, *, scoped: bool = True
+    def log_streams(
+        self, query: LogQuery, *, since: str = "30m"
     ) -> list[dict[str, str]]:
-        """Label sets of all streams matching the selector."""
-        self._check_scope(match, scoped)
-        resp = requests.get(
-            f"{self.loki_url}/loki/api/v1/series",
-            params={"match[]": match, "since": "30m"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        return list(resp.json()["data"])
+        """Label sets of all streams matching the query's selector."""
+        return self.logs.streams(query, since=since)
 
     def alloy_components(self) -> list[dict[str, Any]]:
         """Component list with health from the Alloy UI API."""
@@ -244,11 +205,6 @@ class Stack:
         return f"{self.project}-{service}-1"
 
 
-def _to_seconds(duration: str) -> float:
-    units = {"s": 1.0, "m": 60.0, "h": 3600.0}
-    return float(duration[:-1]) * units[duration[-1]]
-
-
 def _compose_port(
     compose_cmd: tuple[str, ...],
     env: dict[str, str],
@@ -278,10 +234,14 @@ def _collect_diagnostics(stack: Stack, out_dir: Path) -> None:
     (out_dir / "compose-logs.txt").write_text(
         logs.stdout + logs.stderr, encoding="utf-8"
     )
-    for name, url in (
+    sources = [
         ("alloy-components.json", f"{stack.alloy_url}/api/v0/web/components"),
-        ("prometheus-targets.json", f"{stack.prometheus_url}/api/v1/targets"),
-    ):
+    ]
+    if stack.backend == "prometheus-loki":
+        sources.append(
+            ("prometheus-targets.json", f"{stack.metrics_url}/api/v1/targets")
+        )
+    for name, url in sources:
         try:
             (out_dir / name).write_text(
                 json.dumps(
@@ -368,18 +328,21 @@ def _bring_up(
         )
         pytest.fail(f"compose up failed:\n{up.stdout}\n{up.stderr}")
 
+    metrics_url = _compose_port(compose_cmd, env, "prometheus", 9090)
+    logs_url = _compose_port(compose_cmd, env, "loki", 3100)
     instance = Stack(
         project=spec.project,
         compose_cmd=compose_cmd,
         env=env,
-        prometheus_url=_compose_port(compose_cmd, env, "prometheus", 9090),
-        loki_url=_compose_port(compose_cmd, env, "loki", 3100),
+        metrics_url=metrics_url,
+        logs=LokiBackend(logs_url),
+        backend="prometheus-loki",
         alloy_url=_compose_port(compose_cmd, env, "alloy", 12345),
         host_journal=spec.host_journal,
     )
     for name, url in (
-        ("prometheus", f"{instance.prometheus_url}/-/ready"),
-        ("loki", f"{instance.loki_url}/ready"),
+        ("prometheus", f"{metrics_url}/-/ready"),
+        ("loki", f"{logs_url}/ready"),
         ("alloy", f"{instance.alloy_url}/-/ready"),
     ):
         wait_until(

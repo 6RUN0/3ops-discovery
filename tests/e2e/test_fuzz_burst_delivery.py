@@ -1,6 +1,7 @@
 """Fuzz resilience and burst smoke."""
 
 import json
+from dataclasses import replace
 
 from tests.e2e.conftest import (
     LOGS_BUDGET,
@@ -8,16 +9,22 @@ from tests.e2e.conftest import (
     Stack,
     wait_until,
 )
+from tools.backends import LogQuery
 
 BURST_TOTAL = 10_000  # APP_BURST=1000:10 in the compose file
 
 
 def test_fuzz_markers_survive_garbage(stack: Stack) -> None:
-    base = f'{{service_name="app-fuzz",compose_project="{stack.project}"}}'
+    base = LogQuery(
+        stream={"service_name": "app-fuzz", "compose_project": stack.project}
+    )
     markers = wait_until(
         lambda: (
             m
-            if len(m := stack.loki_entries(base + ' |= "fuzz-marker"')) >= 2
+            if len(
+                m := stack.log_entries(replace(base, contains="fuzz-marker"))
+            )
+            >= 2
             else None
         ),
         timeout=LOGS_BUDGET * 2,
@@ -30,9 +37,14 @@ def test_fuzz_markers_survive_garbage(stack: Stack) -> None:
 def test_fuzz_valid_unicode_preserved(stack: Stack) -> None:
     emoji = chr(0x1F600)
     entries = wait_until(
-        lambda: stack.loki_entries(
-            f'{{service_name="app-fuzz",'
-            f'compose_project="{stack.project}"}} |= "{emoji}"'
+        lambda: stack.log_entries(
+            LogQuery(
+                stream={
+                    "service_name": "app-fuzz",
+                    "compose_project": stack.project,
+                },
+                contains=emoji,
+            )
         ),
         timeout=LOGS_BUDGET,
         desc="emoji line delivered intact",
@@ -75,15 +87,15 @@ def test_fuzz_gauge_extremes_delivered_exactly(stack: Stack) -> None:
 
 
 def test_burst_no_loss(stack: Stack) -> None:
-    base = (
-        f'{{service_name="app-burst",'
-        f'compose_project="{stack.project}"}} |= "\\"event\\": \\"burst\\""'
+    base = LogQuery(
+        stream={"service_name": "app-burst", "compose_project": stack.project},
+        contains='"event": "burst"',
     )
 
     def _all_delivered() -> list[int] | None:
         seqs = sorted(
             json.loads(line)["seq"]
-            for _ts, line in stack.loki_entries(base)
+            for _ts, line in stack.log_entries(base)
             if json.loads(line).get("event") == "burst"
         )
         return seqs if len(seqs) >= BURST_TOTAL else None

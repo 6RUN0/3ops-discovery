@@ -7,6 +7,12 @@ from tests.e2e.conftest import (
     wait_until,
 )
 from tests.static import manifest_doc as md
+from tools.backends import LogQuery
+
+#: The OTLP path produces no provenance (manifest 10.5), so an OTLP stream
+#: has no compose_project to scope by -- and both stacks run an app-otel
+#: of the same name.
+_OTEL_STREAM = LogQuery(stream={"service_name": "app-otel"}, scoped=False)
 
 
 def test_otlp_metrics_reach_prometheus(stack: Stack) -> None:
@@ -26,17 +32,7 @@ def test_otlp_logs_reach_loki_only_via_otlp(stack: Stack) -> None:
     # app-otel sets logs.enabled=false, so the docker path is off; any
     # entry proves the OTLP logs path.
     wait_until(
-        lambda: (
-            stack.loki_entries(
-                # The OTLP path produces no provenance (manifest 10.5),
-                # so an OTLP stream has no compose_project to scope by --
-                # and both stacks run an app-otel of the same name.
-                '{service_name="app-otel"}',
-                since="30m",
-                scoped=False,
-            )
-            or None
-        ),
+        lambda: stack.log_entries(_OTEL_STREAM, since="30m") or None,
         timeout=LOGS_BUDGET + 30,
         desc="otlp log entries in loki",
     )
@@ -44,10 +40,7 @@ def test_otlp_logs_reach_loki_only_via_otlp(stack: Stack) -> None:
 
 def test_otlp_stream_labels_within_allowlist(stack: Stack) -> None:
     streams = wait_until(
-        lambda: (
-            stack.loki_series('{service_name="app-otel"}', scoped=False)
-            or None
-        ),
+        lambda: stack.log_streams(_OTEL_STREAM) or None,
         timeout=LOGS_BUDGET + 30,
         desc="app-otel stream present",
     )
