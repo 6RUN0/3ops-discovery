@@ -34,7 +34,7 @@ nox.options.sessions = ["lint", "docs_lint", "alloy_check", "tests"]
 #: Exactly the tag pinned by the manifest (section 14): foreach is
 #: experimental and its semantics may drift between Alloy versions.
 #: tests/static/test_reference_files.py asserts this equality.
-ALLOY_IMAGE = "grafana/alloy:v1.17.1"
+ALLOY_IMAGE = "grafana/alloy:v1.21.2"
 
 
 def _uv(session: nox.Session, *args: str) -> None:

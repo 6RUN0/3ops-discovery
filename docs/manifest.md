@@ -1080,10 +1080,10 @@ The reference Alloy configuration lives in the [`alloy/`](../alloy/) directory a
 alloy run --stability.level=experimental alloy/
 ```
 
-The `--stability.level=experimental` flag is required by the `foreach` block (experimental in Alloy v1.17). A syntax check without running:
+The `--stability.level=experimental` flag is required by the `foreach` block (experimental in Alloy v1.21). A syntax check without running:
 
 ```sh
-docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.17.1 \
+docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.21.2 \
   validate --stability.level=experimental /etc/alloy
 ```
 
