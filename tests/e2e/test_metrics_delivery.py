@@ -2,6 +2,8 @@
 
 from typing import Any
 
+import pytest
+
 from tests.e2e.conftest import METRICS_BUDGET, Stack, wait_until
 
 
@@ -95,6 +97,7 @@ def test_provenance_labels_on_native_series(stack: Stack) -> None:
     assert labels["host"]
 
 
+@pytest.mark.alloy_internals
 def test_fast_profile_target_is_routed_to_fast_pair(stack: Stack) -> None:
     # Manifest 8.2 routing: rabbitmq declares fast-v1, so its target must
     # carry the raw profile label through the shared relabel and land in
@@ -125,6 +128,7 @@ def test_fast_profile_target_is_routed_to_fast_pair(stack: Stack) -> None:
     assert not any(t.get(name_label) == rabbitmq for t in normal)
 
 
+@pytest.mark.alloy_internals
 def test_unmarked_target_reaches_only_the_default_pair(stack: Stack) -> None:
     # The other direction, which nothing checked. app-metrics declares no
     # profile at all, so it belongs to normal-v1 and to nothing else. If a
@@ -154,6 +158,7 @@ def test_unmarked_target_reaches_only_the_default_pair(stack: Stack) -> None:
         )
 
 
+@pytest.mark.alloy_internals
 def test_badsecret_target_is_dropped(stack: Stack) -> None:
     # The path-traversal secret-id ("bad/../id") must fail the manifest
     # section 9 keep-rule in 030, so the database relabel keeps ONLY the

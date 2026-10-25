@@ -5,6 +5,7 @@ import subprocess
 from dataclasses import replace
 from typing import Any
 
+import pytest
 import requests
 
 from tests.e2e.conftest import LOGS_BUDGET, Stack, wait_until
@@ -69,7 +70,9 @@ def _tailer_container_ids(detail: dict[str, Any]) -> list[str]:
     return ids
 
 
-def test_multiport_container_is_tailed_once(stack: Stack) -> None:
+@pytest.mark.alloy_internals
+def test_multiport_container_has_one_alloy_tailer(stack: Stack) -> None:
+    """Pins: one tailer per container despite the per-port target fan-out."""
     # discovery.docker emits one target per exposed TCP port (and only
     # for the FIRST network: match_first_network defaults to true, so
     # ports are the live fan-out trigger); 040 relies on
@@ -77,7 +80,7 @@ def test_multiport_container_is_tailed_once(stack: Stack) -> None:
     # app-logs-multiport exposes two ports, so first PROVE the fan-out
     # reaches the source (>= 2 targets carrying one container ID --
     # without that precondition the dedup claim would be vacuously
-    # green), then assert a single tailer and no duplicate delivery.
+    # green), then assert a single tailer.
     container = "/" + stack.compose_container("app-logs-multiport")
 
     def _fanout() -> tuple[dict[str, Any], str] | None:
@@ -95,6 +98,10 @@ def test_multiport_container_is_tailed_once(stack: Stack) -> None:
     assert _tailer_container_ids(detail).count(container_id) == 1, (
         "loki.source.docker runs more than one tailer for one container"
     )
+
+
+def test_multiport_container_lines_are_not_duplicated(stack: Stack) -> None:
+    """Pins: a multi-port container's lines reach storage exactly once."""
     entries = wait_until(
         lambda: (
             stack.log_entries(
@@ -232,7 +239,8 @@ def test_unknown_profile_degrades_to_raw(stack: Stack) -> None:
     )
 
 
-def test_silent_optout_with_positive_control(stack: Stack) -> None:
+def test_silent_optout_is_not_delivered(stack: Stack) -> None:
+    """Pins: an opted-out container has no stream; the control is live."""
     # Positive control FIRST: prove the container wrote to stdout in the
     # test window, otherwise "no data" would prove a crash, not the
     # opt-out.
@@ -257,12 +265,16 @@ def test_silent_optout_with_positive_control(stack: Stack) -> None:
             }
         )
     ), "opt-out container has a log stream"
-    # The opt-out must exclude the container BEFORE the source (manifest
-    # 10.3.1): fed raw discovery targets, the tailer still reads the
-    # opt-out container and ships its lines as the empty stream {},
-    # which no Loki series selector can see -- exactly how the old
-    # wiring kept this test green. Assert on the source's own targets,
-    # with an in-band positive control proving the API read works.
+
+
+@pytest.mark.alloy_internals
+def test_silent_optout_has_no_alloy_tailer(stack: Stack) -> None:
+    """Pins: the opt-out precedes the source (manifest 10.3.1)."""
+    # Fed raw discovery targets, the tailer still reads the opt-out
+    # container and ships its lines as the empty stream {}, which no
+    # Loki series selector can see -- exactly how the old wiring kept
+    # the storage check green. Assert on the source's own targets, with
+    # an in-band positive control proving the API read works.
     tailed = _source_target_containers(stack)
     assert stack.compose_container("app-logs-raw") in tailed, (
         "positive control: collected container missing from source targets"

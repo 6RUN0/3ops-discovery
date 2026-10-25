@@ -1,5 +1,7 @@
 """The stack comes up healthy and Alloy loads the full config."""
 
+import pytest
+
 from tests.e2e.conftest import Stack
 
 
@@ -8,6 +10,7 @@ def _health_state(component: dict[str, object]) -> object:
     return health.get("state") if isinstance(health, dict) else None
 
 
+@pytest.mark.alloy_internals
 def test_alloy_components_are_healthy(stack: Stack) -> None:
     components = stack.alloy_components()
     assert components, "Alloy reported no components"

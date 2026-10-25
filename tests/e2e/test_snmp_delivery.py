@@ -2,6 +2,8 @@
 
 from typing import Any
 
+import pytest
+
 from tests.e2e.conftest import METRICS_BUDGET, Stack, wait_until
 
 
@@ -44,6 +46,7 @@ def test_system_module_delivers_device_identity(snmp_stack: Stack) -> None:
     assert series[0]["metric"]["instance"] == "snmp-agent:161"
 
 
+@pytest.mark.alloy_internals
 def test_valid_devices_are_kept_and_invalid_dropped(snmp_stack: Stack) -> None:
     # Fail-closed control: the fixture provisions three devices, one with a
     # module outside the (if_mib|system) allowlist. Exactly the two valid e2e

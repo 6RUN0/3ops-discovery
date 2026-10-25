@@ -122,6 +122,9 @@ enable_error_code = [
 testpaths = ["tests/static", "tests/app"]
 addopts = "-ra --strict-config --strict-markers"
 xfail_strict = true
+markers = [
+  "alloy_internals: reads Alloy internals (UI API, component graph); not a contract check",
+]
 filterwarnings = ["error"]
 # A hung static test must fail fast; the e2e session overrides this
 # budget on the command line (-o timeout=900).

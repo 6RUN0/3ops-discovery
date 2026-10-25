@@ -3,6 +3,8 @@
 import json
 from dataclasses import replace
 
+import pytest
+
 from tests.e2e.conftest import (
     LOGS_BUDGET,
     METRICS_BUDGET,
@@ -52,6 +54,7 @@ def test_fuzz_valid_unicode_preserved(stack: Stack) -> None:
     assert entries
 
 
+@pytest.mark.alloy_internals
 def test_alloy_stays_healthy_under_fuzz(stack: Stack) -> None:
     unhealthy = [
         c
