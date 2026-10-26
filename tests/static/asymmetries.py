@@ -194,3 +194,10 @@ SERIES_CELLS_UNCATALOGUED: dict[tuple[str, str], str] = {
         "mongodb/extended-v1",
     ): "the e2e mongodb runs the default standard-v1",
 }
+
+#: Catalog series an implementation is allowed not to deliver, or to deliver
+#: without the cataloged identity labels, as (implementation, domain, cell,
+#: series) -> reason. test_series_parity.py subtracts the "alloy" rows from
+#: the problems it finds. Empty: the reference delivers every cell on both
+#: storage backends.
+SERIES_PARITY_GAPS: dict[tuple[str, str, str, str], str] = {}

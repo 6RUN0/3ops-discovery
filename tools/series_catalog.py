@@ -251,6 +251,35 @@ def parity_problems(
     return problems
 
 
+_SERIES_IN_PROBLEM = re.compile(r": series (\S+) ")
+
+
+def unexcused_problems(
+    cell: Cell,
+    observed: Mapping[str, frozenset[str]],
+    gaps: Mapping[tuple[str, str, str, str], str],
+    implementation: str,
+) -> list[str]:
+    """
+    Return ``parity_problems`` minus the series the gap table excuses.
+
+    A gap row (implementation, domain, cell, series) hides exactly the
+    problems of its own series, whether it is missing, lacks labels or
+    must be absent.
+    """
+    return [
+        problem
+        for problem in parity_problems(cell, observed)
+        if (implementation, cell.domain, cell.name, _series_of(problem))
+        not in gaps
+    ]
+
+
+def _series_of(problem: str) -> str:
+    match = _SERIES_IN_PROBLEM.search(problem)
+    return match.group(1) if match else ""
+
+
 def _query(metrics_url: str, expr: str) -> list[dict[str, Any]]:
     resp = requests.get(
         f"{metrics_url}/api/v1/query",
