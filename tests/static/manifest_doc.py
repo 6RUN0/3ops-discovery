@@ -379,13 +379,13 @@ def domain_label_names(number: str) -> set[str]:
 
 
 def optional_files() -> set[str]:
-    """Section 14.5: names of the optional overlay files."""
-    return {_plain(row["Файл"]) for row in table("14.5")}
+    """Section 14.4.3: names of the optional overlay files."""
+    return {_plain(row["Файл"]) for row in table("14.4.3")}
 
 
 def extension_points() -> set[str]:
-    """Section 14.4: stable base exports overlays may reference."""
-    return {_plain(row["Экспорт"]) for row in table("14.4")}
+    """Section 14.4.2: stable base exports overlays may reference."""
+    return {_plain(row["Экспорт"]) for row in table("14.4.2")}
 
 
 def secret_id_pattern() -> str:
@@ -419,16 +419,39 @@ def env_defaults() -> dict[str, str]:
 
 
 def base_files() -> set[str]:
-    """Section 14: file names of the base reference config."""
-    return {_plain(row["Файл"]) for row in table("14")}
+    """Section 14.4: file names of the base reference config."""
+    return {_plain(row["Файл"]) for row in table("14.4")}
 
 
 def alloy_image_tag() -> str:
-    """Section 14: the pinned grafana/alloy image tag."""
-    m = re.search(r"grafana/alloy:(v[0-9][\w.]*)", section("14"))
+    """Section 14.4: the pinned grafana/alloy image tag."""
+    m = re.search(
+        r"grafana/alloy:(v[0-9][\w.]*)", section("14.4", subsections=False)
+    )
     if m is None:
-        raise AnchorError("alloy image tag not found in section 14")
+        raise AnchorError("alloy image tag not found in section 14.4")
     return m.group(1)
+
+
+def domains() -> set[str]:
+    """Section 10: every contract domain, label-driven and host alike."""
+    return set(code_block("10").split()) | host_domains()
+
+
+def host_domains() -> set[str]:
+    """Section 10: domains not driven by labels, listed after a marker."""
+    return set(code_block("10", after="Хост-домены:").split())
+
+
+def implementations() -> dict[str, set[str]]:
+    """Section 14 registry: implementation name -> domains it covers."""
+    registry = {
+        _plain(row["Реализация"]): set(re.findall(r"`([^`]+)`", row["Домены"]))
+        for row in table("14")
+    }
+    if not registry:
+        raise AnchorError("no implementations parsed from section 14")
+    return registry
 
 
 #: Reference-implementation section: the only place the manifest may name

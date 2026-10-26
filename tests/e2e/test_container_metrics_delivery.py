@@ -1,4 +1,4 @@
-"""Cadvisor per-container delivery (manifest 14.5, overlay 075)."""
+"""Cadvisor per-container delivery (manifest 14.4.3, overlay 075)."""
 
 from tests.e2e.conftest import METRICS_BUDGET, Stack, wait_until
 
@@ -30,7 +30,7 @@ def test_sibling_container_metrics_with_full_provenance(
     assert labels["container"] == stack.compose_container("prometheus")
     assert labels["collector"] == "alloy"
     assert labels["host"]
-    # Pins the manifest 14.5 literal: exporters set job=integrations/<x>.
+    # Pins the manifest 14.4.3 literal: exporters set job=integrations/<x>.
     assert labels["job"] == "integrations/cadvisor"
     # The mandatory labeldrop: no raw cadvisor label may survive. This
     # also pins the label sanitization of the vendored cadvisor fork

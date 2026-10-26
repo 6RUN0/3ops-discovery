@@ -1,4 +1,4 @@
-"""Host telemetry delivery (manifest 14.5): node_* metrics, journal logs."""
+"""Host telemetry delivery (manifest 14.4.3): node_* metrics, journal logs."""
 
 import uuid
 
@@ -46,7 +46,7 @@ def test_journal_logs_delivered(stack: Stack) -> None:
     )
     assert written.returncode == 0, written.stderr
     # Journal streams come from the host, not from a container, so they
-    # carry no compose labels to scope by (manifest 14.5); the marker is
+    # carry no compose labels to scope by (manifest 14.4.3); the marker is
     # what limits the query to this run.
     records = wait_until(
         lambda: stack.log_records(

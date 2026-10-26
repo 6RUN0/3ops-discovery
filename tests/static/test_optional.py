@@ -30,7 +30,7 @@ def test_optional_files_match_manifest_table() -> None:
 
 def test_extension_points_exist_in_base() -> None:
     # Every export an optional file references must be a real base
-    # component (anti-drift); and every documented extension point (14.4)
+    # component (anti-drift); and every documented extension point (14.4.2)
     # must exist in base. Documented exports carry a trailing
     # .receiver/.targets/.input; strip it to get the component key that
     # base_component_names() returns.
@@ -42,7 +42,7 @@ def test_extension_points_exist_in_base() -> None:
 
 
 def test_overlays_only_use_documented_exports() -> None:
-    # Existing in base is a weaker property than being published. 14.4
+    # Existing in base is a weaker property than being published. 14.4.2
     # calls itself the public API of the base configuration, stable
     # within a minor version -- so an overlay reaching into an internal
     # stage of a domain pipeline (the output of a shared relabel, say)
@@ -50,6 +50,6 @@ def test_overlays_only_use_documented_exports() -> None:
     # subset-of-base check above would have said nothing.
     undocumented = ac.extension_point_exports() - md.extension_points()
     assert undocumented == set(), (
-        f"overlays consume base exports absent from manifest 14.4: "
+        f"overlays consume base exports absent from manifest 14.4.2: "
         f"{sorted(undocumented)}"
     )

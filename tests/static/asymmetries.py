@@ -119,10 +119,12 @@ NOT_SERIES_PATHS: dict[str, str] = {
 
 #: Manifest sections outside 14.4 that still name the reference
 #: implementation (Alloy, its components or River functions), each with
-#: the stage-3 task that neutralizes it. test_manifest_neutrality.py
-#: demands equality with the scanner's findings in both directions on
-#: docs/manifest.ru.md, and bounds docs/manifest.md by the same table, so
-#: neutralizing a section forces its entry out. The table only shrinks.
+#: the stage-3 task that neutralizes it or the reason it stays (the
+#: section 14 registry names the agent by design).
+#: test_manifest_neutrality.py demands equality with the scanner's
+#: findings in both directions on docs/manifest.ru.md, and bounds
+#: docs/manifest.md by the same table, so neutralizing a section forces
+#: its entry out. The table only shrinks.
 MANIFEST_IMPLEMENTATION_MENTIONS: dict[str, str] = {
     "1": "neutralized by stage 3 task 6",
     "2": "neutralized by stage 3 task 6",
@@ -152,9 +154,5 @@ MANIFEST_IMPLEMENTATION_MENTIONS: dict[str, str] = {
     "13": "neutralized by stage 3 task 8",
     "13.3": "neutralized by stage 3 task 8",
     "13.5": "neutralized by stage 3 task 8",
-    "14": "restructured by stage 3 task 2",
-    "14.1": "restructured by stage 3 task 2",
-    "14.2": "restructured by stage 3 task 2",
-    "14.3": "restructured by stage 3 task 2",
-    "14.5": "restructured by stage 3 task 2",
+    "14": "registry names the agent",
 }

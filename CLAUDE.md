@@ -47,7 +47,7 @@ them together.
   extracted.
 - `alloy/*.alloy` — reference config; one directory = one merged
   component graph, unique component names, no overrides possible.
-- `alloy-optional/*.alloy` — opt-in overlay files (manifest §14.5):
+- `alloy-optional/*.alloy` - opt-in overlay files (manifest §14.4.3):
   `060_otel` (OTLP receiver), `070_host-metrics`
   (`prometheus.exporter.unix`, `node_*` series), `080_host-logs`
   (`loki.source.journal`). Composed via `tools.materialize.COMBOS`
@@ -95,7 +95,7 @@ them together.
 
 ## Hard rules
 
-- The Alloy image tag is pinned BY THE MANIFEST (section 14, currently
+- The Alloy image tag is pinned BY THE MANIFEST (section 14.4, currently
   v1.21.2); `noxfile.ALLOY_IMAGE` must match - a static test enforces
   it. `foreach` is experimental: always `--stability.level=experimental`.
 - Contract values (scrape intervals, label names, defaults) are never

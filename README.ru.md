@@ -63,7 +63,7 @@ map-, и в list-форме.
 | `uv run nox -s e2e_victoria` | Те же проверки доставки с VictoriaMetrics + VictoriaLogs в роли хранилища (минуты). | Docker |
 | `uv run nox -s preflight` | Всё сразу. | да |
 
-Образ Alloy запинен **манифестом** (раздел [14](docs/manifest.ru.md#14-reference-implementation)); `noxfile.ALLOY_IMAGE`
+Образ Alloy запинен **манифестом** (раздел [14.4](docs/manifest.ru.md#144-эталонная-реализация-alloy)); `noxfile.ALLOY_IMAGE`
 обязан совпадать — это проверяет статический тест.
 
 ## Релиз

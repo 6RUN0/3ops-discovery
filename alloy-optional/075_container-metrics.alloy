@@ -1,10 +1,10 @@
-// Opt-in per-container metrics (manifest 14.5). Host-overlay like 070:
+// Opt-in per-container metrics (manifest 14.4.3). Host-overlay like 070:
 // cadvisor observes EVERY docker container on the host (docker_only),
 // not the discovery-scoped set -- per-container opt-out is not
 // supported. Docker API is reached only via the contract env (the
 // socket-proxy in the e2e stack); the metrics themselves come from
 // cgroupfs, so the collector container needs the host cgroup namespace
-// (manifest 14.3, deployment privilege). With the Docker API
+// (manifest 14.4.1, deployment privilege). With the Docker API
 // unreachable, docker_only filters everything out: the output is
 // near-empty, not "metrics without enrichment".
 

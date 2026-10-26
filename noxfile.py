@@ -32,7 +32,7 @@ sys.path.insert(0, str(REPO))
 nox.options.default_venv_backend = "none"
 nox.options.sessions = ["lint", "docs_lint", "alloy_check", "tests"]
 
-#: Exactly the tag pinned by the manifest (section 14): foreach is
+#: Exactly the tag pinned by the manifest (section 14.4): foreach is
 #: experimental and its semantics may drift between Alloy versions.
 #: tests/static/test_reference_files.py asserts this equality.
 ALLOY_IMAGE = "grafana/alloy:v1.21.2"

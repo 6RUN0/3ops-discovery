@@ -66,7 +66,7 @@ Everything runs through `uv run nox`.
 | `uv run nox -s e2e_victoria` | The same delivery checks with VictoriaMetrics + VictoriaLogs as the storage (minutes). | Docker |
 | `uv run nox -s preflight` | Everything at once. | yes |
 
-The Alloy image is pinned **by the manifest** (section [14](docs/manifest.md#14-reference-implementation));
+The Alloy image is pinned **by the manifest** (section [14.4](docs/manifest.md#144-reference-implementation-alloy));
 `noxfile.ALLOY_IMAGE` must match -- a static test enforces it.
 
 ## Releasing

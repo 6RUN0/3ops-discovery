@@ -1,4 +1,4 @@
-// Opt-in snmp domain overlay (manifest 10.6, 14.5). File-provider domain:
+// Opt-in snmp domain overlay (manifest 10.6, 14.4.3). File-provider domain:
 // devices are listed in a YAML file, not Docker labels (SNMP hardware has no
 // container). Loaded ONLY in the snmp COMBO where the device and auth files
 // are guaranteed -- the two top-level local.file components fail New() on a

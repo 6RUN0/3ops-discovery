@@ -297,7 +297,7 @@ A profile is the name of a predefined, versioned set of settings described in th
 
 - The value of `*.profile` is picked only from the allowlist defined by the Alloy configuration.
 - The label is neither a DSL nor a pipeline programming language: arbitrary values and stage lists are not supported.
-- A profile name must carry a version: the suffix `-vN`, with the full name made of `[a-z0-9-]` (the names of profile components are derived from it mechanically, section [14](#14-reference-implementation)).
+- A profile name must carry a version: the suffix `-vN`, with the full name made of `[a-z0-9-]` (the names of profile components are derived from it mechanically, [`alloy/README.md`](../alloy/README.md#layered-profile-pairs)).
 - Changing a profile may affect labels, cardinality, timestamps, alert rules and Grafana queries, so incompatible changes require a new profile name.
 
 A versioning example:
@@ -523,6 +523,16 @@ ipmi
 
 One container may declare several domains at the same time.
 
+Host domains:
+
+```text
+host-metrics
+container-metrics
+host-logs
+```
+
+Host domains are not driven by labels, are off by default and require deployment privileges; in the reference they are the optional files of section [14.4.3](#1443-optional-files).
+
 ### 10.1. Domain: metrics
 
 Used when the application already publishes a Prometheus-compatible endpoint.
@@ -541,7 +551,7 @@ Used when the application already publishes a Prometheus-compatible endpoint.
 
 Arbitrary interval/timeout values in labels are not supported: scrape parameters are set only by picking a profile (see section [8.2](#82-scrape-profiles)).
 
-`metrics.scheme: https` assumes a certificate the collector trusts through the system trust store: the label contract has no channel for delivering CA material (labels carry strings only -- the same model as the blackbox `tls_connect` module, section [10.4](#104-domain-blackbox)), so an endpoint with a self-signed certificate will not be scraped. TLS trust for internal CAs is an environment customization: a separate scrape pair with `tls_config` (section [14.3](#143-customizing-the-reference-configuration)).
+`metrics.scheme: https` assumes a certificate the collector trusts through the system trust store: the label contract has no channel for delivering CA material (labels carry strings only -- the same model as the blackbox `tls_connect` module, section [10.4](#104-domain-blackbox)), so an endpoint with a self-signed certificate will not be scraped. TLS trust for internal CAs is an environment customization: a separate scrape pair with `tls_config` (section [14.4.1](#1441-customization)).
 
 #### 10.1.2. RabbitMQ example
 
@@ -566,7 +576,7 @@ services:
       ru.3ops.discovery.metrics.profile: "fast-v1"
 ```
 
-The profile picks one of the relabel/scrape pairs of the Alloy configuration; the reference configuration ships pairs for every base profile of section [8.2](#82-scrape-profiles) (see section [14](#14-reference-implementation)).
+The profile picks one of the relabel/scrape pairs of the Alloy configuration; the reference configuration ships pairs for every base profile of section [8.2](#82-scrape-profiles) (see section [14.4](#144-reference-implementation-alloy)).
 
 ### 10.2. Domain: database
 
@@ -858,7 +868,7 @@ labels:
 
 Used for services that send OTLP telemetry.
 
-The receiver listens on the conventional OTLP ports: `4317` (gRPC) and `4318` (HTTP). The values are fixed by the contract and are not parameterized by an environment variable -- unlike the endpoints of section [14.1](#141-environment-parameters), this is not a deployment value but an address senders know in advance: changing the port would require changing the configuration of every client. A deployment that needs a different port changes the [`060_otel`](../alloy-optional/060_otel.alloy) overlay -- a customization under section [14.3](#143-customizing-the-reference-configuration), not a parameter.
+The receiver listens on the conventional OTLP ports: `4317` (gRPC) and `4318` (HTTP). The values are fixed by the contract and are not parameterized by an environment variable -- unlike the endpoints of section [14.1](#141-environment-parameters), this is not a deployment value but an address senders know in advance: changing the port would require changing the configuration of every client. A deployment that needs a different port changes the [`060_otel`](../alloy-optional/060_otel.alloy) overlay -- a customization under section [14.4.1](#1441-customization), not a parameter.
 
 #### 10.5.1. Labels
 
@@ -879,7 +889,7 @@ The OTLP path is an exception to the provenance of section [6.1](#61-labels-adde
 
 ### 10.6. Domain: snmp
 
-The only domain not driven by Docker labels: external network equipment (switches, routers) has no container, so targets are enumerated in a file rather than discovered. The domain ships as the opt-in overlay file [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) (section [14.5](#145-optional-files)) rather than as a base domain: its top-level `local.file` becomes unhealthy without a file on disk and brings the whole graph down with it, so it is only loaded together with the device and auth files.
+The only domain not driven by Docker labels: external network equipment (switches, routers) has no container, so targets are enumerated in a file rather than discovered. The domain ships as the opt-in overlay file [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) (section [14.4.3](#1443-optional-files)) rather than as a base domain: its top-level `local.file` becomes unhealthy without a file on disk and brings the whole graph down with it, so it is only loaded together with the device and auth files.
 
 The device file (`snmp_targets.yaml`) is a list of entries; every value is stored as a string (`encoding.from_yaml` decodes the list into `list(map(string))`):
 
@@ -1041,7 +1051,7 @@ If Alloy uses `/var/run/docker.sock`, the following must be taken into account:
 
 A socket proxy narrows the privilege without removing it. The proxy allowlist works by API section rather than by individual path: permitting `/containers` permits EVERY GET in that section -- including `/containers/{id}/json` (the container's environment variables, meaning passwords passed through `environment`), `/containers/{id}/archive?path=/` (reading an arbitrary file out of any container) and `/containers/{id}/export`. Discovery cannot work otherwise: `loki.source.docker` reads logs through the same section. What follows in practice: a collector with access to the proxy is equivalent to a reader of every container's secrets on that host, and the proxy belongs on an internal network unreachable by the workloads -- it lowers the risk of the daemon being compromised, not the risk of someone else's data being read.
 
-The requirement "Alloy must not be reachable from an untrusted Docker network" cannot be met in full, and that is a property of the model rather than an oversight in the configuration. Scraping a container means sharing a network with it, so a collector is always a neighbour of what it collects from: the Alloy HTTP server (`/metrics`, the unauthenticated `/api/v0/web/components`) and the opt-in OTLP receiver are visible to every container on that network. Splitting networks does not help -- with several networks `discovery.docker` takes only the alphabetically first one (section [14](#14-reference-implementation)), so the collector still has to sit in the network of the things it observes. What follows in practice: untrusted workloads are separated by a collector of their own, not by a network of the same one; on a shared network, assume neighbours can read the component list and its arguments (values marked `is_secret` are redacted).
+The requirement "Alloy must not be reachable from an untrusted Docker network" cannot be met in full, and that is a property of the model rather than an oversight in the configuration. Scraping a container means sharing a network with it, so a collector is always a neighbour of what it collects from: the Alloy HTTP server (`/metrics`, the unauthenticated `/api/v0/web/components`) and the opt-in OTLP receiver are visible to every container on that network. Splitting networks does not help -- with several networks `discovery.docker` takes only the alphabetically first one ([`alloy/README.md`](../alloy/README.md#per-port-fan-out-and-multiple-networks)), so the collector still has to sit in the network of the things it observes. What follows in practice: untrusted workloads are separated by a collector of their own, not by a network of the same one; on a shared network, assume neighbours can read the component list and its arguments (values marked `is_secret` are redacted).
 
 ### 13.4. Secret path traversal
 
@@ -1072,15 +1082,68 @@ Labels are declared by the container itself, so the right to start containers on
 - with untrusted neighbours on the host, the values of `team`/`environment`/`service_name` should additionally be constrained by allowlist rules in `discovery.relabel`; the reference configuration contains no such rules;
 - the contract sets no limit on telemetry volume: a container can generate load through log volume and through the number of opt-in targets; the defence is rate limits on the backend side (Loki limits, remote_write endpoint limits).
 
-## 14. Reference implementation
+## 14. Implementations
 
-The reference Alloy configuration lives in the [`alloy/`](../alloy/) directory and is split across files. Every `*.alloy` file of the directory forms one configuration and they run together:
+An implementation is an agent with its own configuration that fulfils the contract for one or more domains of section [10](#10-domains). The implementation name is the value of the `collector` label (section [6.1](#61-labels-added-by-alloy)).
+
+| Implementation | Domains | Agent | Directory |
+|---|---|---|---|
+| `alloy` | `metrics`, `database`, `logs`, `blackbox`, `otel`, `snmp`, `ipmi`, `host-metrics`, `container-metrics`, `host-logs` | Grafana Alloy, version pinned in section [14.4](#144-reference-implementation-alloy) | [`alloy/`](../alloy/), [`alloy-optional/`](../alloy-optional/) |
+
+The domains of one host may be split between implementations, but each domain on a host is served by exactly one collector. Two collectors of one domain (two different implementations or two instances of one) produce duplicate series and lines that the storage cannot tell from real data, so such a deployment is an error. The symptom of the error is series or log streams that differ only in `collector` or `host`, or two running collectors of one domain on a host; the second symptom is needed when the labels of the duplicates match entirely.
+
+For each of its domains an implementation must:
+
+- understand the labels and follow the behaviour of sections 3-11;
+- produce the series of the series catalog (section [14.3](#143-series-catalog));
+- meet the security requirements of section [13](#13-security-requirements);
+- understand the environment parameters of section [14.1](#141-environment-parameters) that belong to its domains and outputs.
+
+The divergences of the reference from the contract that the gates allow are listed with their reasons in one place: [`tests/static/asymmetries.py`](../tests/static/asymmetries.py).
+
+### 14.1. Environment parameters
+
+Deployment-specific values are set through environment variables; when a variable is unset, the default applies. An implementation must understand the parameters of its domains and outputs. The `RU_3OPS_DISCOVERY_` prefix stands for 3ops Discovery.
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `RU_3OPS_DISCOVERY_DOCKER_HOST` | The Docker daemon address | `unix:///var/run/docker.sock` |
+| `RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL` | The target list refresh interval | `30s` |
+| `RU_3OPS_DISCOVERY_SECRETS_DIR` | The directory of secret files (see [9](#9-secret-contract)) | `/run/alloy-secrets` |
+| `RU_3OPS_DISCOVERY_REMOTE_WRITE_URL` | The metrics endpoint (Prometheus remote_write protocol) | `http://prometheus:9090/api/v1/write` |
+| `RU_3OPS_DISCOVERY_LOKI_PUSH_URL` | The logs endpoint (Loki push API) | `http://loki:3100/loki/api/v1/push` |
+| `RU_3OPS_DISCOVERY_HOST_ROOTFS_PATH` | The mount point of the host root filesystem (the `host-metrics` domain) | `/rootfs` |
+| `RU_3OPS_DISCOVERY_HOST_PROCFS_PATH` | The mount point of the host procfs (the `host-metrics` domain) | `/host/proc` |
+| `RU_3OPS_DISCOVERY_HOST_SYSFS_PATH` | The mount point of the host sysfs (the `host-metrics` domain) | `/host/sys` |
+| `RU_3OPS_DISCOVERY_SNMP_TARGETS_FILE` | The path to the snmp device file (not a secret; the `snmp` domain) | `/etc/alloy/snmp_targets.yaml` |
+
+The scrape profile parameters (interval/timeout) are not configurable through environment variables: they are part of the contract (see [8.2](#82-scrape-profiles)), not deployment configuration.
+
+### 14.2. Output protocols and stores
+
+An implementation sends metrics over the Prometheus remote_write protocol to the `RU_3OPS_DISCOVERY_REMOTE_WRITE_URL` address. Any store that accepts remote_write fits: Prometheus, Mimir, VictoriaMetrics, Thanos, Grafana Cloud.
+
+For logs the contract fixes the result in the store rather than the protocol: the indexed and non-indexed fields of section [6.2](#62-loki-label-cardinality) and the profile fields of section [8.3](#83-log-profiles). The implementation chooses the protocol (Loki push, the store's native ingestion, OTLP) and declares the stores it supports. Over Loki push the logs are accepted by both Loki and VictoriaLogs: in both cases the address is set by `RU_3OPS_DISCOVERY_LOKI_PUSH_URL`.
+
+VictoriaLogs without the `-loki.disableMessageParsing` flag parses a JSON line received over Loki push into fields: the store gains fields beyond sections 6.2 and 8.3, and `_msg` no longer holds the original line. A deployment that needs exactly the contract fields runs VictoriaLogs with this flag.
+
+Credentials are not embedded into URLs (`https://user:pass@host`): the value of a variable is an ordinary string and may show up in the collector's UI and logs. If the store requires authentication, the implementation takes the credentials from a secret file, not from the URL.
+
+The contract sets no delivery guarantee stronger than at-least-once: a restart or recreation of the collector may resend log history and lose unsent metrics. Persisting the collector's state across recreations is the implementation's job.
+
+### 14.3. Series catalog
+
+The series catalog is a normative machine-readable appendix to the manifest: the names and labels of the series of every domain, identical across all implementations of that domain. Logs have no series; their fields are set by sections 6.2 and 8.3.
+
+### 14.4. Reference implementation: Alloy
+
+The reference implementation is a Grafana Alloy configuration: the base files in the [`alloy/`](../alloy/) directory, the optional ones in [`alloy-optional/`](../alloy-optional/) (section [14.4.3](#1443-optional-files)). Every `*.alloy` file of the directory forms one configuration and they run together:
 
 ```sh
 alloy run --stability.level=experimental alloy/
 ```
 
-The `--stability.level=experimental` flag is required by the `foreach` block (experimental in Alloy v1.21). A syntax check without running:
+The `--stability.level=experimental` flag is required by the `foreach` block in file 030 (experimental in Alloy v1.21). A syntax check without running:
 
 ```sh
 docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.21.2 \
@@ -1089,9 +1152,7 @@ docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.21.2 \
 
 The Alloy version policy. The tag in the command above is normative: the contract has been verified on exactly that tag, and the same one must appear in `noxfile.ALLOY_IMAGE` (checked both ways by a static gate). The contract declares no range of compatible versions -- not because versions do not matter, but because exactly one has honestly been verified: updating the tag is a change to the contract and passes the same gates (`alloy fmt`, `validate` for every combination, e2e). No lower bound is given deliberately: `foreach` is experimental, and upstream guarantees neither syntax stability nor the continued existence of an experimental block in the next release.
 
-The contract offers no configuration free of experimental features: `foreach` lives in the base file [`030_database.alloy`](../alloy/030_database.alloy), so `--stability.level=experimental` is mandatory for the whole reference rather than for the database domain alone. A deployment that cannot accept experimental features excludes file 030 entirely -- and with it the database domain; no other domain depends on `foreach`.
-
-The numeric prefix in the file names sets the reading order (the pipeline flow: discovery, then domains, then outputs). It does not affect how Alloy works: every file of the directory merges into a single component graph and cross-file references resolve regardless of order.
+The reference offers no configuration free of experimental features: `foreach` lives in the base file [`030_database.alloy`](../alloy/030_database.alloy), so `--stability.level=experimental` is mandatory for the whole reference rather than for the database domain alone. A deployment that cannot accept experimental features excludes file 030 entirely -- and with it the database domain; no other domain depends on `foreach`.
 
 | File | Content |
 |---|---|
@@ -1103,57 +1164,21 @@ The numeric prefix in the file names sets the reading order (the pipeline flow: 
 | [`050_log-profiles.alloy`](../alloy/050_log-profiles.alloy) | The profile dispatcher: `loki.process` with the base log profiles |
 | [`090_outputs.alloy`](../alloy/090_outputs.alloy) | The outputs: `prometheus.remote_write` and `loki.write` |
 
-The profile scrape pairs are layered: the shared domain relabel carries validation and provenance, while the thin `discovery.relabel`/`prometheus.scrape` pair per profile carries only the routing to its own interval. The names of profile components are derived mechanically from the full profile name (`fast-v1` becomes `metrics_fast_v1`). Targets that declare a profile outside the allowlist are deliberately scraped by no pair at all. An extra profile is added by copying the thin pair (filter plus scrape) with a changed regex in the profile rule, `scrape_interval` and `scrape_timeout`.
+The file order, the layout of the profile pairs, the per-port target fan-out, state storage and store integration are described in [`alloy/README.md`](../alloy/README.md).
 
-A known limitation of the reference configuration: `discovery.docker` creates a separate target per exposed TCP port of a container. The port fan-out is collapsed by `keepequal` rules (metrics, database, blackbox); logs are unaffected -- `loki.source.docker` deduplicates targets by container ID and reads a container exactly once. A container attached to several Docker networks produces no duplicate targets: by default (`match_first_network = true`) discovery creates targets for one network only, the first in alphabetical order of names. The multi-network risk lies elsewhere: the choice of network is deterministic but arbitrary, and if the first network by name is unreachable for Alloy, the targets of the metrics/database/blackbox domains point at an unreachable address (the target shows as `up == 0`); log collection does not depend on network reachability -- the lines are read through the Docker API. Containers with telemetry should be attached to a single network visible to Alloy.
-
-The log read positions (`positions.yml`) and the `prometheus.remote_write` WAL live under the Alloy `--storage.path`. Without a persistent volume, recreating the Alloy container (an image update, `up --force-recreate`) causes the available container log history to be resent and the unsent metrics WAL to be lost; an ordinary process restart is safe (the writable layer of the container survives). For a production deployment the `--storage.path` directory should be placed on a persistent volume; the contract offers no delivery guarantee stronger than at-least-once.
-
-### 14.1. Environment parameters
-
-Deployment-specific values are configured through environment variables via `coalesce(sys.env("..."), <default>)`; when a variable is absent the default applies. The `RU_3OPS_DISCOVERY_` prefix stands for 3ops Discovery.
-
-| Variable | Purpose | Default |
-|---|---|---|
-| `RU_3OPS_DISCOVERY_DOCKER_HOST` | The Docker daemon address | `unix:///var/run/docker.sock` |
-| `RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL` | The target list refresh interval | `30s` |
-| `RU_3OPS_DISCOVERY_SECRETS_DIR` | The directory of secret files (see [9](#9-secret-contract)) | `/run/alloy-secrets` |
-| `RU_3OPS_DISCOVERY_REMOTE_WRITE_URL` | The metrics endpoint (Prometheus remote_write protocol) | `http://prometheus:9090/api/v1/write` |
-| `RU_3OPS_DISCOVERY_LOKI_PUSH_URL` | The logs endpoint (Loki push API) | `http://loki:3100/loki/api/v1/push` |
-| `RU_3OPS_DISCOVERY_HOST_ROOTFS_PATH` | The mount point of the host root FS for `prometheus.exporter.unix` (optional file 070) | `/rootfs` |
-| `RU_3OPS_DISCOVERY_HOST_PROCFS_PATH` | The procfs mount point for the host exporter | `/host/proc` |
-| `RU_3OPS_DISCOVERY_HOST_SYSFS_PATH` | The sysfs mount point for the host exporter | `/host/sys` |
-| `RU_3OPS_DISCOVERY_SNMP_TARGETS_FILE` | The path to the snmp device file (not a secret; overlay 037) | `/etc/alloy/snmp_targets.yaml` |
-
-The scrape profile parameters (interval/timeout) are not configurable through environment variables: they are part of the contract (see [8.2](#82-scrape-profiles)), not deployment configuration.
-
-Do not embed credentials into endpoint URLs (`https://user:pass@host`): the value of a variable is an ordinary string and may show up in the Alloy UI and in the logs. For authentication use the `basic_auth`/`authorization` blocks inside `endpoint` with a secret from `local.file` (`is_secret = true`).
-
-### 14.2. Backends
-
-The file [`090_outputs.alloy`](../alloy/090_outputs.alloy) is the single integration point with the storage systems; replacing a backend does not touch the discovery and pipeline files. Alloy is not limited to the Prometheus plus Loki pair:
-
-- `prometheus.remote_write` works with any remote_write-compatible storage: Mimir, VictoriaMetrics, Thanos, Grafana Cloud.
-- `loki.write` works with any endpoint implementing the Loki push API.
-- For OTLP backends (Tempo, vendor APM) the streams are converted through `otelcol.receiver.prometheus` / `otelcol.receiver.loki` and exported by `otelcol.exporter.otlp`.
-
-Swapping a single URL is enough only for unauthenticated endpoints. Mimir and Grafana Cloud require authentication and/or the `X-Scope-OrgID` header: beyond the variables of section [14.1](#141-environment-parameters) you will need to add `basic_auth`/`authorization`/`headers` blocks to [`090_outputs.alloy`](../alloy/090_outputs.alloy) -- with a secret from `local.file`, not in the URL (see the warning in [14.1](#141-environment-parameters)).
-
-This is not a complete production configuration but the base structure of a manifest implementation. Explanations of the non-obvious parts (target deduplication by container ID, the keep rule for `secret-id`, the correspondence with scrape profiles) live in the comments of the files themselves.
-
-### 14.3. Customizing the reference configuration
+#### 14.4.1. Customization
 
 Alloy merges every `*.alloy` file of a directory into a single component graph (top level, non-recursively); component names are globally unique. A base component cannot be overridden: two declarations with the same name are a load error, not an override. Customization is done in three ways:
 
-- **an overlay directory** -- extra files added to the base directory at materialization time (section [14.5](#145-optional-files)); the base `alloy/` stays valid and complete without them;
-- **extension points** -- stable exports of the base that an overlay may reference (section [14.4](#144-extension-points));
+- **an overlay directory** -- extra files added to the base directory at materialization time (section [14.4.3](#1443-optional-files)); the base `alloy/` stays valid and complete without them;
+- **extension points** -- stable exports of the base that an overlay may reference (section [14.4.2](#1442-extension-points));
 - **env parameterization** -- deployment values through `RU_3OPS_DISCOVERY_*` (section [14.1](#141-environment-parameters)).
 
 Conventions against collisions: repository files use the numeric prefixes `0xx`, user overlays use `1xx` and above; user component names use the `ext_` prefix. The base/optional boundary criterion: the base `alloy/` contains exactly what is driven by discovery through Docker labels, while anything static, host-level or requiring deployment privileges is moved into optional.
 
 Privileged overlays receive host-level deployment privileges and observe the host or all of its containers as a whole, outside the discovery scope: [`070_host-metrics`](../alloy-optional/070_host-metrics.alloy) (host procfs/sysfs/rootfs), [`080_host-logs`](../alloy-optional/080_host-logs.alloy) (systemd journal), [`075_container-metrics`](../alloy-optional/075_container-metrics.alloy) (the host cgroup namespace plus `/sys/fs/cgroup:ro`; the host PID namespace is neither required nor granted). Granting such privileges is a deliberate deployment decision, not a default. "Host-level privileges" means something specific: `070` mounts the host filesystem root (`/:/rootfs:ro`) for the sake of `node_filesystem_*`, and that is read access to EVERYTHING -- `/etc/shadow`, private SSH keys, the `/var/lib/docker` layers along with the contents of every other container. Mounting less is not an option: filesystem metrics require seeing the mount points. The only thing the reference masks separately is the Docker socket (`/dev/null` over `/rootfs/var/run/docker.sock`), so that a read privilege does not become a privilege to drive the daemon; everything else is read-only and available. `080` grants the system journal, `075` the statistics of every container on the host, including ones outside discovery.
 
-### 14.4. Extension points
+#### 14.4.2. Extension points
 
 The public API of the base configuration: the stable exports an overlay file may reference. They are stable within a minor version of the contract; renaming one is a breaking change.
 
@@ -1165,7 +1190,7 @@ The public API of the base configuration: the stable exports an overlay file may
 | `discovery.docker.containers.targets` | [`010_discovery.alloy`](../alloy/010_discovery.alloy) |
 | `discovery.docker.docker_logs.targets` | [`010_discovery.alloy`](../alloy/010_discovery.alloy) |
 
-### 14.5. Optional files
+#### 14.4.3. Optional files
 
 The [`alloy-optional/`](../alloy-optional/) directory holds overlay files added to the base directory at materialization time. The base `alloy/` is valid without them.
 
@@ -1173,7 +1198,7 @@ The [`alloy-optional/`](../alloy-optional/) directory holds overlay files added 
 |---|---|
 | [`060_otel.alloy`](../alloy-optional/060_otel.alloy) | Opt-in OTLP receiver: `otelcol.receiver.otlp`, with metrics going to `prometheus.remote_write` and logs to `loki.write` through an allowlist processor |
 | [`070_host-metrics.alloy`](../alloy-optional/070_host-metrics.alloy) | Opt-in host metrics: `prometheus.exporter.unix` (`node_*` series) into `prometheus.remote_write`; rootfs/procfs/sysfs through `RU_3OPS_DISCOVERY_HOST_*`; provenance per [6.1](#61-labels-added-by-alloy): `host`/`collector` are added by `discovery.relabel` before the scrape |
-| [`075_container-metrics.alloy`](../alloy-optional/075_container-metrics.alloy) | Opt-in per-container metrics: `prometheus.exporter.cadvisor` (series `container_cpu_*`/`container_memory_*`/`container_network_*`; `container_fs_*` is outside the perimeter) into `prometheus.remote_write`. The Docker API goes through `docker_host` (reusing `RU_3OPS_DISCOVERY_DOCKER_HOST`, socket proxy: a GET allowlist of the `CONTAINERS`/`INFO`/`VERSION`/`PING` sections is enough); with the Docker API unavailable the output is practically empty (`docker_only`). Provenance per [6.1](#61-labels-added-by-alloy): allowlisted container labels become `environment`/`team`/`compose_*`, `name` becomes `container`; raw `container_label_*`/`id`/`name` are dropped; `instance` is the collector hostname and `job` is `integrations/cadvisor` (the exporter's own label; both are deliberate gaps). Cardinality: `store_container_labels = false` plus the allowlist, root cgroup statistics disabled, `disabled_metrics`/`enabled_metrics` tunable. Deployment privileges (the host cgroup namespace) are covered in section [14.3](#143-customizing-the-reference-configuration); per-container opt-out is not supported. |
+| [`075_container-metrics.alloy`](../alloy-optional/075_container-metrics.alloy) | Opt-in per-container metrics: `prometheus.exporter.cadvisor` (series `container_cpu_*`/`container_memory_*`/`container_network_*`; `container_fs_*` is outside the perimeter) into `prometheus.remote_write`. The Docker API goes through `docker_host` (reusing `RU_3OPS_DISCOVERY_DOCKER_HOST`, socket proxy: a GET allowlist of the `CONTAINERS`/`INFO`/`VERSION`/`PING` sections is enough); with the Docker API unavailable the output is practically empty (`docker_only`). Provenance per [6.1](#61-labels-added-by-alloy): allowlisted container labels become `environment`/`team`/`compose_*`, `name` becomes `container`; raw `container_label_*`/`id`/`name` are dropped; `instance` is the collector hostname and `job` is `integrations/cadvisor` (the exporter's own label; both are deliberate gaps). Cardinality: `store_container_labels = false` plus the allowlist, root cgroup statistics disabled, `disabled_metrics`/`enabled_metrics` tunable. Deployment privileges (the host cgroup namespace) are covered in section [14.4.1](#1441-customization); per-container opt-out is not supported. |
 | [`080_host-logs.alloy`](../alloy-optional/080_host-logs.alloy) | Opt-in host logs: `loki.source.journal` (systemd journal) into `loki.write`; the static labels `host`/`collector`/`source` (allowlisted in [6.2](#62-loki-label-cardinality)) |
 | [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) | The snmp domain (opt-in overlay): the file provider (`local.file` plus `encoding.from_yaml`), `prometheus.exporter.snmp` (modules `if_mib`/`system`, profile `snmp-standard-v1`), auth from an inline `config` secret (`local.file` with `is_secret`) through merge. Enabled only together with the device and auth files (a top-level `local.file` without a file is unhealthy). |
 

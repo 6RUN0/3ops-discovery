@@ -81,7 +81,7 @@ def extension_point_targets() -> set[str]:
     A "type.label" is referenced when an optional file forwards into
     "<type>.<label>.receiver" (or .input), or consumes
     "<type>.<label>.targets" or "<type>.<label>.output" -- the manifest
-    14.4 extension points include two .targets exports, and .output is
+    14.4.2 extension points include two .targets exports, and .output is
     how one relabel feeds another, so the scan must see all four. Leaving
     .output out meant an overlay could consume the output of a base
     relabel -- an internal stage of a domain pipeline, not a published
@@ -106,7 +106,7 @@ def extension_point_exports() -> set[str]:
     """
     Full export names ("<type>.<label>.<export>") overlays take from base.
 
-    The manifest 14.4 table lists exports, not components, so binding an
+    The manifest 14.4.2 table lists exports, not components, so binding an
     overlay to it needs the export kind as well: base may declare a
     component whose receiver is public and whose output is not.
     """

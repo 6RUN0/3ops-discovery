@@ -24,9 +24,15 @@ _LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 _SPILLED = re.compile(r"\[[^\]]*\]\([^)\s]+\)(?=[0-9])")
 
 
+#: Directories whose markdown files the gate covers, non-recursively.
+MARKDOWN_DIRS: tuple[str, ...] = (".", "docs", "alloy", "packaging")
+
+
 def markdown_files() -> list[Path]:
-    """Repo markdown files covered by the gate (root and docs/)."""
-    return sorted([*ROOT.glob("*.md"), *(ROOT / "docs").glob("*.md")])
+    """Repo markdown files covered by the gate (``MARKDOWN_DIRS``)."""
+    return sorted(
+        path for name in MARKDOWN_DIRS for path in (ROOT / name).glob("*.md")
+    )
 
 
 def slugify(heading: str, seen: dict[str, int] | None = None) -> str:
