@@ -429,3 +429,48 @@ def alloy_image_tag() -> str:
     if m is None:
         raise AnchorError("alloy image tag not found in section 14")
     return m.group(1)
+
+
+#: Reference-implementation section: the only place the manifest may name
+#: Alloy components. It and its subsections are skipped by the neutrality
+#: scan.
+REFERENCE_SECTION = "14.4"
+
+#: Tokens that tie the text to Grafana Alloy. A path default such as
+#: /etc/alloy/... is a contract value, not a mention, hence the lookbehind.
+IMPLEMENTATION_TOKENS = re.compile(
+    r"Alloy|(?<![/\w])alloy(?:-optional)?/|\.alloy\b"
+    r"|discovery\.(?:docker|relabel)|loki\.(?:source|process|write)"
+    r"|prometheus\.(?:scrape|remote_write|exporter)|otelcol\."
+    r"|foreach|__meta_docker|constants\.|coalesce\(|sys\.env|local\.file"
+    r"|is_secret|keepequal|stage\.\w+"
+)
+
+
+def implementation_mentions(text: str | None = None) -> dict[str, int]:
+    """
+    Count implementation tokens per section, excluding numbered subsections.
+
+    A body runs from its numbered heading to the next numbered one; unnumbered
+    sub-headings belong to the enclosing numbered section.
+    Section ``REFERENCE_SECTION`` with its subsections and any text before
+    the first numbered heading are skipped. ``None`` scans the Russian
+    manifest.
+    """
+    source = _text() if text is None else text
+    heading = re.compile(r"(?m)^#+ (?:(\d+(?:\.\d+)*)\. )?.*$")
+    marks = list(heading.finditer(source))
+    counts: dict[str, int] = {}
+    owner: str | None = None
+    for mark, following in zip(marks, [*marks[1:], None], strict=True):
+        # An unnumbered heading hands its body to the last numbered one.
+        owner = mark.group(1) or owner
+        if owner is None or owner.split(".")[:2] == REFERENCE_SECTION.split(
+            "."
+        ):
+            continue
+        body = source[mark.end() : following.start() if following else None]
+        found = len(IMPLEMENTATION_TOKENS.findall(body))
+        if found:
+            counts[owner] = counts.get(owner, 0) + found
+    return counts

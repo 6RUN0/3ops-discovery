@@ -116,3 +116,45 @@ NOT_SERIES_PATHS: dict[str, str] = {
     "090_outputs.alloy": "the write path: remote_write and loki.write "
     "forward what the domains already labelled",
 }
+
+#: Manifest sections outside 14.4 that still name the reference
+#: implementation (Alloy, its components or River functions), each with
+#: the stage-3 task that neutralizes it. test_manifest_neutrality.py
+#: demands equality with the scanner's findings in both directions on
+#: docs/manifest.ru.md, and bounds docs/manifest.md by the same table, so
+#: neutralizing a section forces its entry out. The table only shrinks.
+MANIFEST_IMPLEMENTATION_MENTIONS: dict[str, str] = {
+    "1": "neutralized by stage 3 task 6",
+    "2": "neutralized by stage 3 task 6",
+    "4": "neutralized by stage 3 task 6",
+    "5": "neutralized by stage 3 task 6",
+    "6.1": "neutralized by stage 3 task 6",
+    "7": "neutralized by stage 3 task 6",
+    "8.1": "neutralized by stage 3 task 7",
+    "8.2": "neutralized by stage 3 task 7",
+    "8.4": "neutralized by stage 3 task 7",
+    "9": "neutralized by stage 3 task 7",
+    "10.1.2": "neutralized by stage 3 task 8",
+    "10.2": "neutralized by stage 3 task 8",
+    "10.3.1": "neutralized by stage 3 task 8",
+    "10.3.2": "neutralized by stage 3 task 8",
+    "10.3.4": "neutralized by stage 3 task 8",
+    "10.4.1": "neutralized by stage 3 task 8",
+    "10.5": "neutralized by stage 3 task 8",
+    "10.5.1": "neutralized by stage 3 task 8",
+    "10.6": "neutralized by stage 3 task 8",
+    "10.6.1": "neutralized by stage 3 task 8",
+    "10.7": "neutralized by stage 3 task 8",
+    "10.7.1": "neutralized by stage 3 task 8",
+    "11": "neutralized by stage 3 task 8",
+    "12.1": "neutralized by stage 3 task 8",
+    "12.2": "neutralized by stage 3 task 8",
+    "13": "neutralized by stage 3 task 8",
+    "13.3": "neutralized by stage 3 task 8",
+    "13.5": "neutralized by stage 3 task 8",
+    "14": "restructured by stage 3 task 2",
+    "14.1": "restructured by stage 3 task 2",
+    "14.2": "restructured by stage 3 task 2",
+    "14.3": "restructured by stage 3 task 2",
+    "14.5": "restructured by stage 3 task 2",
+}
