@@ -809,11 +809,13 @@ services:
       ru.3ops.discovery.logs.service: "legacy-worker"
 ```
 
-The `mixed-v1` profile may:
+The `mixed-v1` profile parses a line as follows (the branches are mutually exclusive, so the order in which they are applied does not affect the result):
 
-1. apply the JSON parser to lines starting with `{`;
-2. apply the logfmt parser to lines containing `level=`, `msg=` or `status=`;
-3. keep the remaining lines raw.
+1. the JSON parser - for lines starting with `{`;
+2. the logfmt parser - for lines containing `level=`, `msg=` or `status=` at the start of the line or after a space, AND not looking like JSON;
+3. the remaining lines are kept raw.
+
+The mutual exclusion of the branches is normative, not an optimisation: a line such as `{"msg":"raised level=high"}` matches both heuristics, and without the exclusion the result would depend on the order of the stages - logfmt would overwrite the values extracted by the JSON parser. The anchoring requirement (`level=` at the start of the line or after a space, not anywhere) rules out matches inside words and values.
 
 Format detection is best-effort and must never lead to deletion of the original line. The heuristics admit false positives: a free-text line containing `level=` or `status=` will reach the logfmt parser; on a parse error it is kept raw.
 
