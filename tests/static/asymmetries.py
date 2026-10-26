@@ -186,3 +186,17 @@ SERIES_CELLS_UNCATALOGUED: dict[tuple[str, str], str] = {
 #: the problems it finds. Empty: the reference delivers every cell on both
 #: storage backends.
 SERIES_PARITY_GAPS: dict[tuple[str, str, str, str], str] = {}
+
+#: Non-indexed log fields a store adds on its own, per e2e backend:
+#: backend -> field -> reason and source. Anything Alloy adds beyond the
+#: manifest 8.3 table is a reference defect and never goes here.
+STORE_DERIVED_LOG_FIELDS: dict[str, dict[str, str]] = {
+    "prometheus-loki": {
+        "detected_level": "Loki 3.x adds it at ingest when the line "
+        "carries no level (limits_config.discover_log_levels, default "
+        "true). Source: `docker run --rm grafana/loki:3.6.12 -help | "
+        "grep -A2 discover-log-levels`; no alloy/*.alloy file names it; "
+        "seen as {'detected_level': 'unknown'} on a raw-v1 record.",
+    },
+    "victoria": {},
+}
