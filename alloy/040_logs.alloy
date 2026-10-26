@@ -93,7 +93,7 @@ loki.source.docker "containers" {
 	labels = {
 		source    = "docker",
 		collector = "alloy",
-		host      = constants.hostname,
+		host      = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname),
 	}
 
 	forward_to = [

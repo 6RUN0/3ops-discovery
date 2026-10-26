@@ -7,6 +7,7 @@ responsibility.
 """
 
 from tests.static import alloy_config as ac
+from tests.static import asymmetries
 from tests.static import manifest_doc as md
 
 
@@ -24,9 +25,21 @@ def test_defaults_agree_and_are_consistent_across_files() -> None:
         assert len(defaults) == 1, (
             f"{name} has diverging defaults across files: {defaults}"
         )
-        assert defaults == {manifest[name]}, (
+        prose, expression = asymmetries.ENV_DEFAULT_EXPRESSIONS.get(
+            name, (manifest[name], manifest[name])
+        )
+        assert manifest[name] == prose
+        assert defaults == {expression}, (
             f"{name}: config default {defaults} != manifest {manifest[name]!r}"
         )
+
+
+def test_default_expressions_are_not_stale() -> None:
+    # An entry whose variable now has a literal default (or none) would
+    # quietly mask a manifest/config mismatch.
+    config = ac.env_defaults()
+    for name, (_, expression) in asymmetries.ENV_DEFAULT_EXPRESSIONS.items():
+        assert config.get(name) == {expression}
 
 
 def test_env_scanner_includes_optional_files() -> None:

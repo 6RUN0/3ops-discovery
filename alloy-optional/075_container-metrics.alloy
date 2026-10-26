@@ -41,7 +41,7 @@ discovery.relabel "cadvisor" {
 
 	rule {
 		target_label = "host"
-		replacement  = constants.hostname
+		replacement  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)
 	}
 }
 

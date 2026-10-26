@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from tests.e2e.conftest import METRICS_BUDGET, Stack, wait_until
+from tests.e2e.conftest import E2E_HOSTNAME, METRICS_BUDGET, Stack, wait_until
 
 
 def _first_value(stack: Stack, expr: str) -> float | None:
@@ -94,7 +94,7 @@ def test_provenance_labels_on_native_series(stack: Stack) -> None:
     assert labels["team"] == "apps"
     assert labels["collector"] == "alloy"
     assert "app-metrics" in labels["container"]
-    assert labels["host"]
+    assert labels["host"] == E2E_HOSTNAME
 
 
 @pytest.mark.alloy_internals

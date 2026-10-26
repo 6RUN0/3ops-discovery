@@ -215,7 +215,7 @@ compose_service
 
 The log path adds `service_name`, `log_profile` and `source` to this set; the full list of permitted stream labels is in section [6.2](#62-loki-label-cardinality), which governs cardinality rather than composition. There is no single place listing every emitted label, by construction: metrics and logs have different sets, and section [6.2](#62-loki-label-cardinality) is the normative source for logs.
 
-The `container` label comes from the Docker engine metadata and `host` from the hostname of the Alloy collector; neither is set by container labels, so a container cannot forge their values. The remaining labels are declared by the container itself (see section [13.5](#135-trust-in-labels)). For logs the set is additionally constrained by the allowlist of section [6.2](#62-loki-label-cardinality).
+The `container` label comes from the Docker engine metadata and `host` from the deployment parameter `RU_3OPS_DISCOVERY_HOSTNAME`, which defaults to the hostname of the Alloy collector; neither is set by container labels, so a container cannot forge their values. The remaining labels are declared by the container itself (see section [13.5](#135-trust-in-labels)). For logs the set is additionally constrained by the allowlist of section [6.2](#62-loki-label-cardinality).
 
 The `instance` label belongs to metrics; for logs its counterpart is `service_name` (see section [10.3.5](#1035-labels)). The analogy is incomplete and must not be leaned on as a rule: `service_name` is derived from `logs.service` alone, whereas the global `instance` does not extend to logs.
 
@@ -230,7 +230,7 @@ Series identity per domain. Dashboards and alert rules bind to exactly these val
 | host-metrics | the constant `integrations/unix` - the exporter label | the collector hostname | - |
 | container-metrics | the constant `integrations/cadvisor` - the exporter label | the collector hostname | `container` - the container name; `compose_project`, `compose_service` - from the Compose labels |
 
-In the host-metrics and container-metrics domains `job` and `instance` are a deliberate gap: `job` is the exporter constant rather than a value from labels, and `instance` is the collector hostname, the same value as `host`. These domains have one target per collector, and that target has no address.
+In the host-metrics and container-metrics domains `job` and `instance` are a deliberate gap: `job` is the exporter constant rather than a value from labels, and `instance` is the collector hostname (the exporter default, not set by `RU_3OPS_DISCOVERY_HOSTNAME`). It equals `host` only while the parameter is unset or empty; queries that join these domains with the others join on `host`, not on `instance`. These domains have one target per collector, and that target has no address.
 
 The blackbox domain is a documented exception to the global `instance` rule of section [5](#5-global-labels): for a probe the instance is the probe target itself, so the global value does not apply here and does not override the address. An `instance` declared on a container with a blackbox probe belongs to its own metrics, not to its probes.
 
@@ -1080,7 +1080,7 @@ Labels are declared by the container itself, so the right to start containers on
 - for the metrics and database domains SSRF is excluded by two conditions at once, and the second is as mandatory as the first. The scrape address is built only from `__meta_docker_network_ip` and a private port of the container itself (for database, from the secret file, which labels do not choose beyond `secret-id`), so labels cannot redirect collection to another host. The scrape response is an untrusted input too: `prometheus.scrape` follows redirects by default, and a container answering `302` with a link-local address would send the next request there on the collector's behalf. Every `prometheus.scrape` in the reference therefore sets `follow_redirects = false`; a configuration that does not meet this condition does not carry the guarantee;
 - the blackbox domain is a deliberate exception: `blackbox.address` (section [10.4.1](#1041-labels)) points a probe at an arbitrary host, and the result (`probe_success`, the status, the certificate expiry) is visible in the metrics -- the container gains a network reachability oracle acting as Alloy. The probe port is limited to the private ports of the container itself, but the container declares its own exposed ports, so with untrusted neighbours `blackbox.address` should be constrained by an allowlist rule in `discovery.relabel`;
 - the opt-in OTLP receiver (overlay [`060_otel`](../alloy-optional/060_otel.alloy)) listens without authentication and produces no provenance labels (section [10.5](#105-domain-otel)): network access to its ports equals the right to write telemetry with an arbitrary identity; the receiver should be kept on an internal network or fronted by an authenticating reverse proxy;
-- `container` is added from the Docker engine metadata and `host` from the hostname of the Alloy collector; neither can be forged through labels (section [6.1](#61-labels-added-by-alloy));
+- `container` is added from the Docker engine metadata and `host` from the deployment parameter `RU_3OPS_DISCOVERY_HOSTNAME`, which defaults to the hostname of the Alloy collector; neither can be forged through labels (section [6.1](#61-labels-added-by-alloy));
 - consequently, series and streams with forged `job`/`team`/`service_name` still carry the honest `container` and `host` of the sender: they do not merge with the data of the real owner and stay distinguishable -- but alert rules and dashboards that filter by `team`/`job` alone without regard for `container` will see the forged data too;
 - fields taken from log content are not promoted into stream labels (section [6.2](#62-loki-label-cardinality));
 - with untrusted neighbours on the host, the values of `team`/`environment`/`service_name` should additionally be constrained by allowlist rules in `discovery.relabel`; the reference configuration contains no such rules;
@@ -1113,6 +1113,7 @@ Deployment-specific values are set through environment variables; when a variabl
 |---|---|---|
 | `RU_3OPS_DISCOVERY_DOCKER_HOST` | The Docker daemon address | `unix:///var/run/docker.sock` |
 | `RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL` | The target list refresh interval | `30s` |
+| `RU_3OPS_DISCOVERY_HOSTNAME` | The value of the `host` label (section 6.1) | `collector hostname` |
 | `RU_3OPS_DISCOVERY_SECRETS_DIR` | The directory of secret files (see [9](#9-secret-contract)) | `/run/alloy-secrets` |
 | `RU_3OPS_DISCOVERY_REMOTE_WRITE_URL` | The metrics endpoint (Prometheus remote_write protocol) | `http://prometheus:9090/api/v1/write` |
 | `RU_3OPS_DISCOVERY_LOKI_PUSH_URL` | The logs endpoint (Loki push API) | `http://loki:3100/loki/api/v1/push` |

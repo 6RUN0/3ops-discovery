@@ -17,7 +17,7 @@ loki.source.journal "host" {
 	max_age        = "12h"
 	forward_to     = [loki.write.default.receiver]
 	labels         = {
-		host      = constants.hostname,
+		host      = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname),
 		collector = "alloy",
 		source    = "journal",
 	}

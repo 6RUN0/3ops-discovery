@@ -3,6 +3,7 @@
 import pytest
 
 from tests.e2e.conftest import (
+    E2E_HOSTNAME,
     METRICS_BUDGET,
     ReadinessTimeoutError,
     Stack,
@@ -76,7 +77,9 @@ def test_db_series_carry_provenance(
     )
     labels = series[0]["metric"]
     assert labels["collector"] == "alloy"
-    assert labels["host"], "db series lost the manifest 6.1 host label"
+    assert labels["host"] == E2E_HOSTNAME, (
+        "db series lost the manifest 6.1 host label"
+    )
     assert labels["compose_project"] == stack.project
     assert labels["container"]
     # Enriched identity must survive prometheus.scrape's defaults

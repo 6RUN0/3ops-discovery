@@ -39,6 +39,9 @@ from tools.snmp_fixtures import write_snmp_fixtures
 from tools.stack_secrets import write_secrets
 
 STACK_DIR = Path(__file__).parent / "stack"
+#: Value the main stack passes as RU_3OPS_DISCOVERY_HOSTNAME; deliberately
+#: unlike any container hostname, so a fallback cannot satisfy a check.
+E2E_HOSTNAME = "e2e-collector"
 ARTIFACTS_DIR = Path(__file__).parent / "_artifacts"
 
 #: Worst case to the FIRST metrics sample: 5s discovery refresh + 30s
@@ -642,7 +645,10 @@ def stack(
         project=f"xad-e2e-{uuid.uuid4().hex[:8]}",
         optional=optional,
         secrets_dir=secrets_dir,
-        extra_env=write_secrets(secrets_dir),
+        extra_env={
+            "RU_3OPS_DISCOVERY_HOSTNAME": E2E_HOSTNAME,
+            **write_secrets(secrets_dir),
+        },
         backend=request.config.stash[_BACKEND_KEY],
     )
     yield from _bring_up(
@@ -710,6 +716,9 @@ def snmp_stack(
         optional=list(COMBOS["all-snmp"]),
         secrets_dir=secrets_dir,
         extra_env={
+            # Empty overrides an inherited value: this stack pins the
+            # collector-hostname fallback.
+            "RU_3OPS_DISCOVERY_HOSTNAME": "",
             "RU_3OPS_DISCOVERY_E2E_SNMP_DIR": str(snmp_dir),
             **write_secrets(secrets_dir),
         },

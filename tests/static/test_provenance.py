@@ -49,3 +49,9 @@ def test_exempt_files_really_produce_nothing() -> None:
     )
     wrong = set(asymmetries.NOT_SERIES_PATHS) & labelled
     assert not wrong, f"exempt files that do attach provenance: {wrong}"
+
+
+def test_every_host_label_honours_the_hostname_parameter() -> None:
+    # A bare constants.hostname ignores RU_3OPS_DISCOVERY_HOSTNAME, so the
+    # host label of that path could not be set by the deployment.
+    assert ac.bare_hostname_sites() == {}

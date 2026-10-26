@@ -99,6 +99,17 @@ SNMP_MODULES_UNIMPLEMENTED: dict[str, str] = {}
 #: entry fails the gate just as a new undeclared row does.
 TRANSLATION_EXTRA_TABLE_ROWS: dict[str, int] = {"README.md": 1}
 
+#: Manifest 14.1 default cells that describe an expression rather than a
+#: literal: variable -> (manifest cell text, expression in the config's
+#: coalesce). test_env_vars.py maps the cell through this table instead of
+#: comparing strings.
+ENV_DEFAULT_EXPRESSIONS: dict[str, tuple[str, str]] = {
+    "RU_3OPS_DISCOVERY_HOSTNAME": (
+        "hostname коллектора",
+        "constants.hostname",
+    ),
+}
+
 #: Config files that produce no series or streams of their own, and are
 #: therefore exempt from the manifest 6.1 provenance check. Everything
 #: else in alloy/ and alloy-optional/ must attach host and collector;

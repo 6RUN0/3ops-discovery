@@ -3,6 +3,7 @@
 import uuid
 
 from tests.e2e.conftest import (
+    E2E_HOSTNAME,
     JOURNAL_HOST,
     LOGS_BUDGET,
     METRICS_BUDGET,
@@ -28,7 +29,7 @@ def test_node_metrics_delivered(stack: Stack) -> None:
     # installation.
     labels = series[0]["metric"]
     assert labels["collector"] == "alloy"
-    assert labels["host"]
+    assert labels["host"] == E2E_HOSTNAME
 
 
 def test_journal_logs_delivered(stack: Stack) -> None:
@@ -62,4 +63,4 @@ def test_journal_logs_delivered(stack: Stack) -> None:
     labels = records[0].stream
     assert labels["collector"] == "alloy"
     assert labels["source"] == "journal"
-    assert labels["host"]
+    assert labels["host"] == E2E_HOSTNAME

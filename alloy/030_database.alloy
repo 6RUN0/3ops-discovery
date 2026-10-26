@@ -170,7 +170,7 @@ foreach "postgres" {
 
 			rule {
 				target_label = "host"
-				replacement  = constants.hostname
+				replacement  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)
 			}
 			// Synthesised series identity: job = type, instance = secret id
 			// (always present, passes the section 9 regex, unique per db).
@@ -341,7 +341,7 @@ foreach "mysql" {
 
 			rule {
 				target_label = "host"
-				replacement  = constants.hostname
+				replacement  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)
 			}
 
 			rule {
@@ -515,7 +515,7 @@ foreach "redis" {
 
 			rule {
 				target_label = "host"
-				replacement  = constants.hostname
+				replacement  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)
 			}
 
 			rule {
@@ -695,7 +695,7 @@ foreach "mongodb" {
 
 			rule {
 				target_label = "host"
-				replacement  = constants.hostname
+				replacement  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)
 			}
 
 			rule {

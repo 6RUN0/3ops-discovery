@@ -179,7 +179,10 @@ def config_text() -> str:
 
 def env_defaults() -> dict[str, set[str]]:
     """
-    Env var -> set of its literal coalesce defaults found.
+    Env var -> set of its coalesce defaults found.
+
+    A default is a string literal (quotes stripped) or the bare expression
+    ``constants.hostname``, which is kept as that text.
 
     Scans base and optional files (an optional overlay may parameterise its
     own values).
@@ -187,11 +190,34 @@ def env_defaults() -> dict[str, set[str]]:
     found: dict[str, set[str]] = {}
     pattern = (
         r'coalesce\(sys\.env\("(RU_3OPS_DISCOVERY_[A-Z0-9_]+)"\),'
-        r'\s*"([^"]*)"\)'
+        r'\s*(?:"([^"]*)"|(constants\.hostname))\)'
     )
-    for name, default in re.findall(pattern, _all_text()):
-        found.setdefault(name, set()).add(default)
+    for name, literal, expression in re.findall(pattern, _all_text()):
+        found.setdefault(name, set()).add(expression or literal)
     return found
+
+
+_HOSTNAME_PARAMETER = (
+    'coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)'
+)
+
+
+def bare_hostname_sites() -> dict[str, int]:
+    """
+    File -> number of ``constants.hostname`` uses that bypass the parameter.
+
+    Every ``host`` value must read RU_3OPS_DISCOVERY_HOSTNAME with the
+    collector hostname as its fallback; a bare use ignores the parameter.
+    """
+    return {
+        name: bare
+        for name, text in {**sources(), **optional_sources()}.items()
+        if (
+            bare := text.replace(_HOSTNAME_PARAMETER, "").count(
+                "constants.hostname"
+            )
+        )
+    }
 
 
 def env_calls_without_default() -> set[str]:
