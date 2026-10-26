@@ -460,10 +460,10 @@ foreach "redis" {
 			is_secret = true
 		}
 
-		// Profile-driven collection scope (manifest 8.4, 14.4.4): basic-v1 keeps
-		// only redis_* series (drops the exporter's own Go runtime
-		// metrics); extended-v1 adds client-list and system memory
-		// metrics on top of the defaults.
+		// Profile-driven collection scope (manifest 8.4, 14.4.4): extended-v1
+		// adds client-list and system memory metrics on top of the defaults.
+		// redis_metrics_only only drops redis_exporter_build_info from a
+		// registry Alloy does not serve, so basic-v1 equals standard-v1 in series.
 		prometheus.exporter.redis "db" {
 			redis_addr     = local.file.addr.content
 			redis_password = local.file.password.content
