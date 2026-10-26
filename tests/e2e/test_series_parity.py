@@ -38,11 +38,15 @@ def test_reference_delivers_the_catalogue(
     # could not tell "not emitted" from "not yet scraped".
     present_only = dataclasses.replace(cell, absent=frozenset())
     last_problems: list[str] = ["no read completed"]
+    satisfying: list[dict[str, frozenset[str]]] = []
 
     def all_present() -> bool:
+        observed = _observed(stack, expr)
         last_problems[:] = unexcused_problems(
-            present_only, _observed(stack, expr), SERIES_PARITY_GAPS, "alloy"
+            present_only, observed, SERIES_PARITY_GAPS, "alloy"
         )
+        if not last_problems:
+            satisfying[:] = [observed]
         return not last_problems
 
     try:
@@ -53,7 +57,10 @@ def test_reference_delivers_the_catalogue(
         )
     except ReadinessTimeoutError as exc:
         pytest.fail(f"{exc}; last problems: {last_problems}")
+    # Judge the observation that satisfied the poll: two series of one scrape
+    # can be missing from consecutive instant queries, so a fresh read could
+    # report a present series missing.
     problems = unexcused_problems(
-        cell, _observed(stack, expr), SERIES_PARITY_GAPS, "alloy"
+        cell, satisfying[0], SERIES_PARITY_GAPS, "alloy"
     )
     assert problems == []

@@ -186,7 +186,8 @@ def test_mongodb_standard_profile_serves_server_status(stack: Stack) -> None:
     # on: every series of the catalog cell must share the timestamp of the
     # earliest mongodb_up == 1 sample. The exporter widens collect_all
     # only while serving its first scrape, so relying on collect_all alone
-    # leaves the first scrape of every new exporter with mongodb_up only.
+    # leaves the first scrape of every new exporter with mongodb_up, the fcv
+    # series and collector_scrape_time_ms only.
     cell = load_catalog()["database", "mongodb/standard-v1"]
     scope = f'compose_project="{stack.project}",compose_service="mongodb"'
     names = "|".join(sorted(cell.present))

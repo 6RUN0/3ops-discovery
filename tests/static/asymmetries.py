@@ -192,9 +192,10 @@ SERIES_PARITY_GAPS: dict[tuple[str, str, str, str], str] = {}
 #: manifest 8.3 table is a reference defect and never goes here.
 STORE_DERIVED_LOG_FIELDS: dict[str, dict[str, str]] = {
     "prometheus-loki": {
-        "detected_level": "Loki 3.x adds it at ingest when the line "
-        "carries no level (limits_config.discover_log_levels, default "
-        "true). Source: `docker run --rm grafana/loki:3.6.12 -help | "
+        "detected_level": "Loki 3.x adds it to every line at ingest "
+        "(`unknown` when none is detected; "
+        "limits_config.discover_log_levels, default true). "
+        "Source: `docker run --rm grafana/loki:3.6.12 -help | "
         "grep -A2 discover-log-levels`; no alloy/*.alloy file names it; "
         "seen as {'detected_level': 'unknown'} on a raw-v1 record.",
     },
