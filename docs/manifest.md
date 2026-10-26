@@ -320,11 +320,11 @@ Behaviour on an unsupported version is undefined in `0.2` because the check is r
 
 ### 8.1. General rules
 
-A profile is the name of a predefined, versioned set of settings described in the Alloy configuration.
+A profile is the name of a predefined, versioned set of settings. The manifest defines the profile allowlist of every domain (sections [8.2](#82-scrape-profiles)-[8.5](#85-snmp-profiles) and [10](#10-domains)).
 
-- The value of `*.profile` is picked only from the allowlist defined by the Alloy configuration.
+- The value of `*.profile` is picked only from the allowlist defined by the manifest; the implementation of a domain must support the whole allowlist of that domain.
 - The label is neither a DSL nor a pipeline programming language: arbitrary values and stage lists are not supported.
-- A profile name must carry a version: the suffix `-vN`, with the full name made of `[a-z0-9-]` (the names of profile components are derived from it mechanically, [`alloy/README.md`](../alloy/README.md#layered-profile-pairs)).
+- A profile name must carry a version: the suffix `-vN`, with the full name made of `[a-z0-9-]`.
 - Changing a profile may affect labels, cardinality, timestamps, alert rules and Grafana queries, so incompatible changes require a new profile name.
 
 A versioning example:
@@ -342,9 +342,7 @@ ru.3ops.discovery.logs.profile: "json,logfmt,raw"
 
 ### 8.2. Scrape profiles
 
-A single `prometheus.scrape` component has one `scrape_interval` and one `scrape_timeout`, so arbitrary interval/timeout values from labels are not supported.
-
-A bounded set of versioned profiles is used instead: every profile gets its own `discovery.relabel`/`prometheus.scrape` pair (see [alloy/020_metrics.alloy](../alloy/020_metrics.alloy)). No arbitrary scrape component is created for a user-supplied value.
+The scrape cadence of a target is set by a profile from a bounded set of versioned profiles. Arbitrary interval/timeout values from labels are not supported: the implementation does not set up a separate scrape for a user-supplied value.
 
 The base profiles:
 
@@ -440,16 +438,11 @@ extended-v1
 
 The profiles make it possible to control the load without accepting arbitrary settings from labels. They are selected through `ru.3ops.discovery.database.profile`; the default is `standard-v1`.
 
-A database profile governs the collection volume of the exporter -- which collectors query the database -- rather than the scrape cadence: the scrape profiles of section [8.2](#82-scrape-profiles) apply to the `metrics` and `blackbox` domains only. The cadence of the database domain is fixed and not chosen by a profile: `interval: 60s`, `timeout: 10s`. The value is set by the contract and stated explicitly in the configuration -- a value a consumer observes cannot be the default of a third-party product, which moves when that product is updated. The load is monotonic: basic <= standard <= extended. `standard-v1` matches the default collector set of the exporter; an incompatible change of the set requires a new profile name (section [8.1](#81-general-rules)). A value outside the allowlist drops the target entirely (fail-closed) -- as in the metrics and blackbox domains. The `logs` domain is the single exception and the only domain where an unknown profile does not drop the target: logs are not lost, `raw-v1` applies (section [10.3.4](#1034-unknown-profile)). The fail-closed rule holds for every domain except logs.
+A database profile governs the collection volume - which series are produced for the database - rather than the scrape cadence: the scrape profiles of section [8.2](#82-scrape-profiles) apply to the `metrics` and `blackbox` domains only. The cadence of the database domain is fixed and not chosen by a profile: `interval: 60s`, `timeout: 10s`. The value is set by the contract, and the implementation states it explicitly: a value a consumer observes cannot be the default of a third-party product, which moves when that product is updated. A value outside the allowlist drops the target entirely (fail-closed) - as in the metrics and blackbox domains. The `logs` domain is the single exception and the only domain where an unknown profile does not drop the target: logs are not lost, `raw-v1` applies (section [10.3.4](#1034-unknown-profile)). The fail-closed rule holds for every domain except logs.
 
-The mapping of profiles onto collectors in the reference configuration ([alloy/030_database.alloy](../alloy/030_database.alloy)); the extended sets only include collectors that work on a vanilla database without extensions or special server settings:
+The content of a profile is stated in series. For every type/profile pair the series catalog [`docs/series/database.yaml`](series/database.yaml) (section [14.3](#143-series-catalog)) lists the series the profile must produce (`present`) and the series it must switch off (`absent`). For example, postgres on `basic-v1` does not produce `pg_settings_max_connections`, and on `extended-v1` it produces `pg_long_running_transactions` and `pg_database_wraparound_age_datfrozenxid_seconds`. An incompatible change of the series of a profile requires a new profile name (section [8.1](#81-general-rules)).
 
-| Type | `basic-v1` | `standard-v1` | `extended-v1` |
-|---|---|---|---|
-| `postgres` | default metrics without `pg_settings` | exporter defaults | defaults plus `database_wraparound`, `long_running_transactions`, `process_idle`, `statio_user_indexes` |
-| `mysql`/`mariadb` | `global_status`, `global_variables` | the six default collectors (pinned explicitly) | defaults plus `engine_innodb_status`, `info_schema.processlist`, `auto_increment.columns` |
-| `redis` | `redis_*` series only (`redis_metrics_only`) | exporter defaults | defaults plus client list and system memory |
-| `mongodb` | diagnostic data only (`serverStatus`) | full collection (`collect_all`) | equivalent to `standard-v1`: the mongodb exporter default is already maximal |
+The load is monotonic: basic <= standard <= extended. The order is not strict: adjacent profiles of one type may produce the same series. Every profile, `extended-v1` included, works on a database without extensions or special server settings.
 
 ### 8.5. SNMP profiles
 
@@ -473,7 +466,7 @@ The label carries a logical identifier only:
 ru.3ops.discovery.database.secret-id: "postgres-orders"
 ```
 
-Alloy builds the path:
+The implementation builds the path:
 
 ```text
 /run/alloy-secrets/postgres-orders.dsn
@@ -494,13 +487,13 @@ The content format of `.dsn` depends on the database type:
 | `redis` | `<host>:<port>` in `.dsn`; the password lives in a separate `<secret-id>.redispass` file |
 | `mongodb` | `mongodb://<user>:<password>@<host>:<port>` |
 
-Redis is the exception: the exporter's `redis_addr` argument takes a plain string rather than a secret, so the address (`host:port`, non-secret) is stored in `.dsn` while the password goes into a separate secret file `<secret-id>.redispass` read through `redis_password`.
+Redis is the exception: the address (`host:port`) is non-secret and is stored in `.dsn`, while the password goes into a separate secret file `<secret-id>.redispass`.
 
 Requirements:
 
-- the file is readable only by the Alloy user;
+- the file is readable only by the user the implementation runs as;
 - the directory is mounted read-only;
-- `local.file` with `is_secret = true` is used;
+- the implementation redacts the value of a file with credentials: its API, debugging interfaces and exports show a placeholder instead of the value;
 - `secret-id` is validated by a regular expression;
 - `secret-id` must not contain `/`, `..`, spaces or shell characters.
 
@@ -520,17 +513,15 @@ ipmi      /run/alloy-secrets/<secret-id>.ipmi
 
 The `/run/alloy-secrets` directory is the default; it is configured by the `RU_3OPS_DISCOVERY_SECRETS_DIR` variable (section [14.1](#141-environment-parameters)).
 
-The identifier validation rules and the read-only mount are identical across domains; `is_secret = true` is mandatory for files with credentials (the exception is the address-only redis `.dsn`: it is non-secret by construction, see above, and is read without `is_secret`). The requirements for path traversal protection are described in section [13.4](#134-secret-path-traversal).
+The identifier validation rules and the read-only mount are identical across domains; redaction is mandatory for files with credentials (the address-only redis `.dsn` is non-secret by construction, see above, and needs no redaction). The requirements for path traversal protection are described in section [13.4](#134-secret-path-traversal).
 
-The `secret-id` space is a single trust domain within the host: the contract does not bind a container to a particular secret, and any container with a valid label may reference any existing secret file. Only secrets meant for the containers of that host should be placed into its secret directory; use a `secret-id` prefix convention to separate teams. Prefixes are an operator convention only: the configuration does not check them, and technically every secret file on the host is reachable by every container of that host. A consequence of the same trust model: a container can determine whether a secret file exists by declaring the corresponding `secret-id` and observing whether an exporter appears; the content of the secret is not disclosed. Binding `secret-id` to a container identity is out of scope for version `0.2` (section [16](#16-out-of-scope)).
+The `secret-id` space is a single trust domain within the host: the contract does not bind a container to a particular secret, and any container with a valid label may reference any existing secret file. Only secrets meant for the containers of that host should be placed into its secret directory; use a `secret-id` prefix convention to separate teams. Prefixes are an operator convention only: the implementation does not check them, and technically every secret file on the host is reachable by every container of that host. A consequence of the same trust model: a container can determine whether a secret file exists by declaring the corresponding `secret-id` and observing whether an exporter appears; the content of the secret is not disclosed. Binding `secret-id` to a container identity is out of scope for version `0.2` (section [16](#16-out-of-scope)).
 
-A missing secret file: the blast radius. `secret-id` arrives from an untrusted input, so how far the failure spreads when it points at a file that does not exist matters. It is bounded, but wider than one container: in the database domain the failure takes down the WHOLE `foreach` block of that database type. A container declaring a regex-valid `secret-id` with no file behind it fails the evaluation of the entire block, and legitimate databases OF THE SAME TYPE stop being collected with it; databases of other types, living in their own blocks, are untouched. The failure is reversible: once the container is removed the block recovers on its own.
+A missing secret file: the blast radius. `secret-id` arrives from an untrusted input, so how far the failure spreads when it points at a file that does not exist matters. The contract does not promise that the failure stays within one container: the radius depends on the implementation and may take in other targets of the same collector (the radius of the reference is in section [14.4.4](#1444-how-the-reference-fulfils-the-contract)). The failure is reversible: once the container is removed, collection from the other targets recovers on its own.
 
-The tempting reading -- "a local.file per iteration, therefore a per-iteration failure" -- is wrong, and that is established by reproduction rather than derived from how `foreach` is built. A top-level `local.file` (the snmp file provider, section [10.6](#106-domain-snmp)) has no localization at all: its path is set by the operator, and a missing file brings the graph down in a cascade -- which is why overlay 037 is loaded only together with its files.
+What follows in practice: the right to start containers on a host may include the right to stop collection from other targets on that collector. Monitoring the health of the implementation is mandatory and is not replaced by the contract.
 
-What follows in practice: the right to start containers on a host includes the right to stop collection from every database of its own type on that collector. The separation by type is a side effect of the configuration's structure, not a protection. Monitoring the health of Alloy components is mandatory and is not replaced by the contract.
-
-The limits of secret redaction. `is_secret = true` guarantees redaction in the Alloy API and in component exports: the value is handed out as `(secret)`. The guarantee does not extend to configuration-load error messages -- when the declared type and the file content disagree, Alloy may quote a fragment of the value it read (the `host:port` of someone else's database, say) in the error text. This is Alloy behaviour rather than a choice of the contract, and no configuration changes it. What follows in practice: the collector's own logs are sensitive and deserve the same handling as secrets -- they should not be sent anywhere secrets are not sent (see section [13.2](#132-may-be-stored)).
+The limits of secret redaction. Redaction is mandatory in the API and the exports of the implementation, but a load error message may quote a fragment of the value read (the `host:port` of someone else's database, say). What follows in practice: the collector's own logs are sensitive and deserve the same handling as secrets: they should not be sent anywhere secrets are not sent (see section [13.2](#132-may-be-stored)).
 
 The snmp domain is the single documented exception to the "one file per `<auth-id>`" convention: its secret is a single `snmp_auths.yaml` file with named profiles inside the YAML (the `auths:` map) rather than one file per `auth-id`. The `secret-id` regular expression above normalizes the secret file names of the label-driven domains and does NOT constrain the profile name referenced by the `auth` field of the file provider (section [10.6.1](#1061-snmp-auth)).
 
@@ -1256,6 +1247,16 @@ The contract sections state their requirements without naming an implementation.
 - [§5](#5-global-labels): the reference does not read the `ru.3ops.discovery.version` label and processes every container by the `0.2` rules.
 - [§6.1](#61-labels-added-by-the-implementation): `collector` equals `alloy`; every file that produces series or streams, except [`060_otel.alloy`](../alloy-optional/060_otel.alloy), computes `host` as `coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)`, so an unset or empty parameter yields the hostname of the Alloy container. The OTLP path is an exemption from provenance (section [10.5](#105-domain-otel)): its series and streams carry neither `host` nor `collector`.
 - [§6.2](#62-log-fields): logs leave through `loki.write` over the Loki push API, to Loki and to VictoriaLogs alike; indexed fields become stream labels, non-indexed ones structured metadata (`stage.structured_metadata` in [`050_log-profiles.alloy`](../alloy/050_log-profiles.alloy)). The reference does not promote `level` into stream labels and does not truncate structured metadata values.
+- [§8.1](#81-general-rules): the names of profile components are derived from the profile name mechanically ([`alloy/README.md`](../alloy/README.md#layered-profile-pairs)), hence the `[a-z0-9-]` alphabet.
+- [§8.2](#82-scrape-profiles): a single `prometheus.scrape` has one `scrape_interval` and one `scrape_timeout`, so every profile gets its own `discovery.relabel`/`prometheus.scrape` pair ([`020_metrics.alloy`](../alloy/020_metrics.alloy)); no scrape component is created for a user-supplied value.
+- [§8.4](#84-database-profiles): profiles map onto exporter collectors ([`030_database.alloy`](../alloy/030_database.alloy)):
+  - `postgres`: `basic-v1` - the exporter defaults without `pg_settings` (`disable_settings_metrics`); `standard-v1` - the exporter defaults; `extended-v1` - `enabled_collectors` made of the 11 collectors enabled by default in the pinned exporter fork (`database`, `locks`, `replication`, `replication_slot`, `roles`, `stat_bgwriter`, `stat_database`, `stat_progress_vacuum`, `stat_user_tables`, `statio_user_tables`, `wal`) and four extras (`database_wraparound`, `long_running_transactions`, `process_idle`, `statio_user_indexes`): a non-empty list replaces the default set rather than adding to it.
+  - `mysql`/`mariadb`: `basic-v1` - `global_status`, `global_variables`; `standard-v1` - the six default collectors, pinned explicitly in `set_collectors`; `extended-v1` - the same plus `engine_innodb_status`, `info_schema.processlist`, `auto_increment.columns`.
+  - `redis`: `basic-v1` - `redis_*` series only (`redis_metrics_only`); `standard-v1` - the exporter defaults; `extended-v1` - the defaults plus `export_client_list` and `incl_system_metrics`.
+  - `mongodb`: `basic-v1` - diagnostic data only (`serverStatus`, `enable_diagnostic_data`); `standard-v1` and `extended-v1` - `collect_all` plus explicit `enable_*` flags equal to the ones `collect_all` turns on: without them the first scrape of each exporter is incomplete. `extended-v1` equals `standard-v1` because the mongodb exporter default is already maximal.
+- [§9](#9-secret-contract): a secret file is read by `local.file` at `coalesce(sys.env("RU_3OPS_DISCOVERY_SECRETS_DIR"), "/run/alloy-secrets")` + `/<secret-id>.<suffix>`; redaction comes from `is_secret = true`, and the Alloy API and component exports hand the value out as `(secret)`. The address-only redis `.dsn` is read with `is_secret = false`: the exporter's `redis_addr` argument takes a plain string rather than a secret; the password from `.redispass` goes through `redis_password`.
+- [§9](#9-secret-contract), the redaction limit: when the declared type and the file content disagree, the Alloy configuration-load error message may quote a fragment of the value read. This is Alloy behaviour, and no configuration changes it.
+- [§9](#9-secret-contract), the failure radius: in the database domain a missing secret file takes down the WHOLE `foreach` block of its database type. A container declaring a regex-valid `secret-id` with no file behind it fails the evaluation of the entire block, and legitimate databases OF THE SAME TYPE stop being collected with it; databases of other types live in their own blocks and are untouched. The reading "a `local.file` per iteration, therefore a per-iteration failure" is wrong: that is established by reproduction rather than derived from how `foreach` is built. The separation by type is a side effect of the configuration's structure, not a protection; the health of Alloy components needs monitoring. A top-level `local.file` (the snmp file provider, section [10.6](#106-domain-snmp)) has no localization at all: its path is set by the operator, and a missing file brings the graph down in a cascade, so overlay 037 is loaded only together with its files.
 
 ## 15. Usage
 

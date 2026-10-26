@@ -139,10 +139,6 @@ NOT_SERIES_PATHS: dict[str, str] = {
 #: its entry out. The table only shrinks.
 MANIFEST_IMPLEMENTATION_MENTIONS: dict[str, str] = {
     "1": "pointer to the reference implementation",
-    "8.1": "neutralized by stage 3 task 7",
-    "8.2": "neutralized by stage 3 task 7",
-    "8.4": "neutralized by stage 3 task 7",
-    "9": "neutralized by stage 3 task 7",
     "10.1.2": "neutralized by stage 3 task 8",
     "10.2": "neutralized by stage 3 task 8",
     "10.3.1": "neutralized by stage 3 task 8",
