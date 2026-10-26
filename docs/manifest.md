@@ -1203,7 +1203,7 @@ The file order, the layout of the profile pairs, the per-port target fan-out, st
 
 Alloy merges every `*.alloy` file of a directory into a single component graph (top level, non-recursively); component names are globally unique. A base component cannot be overridden: two declarations with the same name are a load error, not an override. Customization is done in three ways:
 
-- **an overlay directory** -- extra files added to the base directory at materialization time (section [14.4.3](#1443-optional-files)); the base `implementations/alloy/base/` stays valid and complete without them;
+- **an overlay directory** -- extra files added to the file set of the chosen domains at materialization time (section [14.4.3](#1443-optional-files)); the base `implementations/alloy/base/` stays valid and complete without them;
 - **extension points** -- stable exports of the base that an overlay may reference (section [14.4.2](#1442-extension-points));
 - **env parameterization** -- deployment values through `RU_3OPS_DISCOVERY_*` (section [14.1](#141-environment-parameters)).
 
@@ -1225,7 +1225,7 @@ The public API of the base configuration: the stable exports an overlay file may
 
 #### 14.4.3. Optional files
 
-The [`implementations/alloy/optional/`](../implementations/alloy/optional/) directory holds overlay files added to the base directory at materialization time. The base `implementations/alloy/base/` is valid without them.
+The [`implementations/alloy/optional/`](../implementations/alloy/optional/) directory holds the overlay files. A deployment takes the union of the files of the chosen domains from both tables (the `Domains` column here and the table of section 14.4); `implementations/alloy/base/` alone is the default domains and is valid without these files.
 
 | File | Domains | Content |
 |---|---|---|

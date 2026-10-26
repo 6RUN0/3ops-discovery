@@ -40,7 +40,7 @@ the gates that bind the two together and keep them from drifting apart.
 | [`implementations/alloy/README.md`](implementations/alloy/README.md) | How the reference configuration is built: file order, environment parameters, profile component pairs, stores and collector state. |
 | `tests/static/` | Static gates: they check the normative facts of the manifest against the actual configuration in both directions. |
 | `tests/e2e/` | End-to-end stack (`docker compose`): metrics and logs really do reach the configured storage (Prometheus + Loki by default); alloy/prometheus/loki monitor themselves through the contract (dogfooding). |
-| [`tools/materialize.py`](tools/materialize.py) | Assembles the configuration directory (base union optional) for `alloy_check` and e2e. |
+| [`tools/materialize.py`](tools/materialize.py) | Assembles the configuration directory (the union of the chosen domains' files, `DOMAIN_FILES` and `COMBOS`) for `alloy_check`, e2e and the demo. |
 | `LICENSE` | MIT license. |
 
 The manifest is Russian by design; code, comments and commits are

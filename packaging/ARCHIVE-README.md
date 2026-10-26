@@ -30,8 +30,12 @@ The base configuration alone:
 alloy run --stability.level=experimental implementations/alloy/base/
 ```
 
-The `--stability.level=experimental` flag is required by the `foreach`
-block used by the database domain. Check the syntax without running:
+The configuration is composed by domain: each file belongs to one or more
+domains (manifest sections 14.4 and 14.4.3), and a deployment takes the
+union of the files of the domains it chooses. The
+`--stability.level=experimental` flag is needed only when the set includes
+the database domain, whose `foreach` block requires it. Check the syntax
+without running:
 
 ```sh
 docker run --rm -v "$PWD/implementations/alloy/base:/etc/alloy:ro" grafana/alloy:v1.21.2 \

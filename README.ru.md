@@ -37,7 +37,7 @@ map-, и в list-форме.
 | [`implementations/alloy/README.md`](implementations/alloy/README.md) | Устройство эталонной конфигурации: порядок файлов, параметры окружения, пары профильных компонентов, хранилища и состояние коллектора. |
 | `tests/static/` | Статические гейты: сверяют нормативные факты манифеста с фактической конфигурацией в обе стороны. |
 | `tests/e2e/` | End-to-end стек (`docker compose`): метрики и логи реально доходят до настроенного хранилища (по умолчанию Prometheus + Loki); alloy/prometheus/loki мониторят сами себя через контракт (dogfooding). |
-| [`tools/materialize.py`](tools/materialize.py) | Сборка каталога конфигурации (base ∪ optional) для `alloy_check` и e2e. |
+| [`tools/materialize.py`](tools/materialize.py) | Сборка каталога конфигурации (объединение файлов выбранных доменов, `DOMAIN_FILES` и `COMBOS`) для `alloy_check`, e2e и demo. |
 | `LICENSE` | Лицензия MIT. |
 
 Манифест русскоязычный по замыслу; код, комментарии и коммиты —

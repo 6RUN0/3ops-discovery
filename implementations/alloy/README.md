@@ -105,9 +105,10 @@ Mimir and Grafana Cloud require authentication and/or the
 `X-Scope-OrgID` header: beyond the variables of manifest section 14.1,
 add `basic_auth`/`authorization`/`headers` blocks inside `endpoint` in
 `090_output-metrics.alloy` or `091_output-logs.alloy`, with the secret
-read from `local.file` (`is_secret = true`). Credentials never go into the URL (manifest
-section [14.2](../../docs/manifest.md#142-output-protocols-and-stores)):
-the variable value is an ordinary string and may show up in the Alloy UI
+read from `local.file` (`is_secret = true`). Credentials never go into
+the URL (manifest section
+[14.2](../../docs/manifest.md#142-output-protocols-and-stores)): the
+variable value is an ordinary string and may show up in the Alloy UI
 and in the logs.
 
 ## State and persistent storage
