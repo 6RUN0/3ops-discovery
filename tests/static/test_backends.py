@@ -14,6 +14,7 @@ from tools.backends import (
     LokiBackend,
     UnscopedQueryError,
     VictoriaLogsBackend,
+    _stream_selector,
     check_scope,
     loki_result_to_records,
     parse_json_lines,
@@ -78,6 +79,24 @@ def test_emoji_survives_both() -> None:
 def test_overlapping_keys_rejected() -> None:
     with pytest.raises(ValueError, match="both stream and stream_regex"):
         LogQuery(stream={"container": "a"}, stream_regex={"container": "b"})
+
+
+@pytest.mark.parametrize("name", ["", "a b", 'a"b', "a-b", "1a", "a|b", "a}"])
+def test_bad_label_names_are_rejected(name: str) -> None:
+    # Names are interpolated into the query unquoted, so a stray character
+    # would change the query instead of failing.
+    with pytest.raises(ValueError, match="label name"):
+        LogQuery(stream={name: "v"})
+    with pytest.raises(ValueError, match="label name"):
+        LogQuery(stream={"compose_project": "p"}, stream_regex={name: "v"})
+    with pytest.raises(ValueError, match="label name"):
+        LogQuery(stream={"compose_project": "p"}, field_present=name)
+
+
+def test_empty_contains_is_rejected() -> None:
+    # `|= ""` matches every line: the query would pass for any stream.
+    with pytest.raises(ValueError, match="contains"):
+        LogQuery(stream={"compose_project": "p"}, contains="")
 
 
 def test_unscoped_query_rejected() -> None:
@@ -156,6 +175,12 @@ def test_json_lines_skip_blank_lines() -> None:
 def test_bad_json_line_names_its_position() -> None:
     with pytest.raises(ValueError, match=r"line 2 .*'\{oops'"):
         parse_json_lines('{"a": "1"}\n{oops\n')
+
+
+@pytest.mark.parametrize("line", ["[1, 2]", '"text"', "7", "null"])
+def test_json_line_that_is_not_an_object_names_its_position(line: str) -> None:
+    with pytest.raises(ValueError, match=r"line 2 .*not a JSON object"):
+        parse_json_lines(f'{{"a": "1"}}\n{line}\n')
 
 
 def test_loki_result_to_records_takes_structured_metadata() -> None:
@@ -247,10 +272,59 @@ def test_malformed_stream_strings_are_named(text: str, message: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "text",
+    ['{a="b"x}', '{a="b" c="d"}', '{a="b",}', '{a="b"c="d"}'],
+)
+def test_stream_with_garbage_between_pairs_is_rejected(text: str) -> None:
+    with pytest.raises(ValueError, match="malformed stream string"):
+        parse_stream(text)
+
+
+@pytest.mark.parametrize(
+    ("escaped", "char"),
+    [
+        ("\\r", "\r"),
+        ("\\a", "\a"),
+        ("\\b", "\b"),
+        ("\\f", "\f"),
+        ("\\v", "\v"),
+        ("\\u00e9", "\u00e9"),
+        ("\\U0001f600", "\U0001f600"),
+    ],
+)
+def test_parse_stream_reads_go_escapes(escaped: str, char: str) -> None:
+    assert parse_stream(f'{{a="x{escaped}y"}}') == {"a": f"x{char}y"}
+
+
+@pytest.mark.parametrize("escaped", ["\\u00", "\\uzzzz", "\\U0011ffff"])
+def test_parse_stream_rejects_bad_unicode_escapes(escaped: str) -> None:
+    with pytest.raises(ValueError, match="bad escape in stream string"):
+        parse_stream(f'{{a="{escaped}"}}')
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["plain", 'q"uote', "back\\slash", "a\x01b\r\n\t\x7f", "\U0001f600,}{"],
+)
+def test_quote_and_parse_stream_round_trip(value: str) -> None:
+    # `_quote` is the writer of the same literal syntax parse_stream reads.
+    rendered = _stream_selector(LogQuery(stream={"k": value}))
+    assert parse_stream(rendered) == {"k": value}
+
+
+@pytest.mark.parametrize(
     ("duration", "seconds"), [("90s", 90.0), ("30m", 1800.0), ("2h", 7200.0)]
 )
 def test_seconds_of_each_unit(duration: str, seconds: float) -> None:
     assert to_seconds(duration) == seconds
+
+
+@pytest.mark.parametrize("duration", ["", "30", "30d", "m", "xs", "1.5.2m"])
+def test_bad_durations_raise_value_error(duration: str) -> None:
+    # IndexError escapes wait_until and KeyError is retried silently until
+    # the budget ends; ValueError must name the bad input.
+    with pytest.raises(ValueError, match="duration"):
+        to_seconds(duration)
 
 
 def _ts_of(stamp: str) -> str:

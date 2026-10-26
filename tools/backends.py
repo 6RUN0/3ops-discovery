@@ -10,6 +10,8 @@ HTTP and return backend-neutral `LogRecord`s; everything else is pure.
 from __future__ import annotations
 
 import json
+import re
+import string
 import time
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -18,12 +20,26 @@ from typing import Any, Protocol
 
 import requests
 
+_LABEL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _SCOPE_LABEL = "compose_project"
 #: Storage variants the e2e suite can run against; the first is the default.
 BACKEND_NAMES: tuple[str, ...] = ("prometheus-loki", "victoria")
 _BACKEND_ENV = "RU_3OPS_DISCOVERY_E2E_BACKEND"
 _SIMPLE_ESCAPES = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t"}
-_UNESCAPES = {"\\": "\\", '"': '"', "n": "\n", "t": "\t"}
+_DURATION_UNITS = {"s": 1.0, "m": 60.0, "h": 3600.0}
+_UNESCAPES = {
+    "\\": "\\",
+    '"': '"',
+    "n": "\n",
+    "t": "\t",
+    "r": "\r",
+    "a": "\a",
+    "b": "\b",
+    "f": "\f",
+    "v": "\v",
+}
+#: Go `%q` numeric escapes: letter -> count of hex digits that follow.
+_HEX_ESCAPE_DIGITS = {"x": 2, "u": 4, "U": 8}
 #: Code points below this, and DEL, are written as `\xNN`.
 _FIRST_PRINTABLE = 0x20
 _DEL = 0x7F
@@ -54,7 +70,7 @@ class LogQuery:
     stream_regex: RE2 patterns for stream labels. Loki anchors them fully;
         whether VictoriaLogs does is unverified, so callers use `.*x.*`,
         which matches the same lines either way.
-    contains: case-sensitive substring of the log line.
+    contains: non-empty, case-sensitive substring of the log line.
     field_present: the record has this field and it is non-empty.
     scoped: the query must be limited to one compose project (see
         `check_scope`); False declares a deliberately host-wide query.
@@ -67,7 +83,21 @@ class LogQuery:
     scoped: bool = True
 
     def __post_init__(self) -> None:
-        """Reject a label used both as equality and as regex."""
+        """
+        Reject malformed names, an empty `contains` and a doubled label.
+
+        Label and field names are interpolated into the query unquoted, so
+        each must match the label-name pattern; `contains=""` renders a
+        filter that matches every line.
+        """
+        names = [*self.stream, *self.stream_regex]
+        if self.field_present is not None:
+            names.append(self.field_present)
+        for name in names:
+            if not _LABEL_NAME.fullmatch(name):
+                raise ValueError(f"not a label name: {name!r}")
+        if self.contains == "":
+            raise ValueError("contains must not be empty")
         both = sorted(set(self.stream) & set(self.stream_regex))
         if both:
             raise ValueError(f"label in both stream and stream_regex: {both}")
@@ -153,9 +183,24 @@ def parse_stream(text: str) -> dict[str, str]:
         key = body[pos:eq].strip()
         value, pos = _read_quoted(body, eq + 2, text)
         result[key] = value
-        while pos < len(body) and body[pos] in ", ":
-            pos += 1
+        pos = _skip_pair_separator(body, pos, text)
     return result
+
+
+def _skip_pair_separator(body: str, pos: int, text: str) -> int:
+    """Step over the `,` (and spaces) between pairs; none before the end."""
+    while pos < len(body) and body[pos] == " ":
+        pos += 1
+    if pos == len(body):
+        return pos
+    if body[pos] != ",":
+        raise ValueError(f"malformed stream string: {text!r}")
+    pos += 1
+    while pos < len(body) and body[pos] == " ":
+        pos += 1
+    if pos == len(body):
+        raise ValueError(f"malformed stream string: {text!r}")
+    return pos
 
 
 def _read_quoted(body: str, pos: int, text: str) -> tuple[str, int]:
@@ -173,18 +218,37 @@ def _read_quoted(body: str, pos: int, text: str) -> tuple[str, int]:
         if nxt in _UNESCAPES:
             chars.append(_UNESCAPES[nxt])
             pos += 2
-        elif nxt == "x" and len(body) >= pos + 4:
-            chars.append(chr(int(body[pos + 2 : pos + 4], 16)))
-            pos += 4
+        elif nxt in _HEX_ESCAPE_DIGITS:
+            width = _HEX_ESCAPE_DIGITS[nxt]
+            chars.append(_read_hex_escape(body, pos + 2, width, text))
+            pos += 2 + width
         else:
             raise ValueError(f"bad escape in stream string: {text!r}")
     raise ValueError(f"unterminated value in stream string: {text!r}")
 
 
+def _read_hex_escape(body: str, pos: int, width: int, text: str) -> str:
+    """Decode `width` hex digits at `pos` into one character."""
+    digits = body[pos : pos + width]
+    if len(digits) != width or not set(digits) <= set(string.hexdigits):
+        raise ValueError(f"bad escape in stream string: {text!r}")
+    try:
+        return chr(int(digits, 16))
+    except ValueError:
+        raise ValueError(f"bad escape in stream string: {text!r}") from None
+
+
 def to_seconds(duration: str) -> float:
     """Convert a duration such as `30m` (units s, m, h) to seconds."""
-    units = {"s": 1.0, "m": 60.0, "h": 3600.0}
-    return float(duration[:-1]) * units[duration[-1]]
+    number, unit = duration[:-1], duration[-1:]
+    if unit not in _DURATION_UNITS:
+        raise ValueError(f"bad duration {duration!r}: unit must be s, m or h")
+    try:
+        return float(number) * _DURATION_UNITS[unit]
+    except ValueError:
+        raise ValueError(
+            f"bad duration {duration!r}: no number before the unit"
+        ) from None
 
 
 @dataclass(frozen=True)
@@ -356,19 +420,27 @@ def parse_json_lines(text: str) -> list[dict[str, Any]]:
     """
     Parse a JSON-lines body, one object per non-empty line.
 
-    A bad line raises ValueError naming its 1-based number and text: the
-    bare decoder error gives only a character offset into the whole body.
+    A bad line, or one that is valid JSON but not an object, raises
+    ValueError naming its 1-based number and text: the bare decoder error
+    gives only a character offset into the whole body, and a non-object
+    row would fail later as a TypeError with no line attached.
     """
     rows = []
     for number, line in enumerate(text.splitlines(), start=1):
         if not line:
             continue
         try:
-            rows.append(json.loads(line))
+            row = json.loads(line)
         except json.JSONDecodeError as exc:
             raise ValueError(
                 f"bad JSON on line {number} of the response: {line!r}"
             ) from exc
+        if isinstance(row, dict):
+            rows.append(row)
+            continue
+        raise ValueError(
+            f"line {number} of the response is not a JSON object: {line!r}"
+        )
     return rows
 
 
