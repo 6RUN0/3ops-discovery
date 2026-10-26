@@ -71,3 +71,24 @@ def test_every_domain_with_labels_is_covered() -> None:
     # 10.6 (snmp) is the one domain not driven by Docker labels: its
     # targets come from a file, so it has no labels subsection to cover.
     assert missing == {"10.6"}, f"domains without a labels section: {missing}"
+
+
+def test_documented_labels_do_not_collide_after_normalization() -> None:
+    """
+    Pin manifest section 4: no two keys may coincide once `.`/`-` become `_`.
+
+    Prometheus-style service discovery performs that mapping, so such a
+    pair would collapse into one meta label and one of the two would
+    silently win.
+    """
+    globals_ = set(
+        re.findall(r"(?m)^### `(ru\.3ops\.[\w.-]+)`$", md.section("5"))
+    )
+    assert globals_, "no global labels found in manifest section 5"
+    seen: dict[str, str] = {}
+    for label in sorted(_documented_labels() | globals_):
+        key = re.sub(r"[.-]", "_", label)
+        assert key not in seen, (
+            f"{label} and {seen[key]} collide after normalization"
+        )
+        seen[key] = label

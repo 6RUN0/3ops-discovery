@@ -1,4 +1,4 @@
-// Opt-in snmp domain overlay (manifest 10.6, 14.5). File-provider domain:
+// Opt-in snmp domain overlay (manifest 10.6, 14.4.3). File-provider domain:
 // devices are listed in a YAML file, not Docker labels (SNMP hardware has no
 // container). Loaded ONLY in the snmp COMBO where the device and auth files
 // are guaranteed -- the two top-level local.file components fail New() on a
@@ -21,7 +21,7 @@ discovery.relabel "snmp" {
 	// in the file is a quoted string, so targets is well-typed.
 	targets = encoding.from_yaml(local.file.snmp_devices.content)
 
-	// Module allowlist (manifest 10.6): if_mib (interfaces) and system
+	// Module allowlist (manifest 14.4.4): if_mib (interfaces) and system
 	// (identity/uptime). One module per device row; a device needing both is
 	// listed twice under distinct names. The source label is the plain
 	// `module` key from the device YAML, NOT a docker-label prefix -- snmp is
@@ -89,7 +89,7 @@ discovery.relabel "snmp" {
 
 	rule {
 		target_label = "host"
-		replacement  = constants.hostname
+		replacement  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)
 	}
 }
 

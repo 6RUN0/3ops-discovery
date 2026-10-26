@@ -99,6 +99,17 @@ SNMP_MODULES_UNIMPLEMENTED: dict[str, str] = {}
 #: entry fails the gate just as a new undeclared row does.
 TRANSLATION_EXTRA_TABLE_ROWS: dict[str, int] = {"README.md": 1}
 
+#: Manifest 14.1 default cells that describe an expression rather than a
+#: literal: variable -> (manifest cell text, expression in the config's
+#: coalesce). test_env_vars.py maps the cell through this table instead of
+#: comparing strings.
+ENV_DEFAULT_EXPRESSIONS: dict[str, tuple[str, str]] = {
+    "RU_3OPS_DISCOVERY_HOSTNAME": (
+        "hostname коллектора",
+        "constants.hostname",
+    ),
+}
+
 #: Config files that produce no series or streams of their own, and are
 #: therefore exempt from the manifest 6.1 provenance check. Everything
 #: else in alloy/ and alloy-optional/ must attach host and collector;
@@ -115,4 +126,88 @@ NOT_SERIES_PATHS: dict[str, str] = {
     "documented as an explicit exemption by manifest 10.5",
     "090_outputs.alloy": "the write path: remote_write and loki.write "
     "forward what the domains already labelled",
+}
+
+#: Manifest sections outside 14.4 that still name the reference
+#: implementation (Alloy, its components or River functions), each with
+#: the stage-3 task that neutralizes it or the reason it stays (the
+#: section 1 pointer and the section 14 registry name the agent by
+#: design).
+#: test_manifest_neutrality.py demands equality with the scanner's
+#: findings in both directions on docs/manifest.ru.md, and bounds
+#: docs/manifest.md by the same table, so neutralizing a section forces
+#: its entry out. The table only shrinks.
+MANIFEST_IMPLEMENTATION_MENTIONS: dict[str, str] = {
+    "1": "pointer to the reference implementation",
+    "14": "registry names the agent",
+}
+
+#: Contract rules the reference does not meet: "<section>/<items>" ->
+#: reason. Each unmet rule has a 14.4.4 bullet that names this table
+#: (tests/static/test_rules_unmet.py); a rule stays a MUST in the contract.
+MANIFEST_RULES_UNMET: dict[str, str] = {
+    "10.3.4/3-4": "the reference replaces an unknown log profile with "
+    "raw-v1 in a discovery.relabel rule; relabel rules cannot write to the "
+    "collector's own log (item 3) or increment a metric (item 4), so "
+    "neither is emitted (manifest 14.4.4).",
+}
+
+#: Database type x profile cells (manifest 10.2 x 8.4) the series catalog
+#: does not carry: a catalog cell is snapshotted from an e2e container,
+#: and no e2e container runs these pairs. test_series_catalog.py demands
+#: that catalog cells and this table partition the full product, and that
+#: every key is a real pair, so adding a container forces its entry out.
+SERIES_CELLS_UNCATALOGUED: dict[tuple[str, str], str] = {
+    ("database", "mysql/basic-v1"): "no e2e container runs mysql",
+    ("database", "mysql/standard-v1"): "no e2e container runs mysql",
+    ("database", "mysql/extended-v1"): "no e2e container runs mysql",
+    ("database", "postgres/standard-v1"): (
+        "the e2e postgres containers declare basic-v1 and extended-v1"
+    ),
+    (
+        "database",
+        "mariadb/basic-v1",
+    ): "the e2e mariadb runs the default standard-v1",
+    (
+        "database",
+        "mariadb/extended-v1",
+    ): "the e2e mariadb runs the default standard-v1",
+    (
+        "database",
+        "redis/basic-v1",
+    ): "the e2e redis runs the default standard-v1",
+    (
+        "database",
+        "redis/extended-v1",
+    ): "the e2e redis runs the default standard-v1",
+    (
+        "database",
+        "mongodb/basic-v1",
+    ): "the e2e mongodb runs the default standard-v1",
+    (
+        "database",
+        "mongodb/extended-v1",
+    ): "the e2e mongodb runs the default standard-v1",
+}
+
+#: Catalog series an implementation is allowed not to deliver, or to deliver
+#: without the cataloged identity labels, as (implementation, domain, cell,
+#: series) -> reason. test_series_parity.py subtracts the "alloy" rows from
+#: the problems it finds. Empty: the reference delivers every cell on both
+#: storage backends.
+SERIES_PARITY_GAPS: dict[tuple[str, str, str, str], str] = {}
+
+#: Non-indexed log fields a store adds on its own, per e2e backend:
+#: backend -> field -> reason and source. Anything Alloy adds beyond the
+#: manifest 8.3 table is a reference defect and never goes here.
+STORE_DERIVED_LOG_FIELDS: dict[str, dict[str, str]] = {
+    "prometheus-loki": {
+        "detected_level": "Loki 3.x adds it to every line at ingest "
+        "(`unknown` when none is detected; "
+        "limits_config.discover_log_levels, default true). "
+        "Source: `docker run --rm grafana/loki:3.6.12 -help | "
+        "grep -A2 discover-log-levels`; no alloy/*.alloy file names it; "
+        "seen as {'detected_level': 'unknown'} on a raw-v1 record.",
+    },
+    "victoria": {},
 }

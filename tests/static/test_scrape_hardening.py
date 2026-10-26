@@ -76,6 +76,8 @@ def test_scrape_states_its_own_cadence(
 def test_manifest_states_why_ssrf_is_excluded() -> None:
     # Binding the text to the config: the guarantee and the setting that
     # earns it must be written down together, or the next reader takes
-    # the address construction alone for the whole reason.
-    trust = md.section("13.5")
-    assert "follow_redirects = false" in trust
+    # the address construction alone for the whole reason. The contract
+    # states the redirect rule neutrally; the setting lives in the reference
+    # notes of 14.4.4.
+    assert "не следует HTTP-редиректам" in md.section("13.5")
+    assert "follow_redirects = false" in md.section("14.4.4")

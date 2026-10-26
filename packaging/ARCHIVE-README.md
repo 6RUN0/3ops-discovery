@@ -37,7 +37,7 @@ docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.21.2 \
   validate --stability.level=experimental /etc/alloy
 ```
 
-The image tag is pinned by the manifest (section 14). Use that tag: the
+The image tag is pinned by the manifest (section 14.4). Use that tag: the
 configuration is validated against it and nothing else.
 
 ## Adding an overlay

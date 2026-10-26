@@ -1,8 +1,9 @@
-"""Host telemetry delivery (manifest 14.5): node_* metrics, journal logs."""
+"""Host telemetry delivery (manifest 14.4.3): node_* metrics, journal logs."""
 
 import uuid
 
 from tests.e2e.conftest import (
+    E2E_HOSTNAME,
     JOURNAL_HOST,
     LOGS_BUDGET,
     METRICS_BUDGET,
@@ -28,7 +29,7 @@ def test_node_metrics_delivered(stack: Stack) -> None:
     # installation.
     labels = series[0]["metric"]
     assert labels["collector"] == "alloy"
-    assert labels["host"]
+    assert labels["host"] == E2E_HOSTNAME
 
 
 def test_journal_logs_delivered(stack: Stack) -> None:
@@ -46,7 +47,7 @@ def test_journal_logs_delivered(stack: Stack) -> None:
     )
     assert written.returncode == 0, written.stderr
     # Journal streams come from the host, not from a container, so they
-    # carry no compose labels to scope by (manifest 14.5); the marker is
+    # carry no compose labels to scope by (manifest 14.4.3); the marker is
     # what limits the query to this run.
     records = wait_until(
         lambda: stack.log_records(
@@ -62,4 +63,4 @@ def test_journal_logs_delivered(stack: Stack) -> None:
     labels = records[0].stream
     assert labels["collector"] == "alloy"
     assert labels["source"] == "journal"
-    assert labels["host"]
+    assert labels["host"] == E2E_HOSTNAME

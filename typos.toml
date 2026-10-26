@@ -6,3 +6,9 @@ extend-exclude = ["uv.lock", ".secrets.baseline", "*.alloy"]
 [default]
 # The manifest is Russian prose with embedded English identifiers;
 # typos only checks the Latin tokens, which is exactly what we want.
+
+[default.extend-words]
+# asymmetries.SERIES_CELLS_UNCATALOGUED keeps the British spelling.
+uncatalogued = "uncatalogued"
+# test_series_catalog.py feeds the loader this typo on purpose.
+presnt = "presnt"

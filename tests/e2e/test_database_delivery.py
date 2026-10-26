@@ -2,7 +2,18 @@
 
 import pytest
 
-from tests.e2e.conftest import METRICS_BUDGET, Stack, wait_until
+from tests.e2e.conftest import (
+    E2E_HOSTNAME,
+    METRICS_BUDGET,
+    ReadinessTimeoutError,
+    Stack,
+    wait_until,
+)
+from tools.series_catalog import load_catalog
+
+#: The only series family basic-v1 switches off (manifest 8.4); every other
+#: series a basic-v1 exporter serves must survive on the wider profiles.
+_BASIC_ONLY_DROPS = "pg_settings_"
 
 
 def _up_metric(stack: Stack, family: str) -> bool:
@@ -66,7 +77,9 @@ def test_db_series_carry_provenance(
     )
     labels = series[0]["metric"]
     assert labels["collector"] == "alloy"
-    assert labels["host"], "db series lost the manifest 6.1 host label"
+    assert labels["host"] == E2E_HOSTNAME, (
+        "db series lost the manifest 6.1 host label"
+    )
     assert labels["compose_project"] == stack.project
     assert labels["container"]
     # Enriched identity must survive prometheus.scrape's defaults
@@ -130,3 +143,85 @@ def test_basic_profile_shrinks_collection(stack: Stack) -> None:
         f'pg_settings_max_connections{{compose_project="{stack.project}",'
         'instance="postgres-audit"}'
     )
+
+
+def test_extended_profile_keeps_the_standard_set(stack: Stack) -> None:
+    # Profiles are monotonic (manifest 8.4): extended-v1 adds collectors on
+    # top of the default set, it must not replace it. Every catalog series
+    # of postgres/basic-v1 except the pg_settings family it drops has to
+    # reach storage from the extended-v1 service too. Polled rather than
+    # checked once: an anchor series of the same scrape being visible does
+    # not make its siblings visible in the same instant query.
+    basic = load_catalog()["database", "postgres/basic-v1"]
+    expected = {
+        name
+        for name in basic.present
+        if not name.startswith(_BASIC_ONLY_DROPS)
+    }
+    scope = f'compose_project="{stack.project}",compose_service="postgres"'
+    names = "|".join(sorted(expected))
+    missing = set(expected)
+
+    def _all_served() -> bool:
+        served = {
+            series["metric"]["__name__"]
+            for series in stack.prom_query(f'{{__name__=~"{names}",{scope}}}')
+        }
+        missing.clear()
+        missing.update(expected - served)
+        return not missing
+
+    try:
+        wait_until(
+            _all_served,
+            timeout=METRICS_BUDGET,
+            desc="extended-v1 serves the basic-v1 series",
+        )
+    except ReadinessTimeoutError:
+        pytest.fail(f"extended-v1 lacks basic-v1 series: {sorted(missing)}")
+
+
+def test_mongodb_standard_profile_serves_server_status(stack: Stack) -> None:
+    # standard-v1 is full collection (manifest 8.4) from the first scrape
+    # on: every series of the catalog cell must share the timestamp of the
+    # earliest mongodb_up == 1 sample. The exporter widens collect_all
+    # only while serving its first scrape, so relying on collect_all alone
+    # leaves the first scrape of every new exporter with mongodb_up, the fcv
+    # series and collector_scrape_time_ms only.
+    cell = load_catalog()["database", "mongodb/standard-v1"]
+    scope = f'compose_project="{stack.project}",compose_service="mongodb"'
+    names = "|".join(sorted(cell.present))
+    # A range selector keeps __name__ and the sample timestamps; the window
+    # outlasts any e2e session, so it reaches back to the first scrape.
+    expr = f'{{__name__=~"{names}",{scope}}}[6h]'
+    missing = set(cell.present)
+
+    def _all_served() -> bool:
+        served = {s["metric"]["__name__"] for s in stack.prom_query(expr)}
+        missing.clear()
+        missing.update(cell.present - served)
+        return not missing
+
+    try:
+        wait_until(
+            _all_served,
+            timeout=METRICS_BUDGET,
+            desc="mongodb standard-v1 serves the catalog series",
+        )
+    except ReadinessTimeoutError:
+        pytest.fail(f"mongodb standard-v1 lacks series: {sorted(missing)}")
+
+    earliest: dict[str, float] = {}
+    first_up = float("inf")
+    for series in stack.prom_query(expr):
+        name = series["metric"]["__name__"]
+        stamps = [float(ts) for ts, _ in series["values"]]
+        earliest[name] = min([earliest.get(name, stamps[0]), *stamps])
+        if name == "mongodb_up":
+            ups = [float(ts) for ts, v in series["values"] if float(v) == 1.0]
+            first_up = min([first_up, *ups])
+    assert first_up != float("inf"), (
+        "no mongodb_up == 1 sample in the window: the first scrape is unknown"
+    )
+    late = sorted(name for name, ts in earliest.items() if ts > first_up)
+    assert not late, f"missing from the first mongodb scrape: {late}"

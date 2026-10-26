@@ -1,4 +1,4 @@
-"""Manifest 14 file table vs alloy/ contents; image pin."""
+"""Manifest 14.4 file table vs alloy/ contents; image pin."""
 
 import re
 from pathlib import Path

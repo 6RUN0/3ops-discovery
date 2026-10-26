@@ -1,0 +1,84 @@
+domain: database
+cells:
+  postgres/basic-v1:
+    identity: [job, instance, host, collector, container, compose_project, compose_service]
+    present:
+      - up
+      - pg_up
+      - pg_stat_activity_count
+      - pg_stat_database_numbackends
+      - pg_stat_database_xact_commit
+      - pg_stat_database_xact_rollback
+      - pg_stat_database_blks_hit
+      - pg_stat_database_deadlocks
+      - pg_database_size_bytes
+      - pg_locks_count
+    absent:
+      - pg_settings_max_connections
+      - pg_long_running_transactions
+      - pg_database_wraparound_age_datfrozenxid_seconds
+  postgres/extended-v1:
+    identity: [job, instance, host, collector, container, compose_project, compose_service]
+    present:
+      - up
+      - pg_up
+      - pg_stat_activity_count
+      - pg_stat_activity_max_tx_duration
+      - pg_stat_database_numbackends
+      - pg_stat_database_xact_commit
+      - pg_stat_database_xact_rollback
+      - pg_stat_database_deadlocks
+      - pg_database_size_bytes
+      - pg_locks_count
+      - pg_settings_max_connections
+      - pg_long_running_transactions
+      - pg_long_running_transactions_oldest_timestamp_seconds
+      - pg_database_wraparound_age_datfrozenxid_seconds
+      - pg_database_wraparound_age_datminmxid_seconds
+  mariadb/standard-v1:
+    identity: [job, instance, host, collector, container, compose_project, compose_service]
+    present:
+      - up
+      - mysql_up
+      - mysql_version_info
+      - mysql_global_status_uptime
+      - mysql_global_status_threads_connected
+      - mysql_global_status_threads_running
+      - mysql_global_status_queries
+      - mysql_global_status_slow_queries
+      - mysql_global_status_connections
+      - mysql_global_status_aborted_connects
+      - mysql_global_status_innodb_buffer_pool_read_requests
+      - mysql_global_variables_max_connections
+  redis/standard-v1:
+    identity: [job, instance, host, collector, container, compose_project, compose_service]
+    present:
+      - up
+      - redis_up
+      - redis_instance_info
+      - redis_uptime_in_seconds
+      - redis_connected_clients
+      - redis_blocked_clients
+      - redis_memory_used_bytes
+      - redis_memory_max_bytes
+      - redis_commands_processed_total
+      - redis_keyspace_hits_total
+      - redis_keyspace_misses_total
+      - redis_evicted_keys_total
+      - redis_expired_keys_total
+  mongodb/standard-v1:
+    identity: [job, instance, host, collector, container, compose_project, compose_service]
+    present:
+      - up
+      - mongodb_up
+      - mongodb_ss_uptime
+      - mongodb_ss_connections
+      - mongodb_ss_opcounters
+      - mongodb_ss_opLatencies_latency
+      - mongodb_ss_opLatencies_ops
+      - mongodb_ss_mem_resident
+      - mongodb_ss_mem_virtual
+      - mongodb_ss_network_bytesIn
+      - mongodb_ss_network_bytesOut
+      - mongodb_ss_asserts
+      - mongodb_ss_wt_cache_bytes_currently_in_the_cache

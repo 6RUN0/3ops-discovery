@@ -1,11 +1,11 @@
-// Opt-in host logs (manifest 14.5). Reads the systemd journal mounted at
+// Opt-in host logs (manifest 14.4.3). Reads the systemd journal mounted at
 // /var/log/journal and forwards to the base loki.write (090). The static
 // labels are within the manifest 6.2 allowlist (host/collector/source).
 // format_as_json = false reduces each record to its MESSAGE field: the
 // journal metadata (_SYSTEMD_UNIT, PRIORITY, _PID) is dropped outright,
 // not moved into structured metadata, so a host line cannot be attributed
 // to the unit that emitted it. The contract promises only
-// host/collector/source (manifest 14.5), so this keeps it -- carrying the
+// host/collector/source (manifest 14.4.3), so this keeps it -- carrying the
 // metadata would change behaviour and is decided on its own.
 // Requires a persistent journal on the host (/var/log/journal) plus
 // /etc/machine-id;
@@ -17,7 +17,7 @@ loki.source.journal "host" {
 	max_age        = "12h"
 	forward_to     = [loki.write.default.receiver]
 	labels         = {
-		host      = constants.hostname,
+		host      = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname),
 		collector = "alloy",
 		source    = "journal",
 	}

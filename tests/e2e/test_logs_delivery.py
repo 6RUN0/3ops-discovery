@@ -163,11 +163,11 @@ def test_json_profile_parses_into_structured_metadata(
         timeout=LOGS_BUDGET,
         desc="json record with trace_id in the body",
     )
-    record = records[0]
-    assert "trace_id" in record.fields, record
-    body = json.loads(record.line)
-    assert isinstance(body, dict), record.line
-    assert body["trace_id"] == record.fields["trace_id"], record
+    for record in records:
+        assert "trace_id" in record.fields, record
+        body = json.loads(record.line)
+        assert isinstance(body, dict), record.line
+        assert body["trace_id"] == record.fields["trace_id"], record
 
 
 def test_logfmt_profile_parses_into_structured_metadata(

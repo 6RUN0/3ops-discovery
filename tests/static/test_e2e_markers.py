@@ -51,25 +51,32 @@ def _is_marker(node: ast.AST) -> bool:
     return isinstance(node, ast.Attribute) and node.attr == MARKER
 
 
-def _module_is_marked(tree: ast.Module) -> bool:
-    """Whether the module sets ``pytestmark`` with the marker."""
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(
-            isinstance(t, ast.Name) and t.id == "pytestmark"
-            for t in node.targets
+def _assigns_marker(body: list[ast.stmt]) -> bool:
+    """Whether a module or class body sets ``pytestmark`` with the marker."""
+    for node in body:
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if any(
+            isinstance(t, ast.Name) and t.id == "pytestmark" for t in targets
         ):
-            return any(_is_marker(n) for n in ast.walk(node.value))
+            return any(_is_marker(n) for n in ast.walk(value))
     return False
 
 
-def _function_is_marked(node: ast.FunctionDef) -> bool:
-    """Whether a function carries the marker as a decorator."""
+def _is_marked_by_decorator(
+    node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
+) -> bool:
+    """Whether a function or class carries the marker as a decorator."""
     return any(_is_marker(n) for d in node.decorator_list for n in ast.walk(d))
 
 
 def _reads_alloy(
-    func: ast.FunctionDef,
-    functions: dict[str, ast.FunctionDef],
+    func: ast.FunctionDef | ast.AsyncFunctionDef,
+    functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef],
     readers: set[str],
 ) -> bool:
     """
@@ -95,25 +102,58 @@ def _reads_alloy(
     return False
 
 
+def _unmarked_in(tree: ast.Module, readers: set[str]) -> tuple[list[str], int]:
+    """
+    Return unmarked reader tests of one module and the count of readers.
+
+    Covers ``def`` and ``async def`` tests at module level and as methods
+    of a class; a marker may sit on the test, on its class, or in a
+    ``pytestmark`` assignment (plain or annotated) of the module or class.
+    Names are ``test`` or ``Class::test``.
+    """
+    functions = {
+        n.name: n
+        for n in tree.body
+        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
+    }
+    module_marked = _assigns_marker(tree.body)
+    candidates: list[
+        tuple[str, ast.FunctionDef | ast.AsyncFunctionDef, bool]
+    ] = [(name, func, module_marked) for name, func in functions.items()]
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
+            class_marked = (
+                module_marked
+                or _is_marked_by_decorator(node)
+                or _assigns_marker(node.body)
+            )
+            candidates += [
+                (f"{node.name}::{m.name}", m, class_marked)
+                for m in node.body
+                if isinstance(m, ast.FunctionDef | ast.AsyncFunctionDef)
+            ]
+    unmarked: list[str] = []
+    found = 0
+    for name, func, marked in candidates:
+        if not name.rpartition("::")[2].startswith("test_"):
+            continue
+        if not _reads_alloy(func, functions, readers):
+            continue
+        found += 1
+        if not (marked or _is_marked_by_decorator(func)):
+            unmarked.append(name)
+    return unmarked, found
+
+
 def _unmarked_readers() -> tuple[list[str], int]:
     """Return unmarked ``file::test`` readers and the count of readers."""
     readers = _alloy_reader_names()
     unmarked: list[str] = []
     found = 0
     for path in sorted(E2E.glob("test_*.py")):
-        tree = ast.parse(path.read_text())
-        module_marked = _module_is_marked(tree)
-        functions = {
-            n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)
-        }
-        for name, func in functions.items():
-            if not name.startswith("test_"):
-                continue
-            if not _reads_alloy(func, functions, readers):
-                continue
-            found += 1
-            if not (module_marked or _function_is_marked(func)):
-                unmarked.append(f"{path.name}::{name}")
+        names, count = _unmarked_in(ast.parse(path.read_text()), readers)
+        unmarked += [f"{path.name}::{name}" for name in names]
+        found += count
     return unmarked, found
 
 
@@ -127,6 +167,7 @@ def test_every_alloy_ui_reader_is_marked() -> None:
     """
     unmarked, found = _unmarked_readers()
     assert found > 0, "positive control: no Alloy-reading test found"
+    assert "alloy_components" in _alloy_reader_names()
     assert not unmarked, (
         f"tests reading Alloy internals lack @pytest.mark.{MARKER}: {unmarked}"
     )
@@ -137,3 +178,73 @@ def test_marker_is_registered() -> None:
     config = tomllib.loads((REPO / "pyproject.toml").read_text())
     markers = config["tool"]["pytest"]["ini_options"].get("markers", [])
     assert any(m.split(":")[0].strip() == MARKER for m in markers)
+
+
+_SYNTHETIC = """
+import pytest
+{module_level}
+
+def test_clean(stack):
+    return 1
+
+def test_plain(stack):
+    stack.alloy_url
+
+@pytest.mark.alloy_internals
+def test_marked(stack):
+    stack.alloy_url
+
+async def test_async(stack):
+    stack.alloy_url
+
+def test_via_helper(stack):
+    _helper(stack)
+
+def _helper(stack):
+    stack.alloy_components()
+
+class TestGroup:
+    def test_method(self, stack):
+        stack.alloy_url
+
+    @pytest.mark.alloy_internals
+    def test_method_marked(self, stack):
+        stack.alloy_url
+"""
+
+
+def _synthetic(module_level: str = "") -> tuple[list[str], int]:
+    tree = ast.parse(_SYNTHETIC.format(module_level=module_level))
+    return _unmarked_in(tree, {"alloy_url", "alloy_components"})
+
+
+def test_gate_flags_every_unmarked_shape() -> None:
+    """Pins: async tests, class methods and helper calls are not skipped."""
+    unmarked, found = _synthetic()
+    assert sorted(unmarked) == [
+        "TestGroup::test_method",
+        "test_async",
+        "test_plain",
+        "test_via_helper",
+    ]
+    assert found == 6
+
+
+def test_gate_honours_module_markers_of_both_assignment_forms() -> None:
+    """Pins: an annotated ``pytestmark`` marks the module like a plain one."""
+    plain = "pytestmark = pytest.mark.alloy_internals"
+    annotated = "pytestmark: object = pytest.mark.alloy_internals"
+    assert _synthetic(plain) == ([], 6)
+    assert _synthetic(annotated) == ([], 6)
+    assert _synthetic("pytestmark = pytest.mark.slow")[0]
+
+
+def test_gate_honours_class_marker() -> None:
+    """Pins: a class decorator marks its methods, not the module's tests."""
+    source = _SYNTHETIC.replace(
+        "class TestGroup:",
+        "@pytest.mark.alloy_internals\nclass TestGroup:",
+    ).format(module_level="")
+    unmarked, _ = _unmarked_in(ast.parse(source), {"alloy_url"})
+    assert "TestGroup::test_method" not in unmarked
+    assert "test_plain" in unmarked

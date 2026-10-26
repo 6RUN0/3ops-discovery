@@ -1,0 +1,10 @@
+domain: metrics
+cells:
+  scrape:
+    identity: [job, instance, host, collector, container, compose_project, compose_service]
+    present:
+      - up
+      - scrape_duration_seconds
+      - scrape_samples_scraped
+      - scrape_samples_post_metric_relabeling
+      - scrape_series_added

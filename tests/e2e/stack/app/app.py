@@ -183,7 +183,7 @@ def _fuzz_corpus(seq: int) -> list[bytes]:
     invalid_utf8 = b"broken \xff\xfe\xfa bytes"
     # Big enough to exercise a huge line, but under Loki's default
     # max_line_size (262144 bytes) so it is ingested rather than rejected
-    # -- the reference config does not truncate (manifest 6.2), so an
+    # -- the reference config does not truncate (manifest 14.4.4), so an
     # over-limit line would be dropped by Loki and is out of scope here.
     huge = b"x" * 230_000
     broken_json = b'{"level": "info", "unterminated": '

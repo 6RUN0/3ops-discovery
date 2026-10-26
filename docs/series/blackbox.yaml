@@ -1,0 +1,42 @@
+domain: blackbox
+cells:
+  http_2xx:
+    identity: [job, instance, host, collector, container, compose_project, compose_service, module]
+    present:
+      - up
+      - probe_success
+      - probe_duration_seconds
+      - probe_dns_lookup_time_seconds
+      - probe_ip_protocol
+      - probe_http_status_code
+      - probe_http_duration_seconds
+      - probe_http_ssl
+      - probe_http_version
+  tcp_connect:
+    identity: [job, instance, host, collector, container, compose_project, compose_service, module]
+    present:
+      - up
+      - probe_success
+      - probe_duration_seconds
+      - probe_dns_lookup_time_seconds
+      - probe_ip_protocol
+  icmp:
+    identity: [job, instance, host, collector, container, compose_project, compose_service, module]
+    present:
+      - up
+      - probe_success
+      - probe_duration_seconds
+      - probe_dns_lookup_time_seconds
+      - probe_ip_protocol
+      - probe_icmp_duration_seconds
+  tls_connect:
+    identity: [job, instance, host, collector, container, compose_project, compose_service, module]
+    present:
+      - up
+      - probe_success
+      - probe_duration_seconds
+      - probe_dns_lookup_time_seconds
+      - probe_ip_protocol
+      - probe_ssl_earliest_cert_expiry
+      - probe_ssl_last_chain_expiry_timestamp_seconds
+      - probe_tls_version_info

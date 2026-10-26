@@ -241,7 +241,7 @@ def secret_formats() -> dict[str, str]:
 
 def snmp_auth_versions() -> set[int]:
     """Section 10.6.1: the numeric `version` values the contract allows."""
-    m = re.search(r"`version ∈ \{([^}]+)\}`", section("10.6.1"))
+    m = re.search(r"`version in \{([^}]+)\}`", section("10.6.1"))
     if m is None:
         raise AnchorError("snmp auth version allowlist not found in 10.6.1")
     parts = [part.strip() for part in m.group(1).split(",")]
@@ -379,13 +379,13 @@ def domain_label_names(number: str) -> set[str]:
 
 
 def optional_files() -> set[str]:
-    """Section 14.5: names of the optional overlay files."""
-    return {_plain(row["Файл"]) for row in table("14.5")}
+    """Section 14.4.3: names of the optional overlay files."""
+    return {_plain(row["Файл"]) for row in table("14.4.3")}
 
 
 def extension_points() -> set[str]:
-    """Section 14.4: stable base exports overlays may reference."""
-    return {_plain(row["Экспорт"]) for row in table("14.4")}
+    """Section 14.4.2: stable base exports overlays may reference."""
+    return {_plain(row["Экспорт"]) for row in table("14.4.2")}
 
 
 def secret_id_pattern() -> str:
@@ -394,12 +394,12 @@ def secret_id_pattern() -> str:
 
 
 def loki_label_allowlist() -> set[str]:
-    """Section 6.2: labels allowed in Loki streams."""
+    """Section 6.2: the allowlist of indexed log fields."""
     return set(code_block("6.2").split())
 
 
 def provenance_labels() -> set[str]:
-    """Section 6.1: label names Alloy must attach when available."""
+    """Section 6.1: label names an implementation attaches when available."""
     names = {
         line.split("=")[0].strip()
         for line in code_block("6.1").splitlines()
@@ -419,13 +419,83 @@ def env_defaults() -> dict[str, str]:
 
 
 def base_files() -> set[str]:
-    """Section 14: file names of the base reference config."""
-    return {_plain(row["Файл"]) for row in table("14")}
+    """Section 14.4: file names of the base reference config."""
+    return {_plain(row["Файл"]) for row in table("14.4")}
 
 
 def alloy_image_tag() -> str:
-    """Section 14: the pinned grafana/alloy image tag."""
-    m = re.search(r"grafana/alloy:(v[0-9][\w.]*)", section("14"))
+    """Section 14.4: the pinned grafana/alloy image tag."""
+    m = re.search(
+        r"grafana/alloy:(v[0-9][\w.]*)", section("14.4", subsections=False)
+    )
     if m is None:
-        raise AnchorError("alloy image tag not found in section 14")
+        raise AnchorError("alloy image tag not found in section 14.4")
     return m.group(1)
+
+
+def domains() -> set[str]:
+    """Section 10: every contract domain, label-driven and host alike."""
+    return set(code_block("10").split()) | host_domains()
+
+
+def host_domains() -> set[str]:
+    """Section 10: domains not driven by labels, listed after a marker."""
+    return set(code_block("10", after="Хост-домены:").split())
+
+
+def implementations() -> dict[str, set[str]]:
+    """Section 14 registry: implementation name -> domains it covers."""
+    registry = {
+        _plain(row["Реализация"]): set(re.findall(r"`([^`]+)`", row["Домены"]))
+        for row in table("14")
+    }
+    if not registry:
+        raise AnchorError("no implementations parsed from section 14")
+    return registry
+
+
+#: Reference-implementation section: the only place the manifest may name
+#: Alloy components. It and its subsections are skipped by the neutrality
+#: scan.
+REFERENCE_SECTION = "14.4"
+
+#: Tokens that tie the text to Grafana Alloy. A path default such as
+#: /etc/alloy/... is a contract value, not a mention, hence the lookbehind.
+IMPLEMENTATION_TOKENS = re.compile(
+    r"Alloy|(?<![/\w])alloy(?:-optional)?/|\.alloy\b"
+    r"|(?<![\w.])discovery\.[a-z]+|loki\.(?:source|process|write|relabel)"
+    r"|prometheus\.(?:scrape|remote_write|exporter|relabel)|otelcol\."
+    r"|source_labels|target_label|__address__|\bRiver\b|stability\.level"
+    r"|(?<![/\w.-])alloy(?![/\w-])"
+    r"|foreach|__meta_docker|constants\.|coalesce\(|sys\.env|local\.file"
+    r"|is_secret|keepequal|stage\.\w+"
+)
+
+
+def implementation_mentions(text: str | None = None) -> dict[str, int]:
+    """
+    Count implementation tokens per section, excluding numbered subsections.
+
+    A body runs from its numbered heading to the next numbered one; unnumbered
+    sub-headings belong to the enclosing numbered section.
+    Section ``REFERENCE_SECTION`` with its subsections and any text before
+    the first numbered heading are skipped. ``None`` scans the Russian
+    manifest.
+    """
+    source = _text() if text is None else text
+    heading = re.compile(r"(?m)^#+ (?:(\d+(?:\.\d+)*)\. )?.*$")
+    marks = list(heading.finditer(source))
+    counts: dict[str, int] = {}
+    owner: str | None = None
+    for mark, following in zip(marks, [*marks[1:], None], strict=True):
+        # An unnumbered heading hands its body to the last numbered one.
+        owner = mark.group(1) or owner
+        if owner is None or owner.split(".")[:2] == REFERENCE_SECTION.split(
+            "."
+        ):
+            continue
+        body = source[mark.end() : following.start() if following else None]
+        found = len(IMPLEMENTATION_TOKENS.findall(body))
+        if found:
+            counts[owner] = counts.get(owner, 0) + found
+    return counts

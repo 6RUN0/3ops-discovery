@@ -30,7 +30,7 @@ def test_snmp_v3_delivery_with_provenance(snmp_stack: Stack) -> None:
     assert labels["environment"] == "e2e"
     assert labels["team"] == "platform"
     assert labels["collector"] == "alloy"
-    assert labels["host"]  # constants.hostname, non-empty
+    assert labels["host"]  # collector hostname fallback, non-empty
 
 
 def test_system_module_delivers_device_identity(snmp_stack: Stack) -> None:

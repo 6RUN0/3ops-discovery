@@ -4,7 +4,7 @@
 // reduce discovery.docker to exactly one target per container: the
 // keepequal rule collapses the per-port fan-out, and several Docker
 // networks do not fan out at all (match_first_network keeps the first
-// network by name, manifest section 14).
+// network by name, alloy/README.md).
 // The DSN is read from a secret file via local.file; labels carry only
 // the logical secret id, never credentials.
 // The foreach block is experimental as of Alloy v1.21: run and validate
@@ -95,11 +95,14 @@ foreach "postgres" {
 			is_secret = true
 		}
 
-		// Profile-driven collection scope (manifest 8.4): standard-v1 is
+		// Profile-driven collection scope (manifest 8.4, 14.4.4): standard-v1 is
 		// the exporter's default set; basic-v1 additionally drops the
 		// pg_settings collection; extended-v1 enables extra collectors
 		// restricted to ones that work on a vanilla server (no
-		// extensions, no server-version gate).
+		// extensions, no server-version gate). A non-empty
+		// enabled_collectors replaces the default set instead of adding
+		// to it, so extended-v1 lists the default-enabled collectors of
+		// the pinned exporter fork first, then the four extras.
 		prometheus.exporter.postgres "db" {
 			data_source_names = [local.file.dsn.content]
 
@@ -108,7 +111,11 @@ foreach "postgres" {
 			enabled_collectors = {
 				"basic-v1"    = [],
 				"standard-v1" = [],
-				"extended-v1" = ["database_wraparound", "long_running_transactions", "process_idle", "statio_user_indexes"],
+				"extended-v1" = [
+					"database", "locks", "replication", "replication_slot", "roles", "stat_bgwriter",
+					"stat_database", "stat_progress_vacuum", "stat_user_tables", "statio_user_tables", "wal",
+					"database_wraparound", "long_running_transactions", "process_idle", "statio_user_indexes",
+				],
 			}[coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1")]
 		}
 
@@ -163,7 +170,7 @@ foreach "postgres" {
 
 			rule {
 				target_label = "host"
-				replacement  = constants.hostname
+				replacement  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)
 			}
 			// Synthesised series identity: job = type, instance = secret id
 			// (always present, passes the section 9 regex, unique per db).
@@ -275,7 +282,7 @@ foreach "mysql" {
 			is_secret = true
 		}
 
-		// Profile-driven collection scope (manifest 8.4). set_collectors
+		// Profile-driven collection scope (manifest 8.4, 14.4.4). set_collectors
 		// fully overrides the exporter's default set, so standard-v1
 		// pins today's upstream defaults explicitly: a profile's
 		// behaviour must not drift with an exporter upgrade (manifest
@@ -334,7 +341,7 @@ foreach "mysql" {
 
 			rule {
 				target_label = "host"
-				replacement  = constants.hostname
+				replacement  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)
 			}
 
 			rule {
@@ -453,10 +460,12 @@ foreach "redis" {
 			is_secret = true
 		}
 
-		// Profile-driven collection scope (manifest 8.4): basic-v1 keeps
-		// only redis_* series (drops the exporter's own Go runtime
-		// metrics); extended-v1 adds client-list and system memory
-		// metrics on top of the defaults.
+		// Profile-driven collection scope (manifest 8.4, 14.4.4): extended-v1
+		// adds client-list and system memory metrics on top of the defaults.
+		// redis_metrics_only only drops redis_exporter_build_info from a
+		// registry Alloy does not serve, so basic-v1 equals standard-v1 in series.
+		// Alloy serves a same-named redis_exporter_build_info of its own
+		// (integration build info) regardless of the flag.
 		prometheus.exporter.redis "db" {
 			redis_addr     = local.file.addr.content
 			redis_password = local.file.password.content
@@ -508,7 +517,7 @@ foreach "redis" {
 
 			rule {
 				target_label = "host"
-				replacement  = constants.hostname
+				replacement  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)
 			}
 
 			rule {
@@ -617,15 +626,33 @@ foreach "mongodb" {
 			is_secret = true
 		}
 
-		// Profile-driven collection scope (manifest 8.4): basic-v1 keeps
+		// Profile-driven collection scope (manifest 8.4, 14.4.4): basic-v1 keeps
 		// only the diagnostic serverStatus data. The exporter's default
 		// (collect_all) is already the maximum, so extended-v1 is an
 		// accepted equivalent of standard-v1 (manifest 8.4).
+		// collect_all alone leaves the first scrape of each exporter with
+		// mongodb_up, the fcv series and collector_scrape_time_ms only:
+		// mongodb_exporter v0.47.2 widens it into the enable_* flags after
+		// copying the options that scrape uses. Spelling out every flag
+		// collect_all sets makes the first scrape complete as well.
 		prometheus.exporter.mongodb "db" {
 			mongodb_uri = local.file.dsn.content
 
-			collect_all            = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
-			enable_diagnostic_data = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") == "basic-v1"
+			collect_all                  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_diagnostic_data       = true
+			discovering_mode             = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_coll_stats            = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_currentop_metrics     = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_db_stats              = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_db_stats_free_storage = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_fcv                   = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_index_stats           = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_pbm_metrics           = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_profile               = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_replicaset_config     = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_replicaset_status     = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_shards                = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_top_metrics           = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
 		}
 
 		discovery.relabel "enrich_mongodb" {
@@ -670,7 +697,7 @@ foreach "mongodb" {
 
 			rule {
 				target_label = "host"
-				replacement  = constants.hostname
+				replacement  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)
 			}
 
 			rule {

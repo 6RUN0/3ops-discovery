@@ -1,7 +1,8 @@
 """
 The credential itself never reaches the log backend.
 
-Manifest section 9 draws the line: `is_secret = true` redacts the Alloy
+Manifest section 9 draws the line, and its reference note in 14.4.4 says
+how Alloy meets it: `is_secret = true` redacts the Alloy
 API and component exports, but a configuration-load error may quote a
 fragment of the value Alloy read, and that is Alloy's behaviour rather
 than the contract's choice. Documenting a limit is only half the work --
@@ -10,7 +11,7 @@ most: the password itself.
 
 The reference collects the stdout/stderr of every container including
 Alloy's own (dogfooding), so if a credential ever surfaced in a
-diagnostic it would travel straight into Loki.
+diagnostic it would travel straight into the log store.
 """
 
 from tests.e2e.conftest import LOGS_BUDGET, Stack, wait_until

@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from tests.e2e.conftest import METRICS_BUDGET, Stack, wait_until
+from tests.e2e.conftest import E2E_HOSTNAME, METRICS_BUDGET, Stack, wait_until
 
 #: module -> compose service its probe targets. Service names deliberately
 #: avoid sharing a substring so per-container assertions cannot collide.
@@ -52,7 +52,7 @@ def test_probe_success_delivered_per_module(stack: Stack) -> None:
         assert labels["environment"] == "e2e"
         assert labels["team"] == "platform"
         assert labels["collector"] == "alloy"
-        assert labels["host"]
+        assert labels["host"] == E2E_HOSTNAME
         assert labels["container"] == stack.compose_container(service)
         instance = labels["instance"]
         if module == "http_2xx":

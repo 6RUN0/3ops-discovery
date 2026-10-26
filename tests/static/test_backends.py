@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+import ast
 import re
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
+from pathlib import Path
 from typing import Any
 
 import pytest
 import requests
 
 from tools.backends import (
+    BACKEND_NAMES,
     LogQuery,
     LokiBackend,
     UnscopedQueryError,
     VictoriaLogsBackend,
+    _stream_selector,
     check_scope,
     loki_result_to_records,
     parse_json_lines,
@@ -80,6 +84,33 @@ def test_overlapping_keys_rejected() -> None:
         LogQuery(stream={"container": "a"}, stream_regex={"container": "b"})
 
 
+@pytest.mark.parametrize("name", ["", "a b", 'a"b', "a-b", "1a", "a|b", "a}"])
+def test_bad_label_names_are_rejected(name: str) -> None:
+    # Names are interpolated into the query unquoted, so a stray character
+    # would change the query instead of failing.
+    with pytest.raises(ValueError, match="label name"):
+        LogQuery(stream={name: "v"})
+    with pytest.raises(ValueError, match="label name"):
+        LogQuery(stream={"compose_project": "p"}, stream_regex={name: "v"})
+    with pytest.raises(ValueError, match="label name"):
+        LogQuery(stream={"compose_project": "p"}, field_present=name)
+
+
+def test_empty_contains_is_rejected() -> None:
+    # `|= ""` matches every line: the query would pass for any stream.
+    with pytest.raises(ValueError, match=r"^contains must not be empty$"):
+        LogQuery(stream={"compose_project": "p"}, contains="")
+
+
+def test_query_is_frozen_but_not_hashable() -> None:
+    # Documented in the LogQuery docstring: frozen for immutability, the
+    # dict fields make it unhashable.
+    with pytest.raises(FrozenInstanceError):
+        Q.contains = "x"  # type: ignore[misc]
+    with pytest.raises(TypeError, match="unhashable"):
+        hash(Q)
+
+
 def test_unscoped_query_rejected() -> None:
     with pytest.raises(UnscopedQueryError):
         check_scope(LogQuery(stream={"service_name": "x"}))
@@ -99,6 +130,21 @@ def test_parse_empty_stream() -> None:
 
 def test_seconds_of_duration() -> None:
     assert to_seconds("30m") == 1800.0
+
+
+@pytest.mark.parametrize(
+    "duration", ["-5s", "nans", "infs", "1e3s", " 5s", "s"]
+)
+def test_duration_must_be_a_plain_non_negative_decimal(duration: str) -> None:
+    with pytest.raises(ValueError, match="bad duration"):
+        to_seconds(duration)
+
+
+@pytest.mark.parametrize("text", ['{="v"}', '{a b="v"}', '{1a="v"}'])
+def test_stream_key_must_be_a_label_name(text: str) -> None:
+    message = f"bad label name in stream string: {text!r}"
+    with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+        parse_stream(text)
 
 
 def test_victorialogs_rows_to_records() -> None:
@@ -156,6 +202,12 @@ def test_json_lines_skip_blank_lines() -> None:
 def test_bad_json_line_names_its_position() -> None:
     with pytest.raises(ValueError, match=r"line 2 .*'\{oops'"):
         parse_json_lines('{"a": "1"}\n{oops\n')
+
+
+@pytest.mark.parametrize("line", ["[1, 2]", '"text"', "7", "null"])
+def test_json_line_that_is_not_an_object_names_its_position(line: str) -> None:
+    with pytest.raises(ValueError, match=r"line 2 .*not a JSON object"):
+        parse_json_lines(f'{{"a": "1"}}\n{line}\n')
 
 
 def test_loki_result_to_records_takes_structured_metadata() -> None:
@@ -218,9 +270,9 @@ def test_unscoped_error_tells_how_to_fix() -> None:
 
 
 def test_control_characters_are_hex_escaped() -> None:
-    q = replace(Q, contains="a\x01b\x7f")
-    assert '"a\\x01b\\x7f"' in to_logql(q)
-    assert '*"a\\x01b\\x7f"*' in to_logsql(q)
+    q = replace(Q, contains="a\x01b\r\x7f")
+    assert '"a\\x01b\\x0d\\x7f"' in to_logql(q)
+    assert '*"a\\x01b\\x0d\\x7f"*' in to_logsql(q)
 
 
 def test_parse_stream_hex_escape_and_spaced_separator() -> None:
@@ -247,10 +299,83 @@ def test_malformed_stream_strings_are_named(text: str, message: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "text",
+    ['{a="b"x}', '{a="b" c="d"}', '{a="b",}', '{a="b"c="d"}'],
+)
+def test_stream_with_garbage_between_pairs_is_rejected(text: str) -> None:
+    message = f"malformed stream string: {text!r}"
+    with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+        parse_stream(text)
+
+
+@pytest.mark.parametrize(
+    "text", ['{a="b" , c="d"}', '{a="b"  ,   c="d"}', '{a="b",c="d" }']
+)
+def test_spaces_around_the_pair_separator_are_allowed(text: str) -> None:
+    assert parse_stream(text) == {"a": "b", "c": "d"}
+
+
+@pytest.mark.parametrize("text", ['{a="\\u00}', '{a="\\U0001f60}'])
+def test_short_hex_escape_at_the_end_is_a_bad_escape(text: str) -> None:
+    # Digits that are all valid hex but too few must not decode, nor fall
+    # through to the "unterminated" message.
+    message = f"bad escape in stream string: {text!r}"
+    with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+        parse_stream(text)
+
+
+def test_bad_unicode_escape_message_quotes_the_whole_text() -> None:
+    text = '{a="\\uzzzz"}'
+    message = f"bad escape in stream string: {text!r}"
+    with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+        parse_stream(text)
+
+
+@pytest.mark.parametrize(
+    ("escaped", "char"),
+    [
+        ("\\r", "\r"),
+        ("\\a", "\a"),
+        ("\\b", "\b"),
+        ("\\f", "\f"),
+        ("\\v", "\v"),
+        ("\\u00e9", "\u00e9"),
+        ("\\U0001f600", "\U0001f600"),
+    ],
+)
+def test_parse_stream_reads_go_escapes(escaped: str, char: str) -> None:
+    assert parse_stream(f'{{a="x{escaped}y"}}') == {"a": f"x{char}y"}
+
+
+@pytest.mark.parametrize("escaped", ["\\u00", "\\uzzzz", "\\U0011ffff"])
+def test_parse_stream_rejects_bad_unicode_escapes(escaped: str) -> None:
+    with pytest.raises(ValueError, match="bad escape in stream string"):
+        parse_stream(f'{{a="{escaped}"}}')
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["plain", 'q"uote', "back\\slash", "a\x01b\r\n\t\x7f", "\U0001f600,}{"],
+)
+def test_quote_and_parse_stream_round_trip(value: str) -> None:
+    # `_quote` is the writer of the same literal syntax parse_stream reads.
+    rendered = _stream_selector(LogQuery(stream={"k": value}))
+    assert parse_stream(rendered) == {"k": value}
+
+
+@pytest.mark.parametrize(
     ("duration", "seconds"), [("90s", 90.0), ("30m", 1800.0), ("2h", 7200.0)]
 )
 def test_seconds_of_each_unit(duration: str, seconds: float) -> None:
     assert to_seconds(duration) == seconds
+
+
+@pytest.mark.parametrize("duration", ["", "30", "30d", "m", "xs", "1.5.2m"])
+def test_bad_durations_raise_value_error(duration: str) -> None:
+    # IndexError escapes wait_until and KeyError is retried silently until
+    # the budget ends; ValueError must name the bad input.
+    with pytest.raises(ValueError, match="duration"):
+        to_seconds(duration)
 
 
 def _ts_of(stamp: str) -> str:
@@ -427,12 +552,17 @@ def test_victorialogs_streams_request_shape(
     assert call["timeout"] is not None
 
 
-@pytest.mark.parametrize("since", [None, "1m"])
+@pytest.mark.parametrize(
+    ("since", "expected", "window_ns"),
+    [(None, "30m", 1800 * 10**9), ("1m", "1m", 60 * 10**9)],
+)
 def test_entries_pass_the_window_through(
-    monkeypatch: pytest.MonkeyPatch, since: str | None
+    monkeypatch: pytest.MonkeyPatch,
+    since: str | None,
+    expected: str,
+    window_ns: int,
 ) -> None:
     window = {} if since is None else {"since": since}
-    expected = "30m" if since is None else since
     calls = _fake_http(
         monkeypatch,
         _loki_result(["9", "a"]),
@@ -442,9 +572,16 @@ def test_entries_pass_the_window_through(
     assert VictoriaLogsBackend(_BASE).entries(Q, **window) == [
         ("1792886401000000000", "m")
     ]
-    window_ns = int(to_seconds(expected) * 10**9)
     assert calls[0]["params"]["start"] == str(_NOW_NS - window_ns)
     assert calls[1]["params"]["start"] == expected
+
+
+def test_entries_is_defined_once_for_both_backends() -> None:
+    # Two copies of the one-liner can drift apart; the shared base keeps
+    # `entries` a function of `records` alone.
+    assert "entries" not in vars(LokiBackend)
+    assert "entries" not in vars(VictoriaLogsBackend)
+    assert LokiBackend.entries is VictoriaLogsBackend.entries
 
 
 def test_default_window_is_thirty_minutes(
@@ -484,3 +621,31 @@ def test_http_errors_are_not_read_as_empty(
     _fake_http(monkeypatch, _FakeResponse(status=500, payload={}))
     with pytest.raises(requests.HTTPError):
         getattr(backend(_BASE), method)(Q)
+
+
+def _conftest_backend_keys() -> set[str]:
+    """Return the string keys of the `BACKENDS` literal in the e2e conftest."""
+    path = Path(__file__).resolve().parents[1] / "e2e" / "conftest.py"
+    for node in ast.parse(path.read_text()).body:
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "BACKENDS"
+            and isinstance(node.value, ast.Dict)
+        ):
+            return {
+                key.value
+                for key in node.value.keys
+                if isinstance(key, ast.Constant) and isinstance(key.value, str)
+            }
+    raise AssertionError("no `BACKENDS: ... = {...}` literal in conftest")
+
+
+def test_e2e_backends_match_backend_names() -> None:
+    """
+    Pins: a variant added to one list and not the other fails in `tests`.
+
+    The conftest check raises only when the e2e suite is collected, so
+    `nox -s tests` alone would pass a mismatch.
+    """
+    assert _conftest_backend_keys() == set(BACKEND_NAMES)

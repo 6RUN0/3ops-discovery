@@ -32,6 +32,7 @@ CONTENTS: tuple[str, ...] = (
     "CHANGELOG.ru.md",
     "docs/manifest.md",
     "docs/manifest.ru.md",
+    "docs/series",
     "alloy",
     "alloy-optional",
 )

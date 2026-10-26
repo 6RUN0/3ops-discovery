@@ -7,7 +7,7 @@
 # One telemetry network for every service: with several networks
 # discovery.docker only targets the alphabetically first one
 # (match_first_network default), which may not be the network Alloy
-# can reach (manifest section 14).
+# can reach (alloy/README.md).
 #
 # That shared network is also why Alloy's HTTP server (12345) and the
 # opt-in OTLP receiver (4317/4318) are reachable by every workload here,
@@ -66,6 +66,8 @@ services:
       # Contract intervals (normal-v1 30s) must not change; only the
       # discovery refresh is accelerated for test budgets.
       RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL: 5s
+      # Empty (unset on the host) falls back to the collector hostname.
+      RU_3OPS_DISCOVERY_HOSTNAME: ${RU_3OPS_DISCOVERY_HOSTNAME:-}
       # File-provider domain (037_snmp): the device file lives in a SECOND,
       # writable mount (the /etc/alloy mount is :ro and holds only *.alloy).
       # Only snmp_stack sets E2E_SNMP_DIR to a real dir; other runs get the
@@ -516,7 +518,7 @@ services:
 
   app-logs-multiport:
     # Two exposed (unpublished) TCP ports make discovery.docker emit two
-    # targets sharing one container ID -- the fan-out 040/manifest 14
+    # targets sharing one container ID -- the fan-out 040/alloy/README.md
     # promise the logs domain survives because loki.source.docker
     # dedupes targets by container ID. The e2e test pins that promise.
     # (Multi-NETWORK fan-out does not exist under the discovery.docker

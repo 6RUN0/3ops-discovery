@@ -94,7 +94,12 @@ def test_archive_carries_the_contract_and_the_deployment_readme(
     built: Path,
 ) -> None:
     members = _members(built)
-    assert {"docs/manifest.ru.md", "docs/manifest.md", "LICENSE"} <= members
+    assert {
+        "docs/manifest.ru.md",
+        "docs/manifest.md",
+        "docs/series/metrics.yaml",
+        "LICENSE",
+    } <= members
     assert "README.md" in members
     with tarfile.open(built, "r:gz") as tar:
         entry = tar.extractfile(f"{release.archive_name()}/README.md")

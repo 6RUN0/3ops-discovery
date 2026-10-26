@@ -1,11 +1,11 @@
-// Opt-in host metrics (manifest 14.5). Lives in alloy-optional/, outside
+// Opt-in host metrics (manifest 14.4.3). Lives in alloy-optional/, outside
 // the base alloy/: the base config is valid without it, and the only
 // reference points INTO a base output (090). The exporter reads the host
 // procfs/sysfs/rootfs mounted into the collector container at the paths
 // below; deployments relocate the mounts via the RU_3OPS_DISCOVERY_HOST_*
 // env vars (manifest 14.1). Series are the standard node_* set.
 //
-// Boundary rule (manifest 14.3): host-level, deployment-privileged
+// Boundary rule (manifest 14.4.1): host-level, deployment-privileged
 // telemetry is optional, never part of the discovery-driven base.
 
 prometheus.exporter.unix "host" {
@@ -28,7 +28,7 @@ discovery.relabel "host_metrics" {
 
 	rule {
 		target_label = "host"
-		replacement  = constants.hostname
+		replacement  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)
 	}
 }
 
