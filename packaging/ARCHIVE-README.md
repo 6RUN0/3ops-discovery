@@ -18,6 +18,7 @@ the quality gates instead and is not shipped here.
 | `docs/manifest.md` | English translation. Provided for readers; on any discrepancy the Russian original wins. |
 | `implementations/alloy/base/` | The reference configuration. Every file together forms one component graph. |
 | `implementations/alloy/optional/` | Opt-in overlay files. The base is valid and complete without them. |
+| `implementations/alloy/README.md` | How the reference configuration is built and how to compose it by domain. |
 | `CHANGELOG.md`, `CHANGELOG.ru.md` | What changed between contract versions. |
 | `LICENSE` | MIT. |
 
