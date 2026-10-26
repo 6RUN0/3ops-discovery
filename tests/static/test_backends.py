@@ -98,7 +98,7 @@ def test_bad_label_names_are_rejected(name: str) -> None:
 
 def test_empty_contains_is_rejected() -> None:
     # `|= ""` matches every line: the query would pass for any stream.
-    with pytest.raises(ValueError, match="contains"):
+    with pytest.raises(ValueError, match=r"^contains must not be empty$"):
         LogQuery(stream={"compose_project": "p"}, contains="")
 
 
@@ -288,7 +288,31 @@ def test_malformed_stream_strings_are_named(text: str, message: str) -> None:
     ['{a="b"x}', '{a="b" c="d"}', '{a="b",}', '{a="b"c="d"}'],
 )
 def test_stream_with_garbage_between_pairs_is_rejected(text: str) -> None:
-    with pytest.raises(ValueError, match="malformed stream string"):
+    message = f"malformed stream string: {text!r}"
+    with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+        parse_stream(text)
+
+
+@pytest.mark.parametrize(
+    "text", ['{a="b" , c="d"}', '{a="b"  ,   c="d"}', '{a="b",c="d" }']
+)
+def test_spaces_around_the_pair_separator_are_allowed(text: str) -> None:
+    assert parse_stream(text) == {"a": "b", "c": "d"}
+
+
+@pytest.mark.parametrize("text", ['{a="\\u00}', '{a="\\U0001f60}'])
+def test_short_hex_escape_at_the_end_is_a_bad_escape(text: str) -> None:
+    # Digits that are all valid hex but too few must not decode, nor fall
+    # through to the "unterminated" message.
+    message = f"bad escape in stream string: {text!r}"
+    with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+        parse_stream(text)
+
+
+def test_bad_unicode_escape_message_quotes_the_whole_text() -> None:
+    text = '{a="\\uzzzz"}'
+    message = f"bad escape in stream string: {text!r}"
+    with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
         parse_stream(text)
 
 
