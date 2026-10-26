@@ -71,11 +71,17 @@ def test_full_set_then_one_domain_leaves_only_that_domain(
     assert _alloy_names(dest) == set(mz.files_for(["logs"]))
 
 
-def test_unknown_domain_materializes_nothing(tmp_path: Path) -> None:
+def test_unknown_domain_leaves_a_reused_dest_untouched(
+    tmp_path: Path,
+) -> None:
+    # The domain check runs before cleanup: a typo must not wipe or
+    # half-rewrite the directory a previous run left behind.
     dest = tmp_path / "cfg"
+    mz.materialize(dest, ["otel"])
+    before = {p.name: p.read_bytes() for p in dest.iterdir()}
     with pytest.raises(ValueError, match="'log'"):
         mz.materialize(dest, ["logs", "log"])
-    assert not _alloy_names(dest)
+    assert {p.name: p.read_bytes() for p in dest.iterdir()} == before
 
 
 def test_files_for_is_a_sorted_union() -> None:
@@ -145,3 +151,20 @@ def test_materialize_clears_stale_provider_files(tmp_path: Path) -> None:
     assert not (dest / "snmp_targets.yaml").exists()
     assert not (dest / "snmp_auths.yaml").exists()
     assert not (dest / "037_snmp.alloy").exists()
+
+
+def test_materialize_creates_missing_parent_directories(
+    tmp_path: Path,
+) -> None:
+    # nox hands a dest under a tmp tree that may not exist yet; a
+    # non-recursive mkdir would fail on the first missing parent.
+    dest = tmp_path / "missing" / "parent" / "cfg"
+    mz.materialize(dest, ["logs"])
+    assert _alloy_names(dest) == set(mz.files_for(["logs"]))
+
+
+def test_unknown_file_name_error_names_both_directories() -> None:
+    # The message is the only pointer to where a DOMAIN_FILES entry was
+    # looked up, so it must survive as text, not as an empty exception.
+    with pytest.raises(FileNotFoundError, match=r"neither .* nor "):
+        mz._source("999_absent.alloy")

@@ -110,3 +110,15 @@ def test_a_numbered_document_title_fails_as_a_missing_anchor(
     monkeypatch.setattr(md, "_text", lambda: "# 1. Title\n\nbody\n")
     with pytest.raises(md.AnchorError, match="document title"):
         md.section("1")
+
+
+def test_reference_file_without_domains_is_an_anchor_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A file row whose Domains cell is empty would map to no domain and
+    # silently drop out of every domain deployment; the extractor must
+    # name it instead of returning an empty set.
+    rows = [{"Файл": "`999_x.alloy`", "Домены": "-"}]
+    monkeypatch.setattr(md, "table", lambda *_args, **_kwargs: rows)
+    with pytest.raises(md.AnchorError, match=r"without domains.*999_x\.alloy"):
+        md.reference_file_domains()

@@ -22,6 +22,7 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 import nox
@@ -137,6 +138,23 @@ def _alloy_fmt_would_change(config_dir: Path, name: str) -> bool:
     return alloy_fmt_verdict(result.returncode, result.stderr)
 
 
+def alloy_validate_args(domains: Iterable[str]) -> list[str]:
+    """
+    Return the `alloy validate` arguments for a domain combination.
+
+    The experimental stability flag is added only where the set needs it,
+    so a combo without database proves it loads at the default level.
+    """
+    from tools.materialize import needs_experimental
+
+    stability = (
+        ["--stability.level=experimental"]
+        if needs_experimental(domains)
+        else []
+    )
+    return ["validate", *stability, "/etc/alloy"]
+
+
 @nox.session
 def alloy_check(session: nox.Session) -> None:
     """
@@ -152,7 +170,6 @@ def alloy_check(session: nox.Session) -> None:
         COMBOS,
         files_for,
         materialize,
-        needs_experimental,
         provider_files,
     )
     from tools.snmp_fixtures import write_snmp_fixtures
@@ -188,8 +205,8 @@ def alloy_check(session: nox.Session) -> None:
             session.error(
                 f"[{combo}] alloy fmt would change: " + ", ".join(unformatted)
             )
-        experimental = needs_experimental(domains)
-        stability = ["--stability.level=experimental"] if experimental else []
+        validate_args = alloy_validate_args(domains)
+        experimental = "--stability.level=experimental" in validate_args
         session.run(
             "docker",
             "run",
@@ -198,9 +215,7 @@ def alloy_check(session: nox.Session) -> None:
             "-v",
             alloy_config_mount(config_dir),
             ALLOY_IMAGE,
-            "validate",
-            *stability,
-            "/etc/alloy",
+            *validate_args,
             external=True,
         )
         session.log(

@@ -10,6 +10,7 @@ logs" gets a set alloy_check validated on its own.
 import re
 
 import pytest
+from noxfile import alloy_validate_args
 
 from tests.static import manifest_doc as md
 from tools import materialize as mz
@@ -70,3 +71,16 @@ def test_manifest_file_tables_match_domain_files() -> None:
 def test_every_domain_has_its_own_combo() -> None:
     for domain in mz.DOMAIN_FILES:
         assert mz.COMBOS[f"domain-{domain}"] == (domain,)
+
+
+def test_alloy_check_passes_the_experimental_flag_only_with_database() -> None:
+    # alloy_check builds its validate command from this function; a combo
+    # without database must validate at the default stability level, so
+    # the flag cannot mask an experimental block outside 030.
+    flag = "--stability.level=experimental"
+    with_flag = {"base", "all", "all-snmp", "domain-database"}
+    for combo, domains in mz.COMBOS.items():
+        args = alloy_validate_args(domains)
+        assert args[0] == "validate"
+        assert args[-1] == "/etc/alloy"
+        assert (flag in args) is (combo in with_flag), combo
