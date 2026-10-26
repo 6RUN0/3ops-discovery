@@ -513,7 +513,7 @@ class _StackSpec:
     """
 
     project: str
-    optional: list[str]
+    domains: tuple[str, ...]
     secrets_dir: Path
     extra_env: dict[str, str]
     backend: str
@@ -529,12 +529,12 @@ def _bring_up(
     Bring the compose stack up, yield a `Stack`, tear it down.
 
     Shared lifecycle for every e2e stack variant (main + snmp): `spec`
-    carries the overlay set and extra env (secrets, device-dir); this owns
+    carries the domain set and extra env (secrets, device-dir); this owns
     materialize -> pre-clean -> up --build -d --wait -> readiness (journal-host
     boot included) -> yield -> diagnostics-on-failure -> down -v.
     """
     config_dir = materialize(
-        tmp_path_factory.mktemp("alloy-config"), optional=spec.optional
+        tmp_path_factory.mktemp("alloy-config"), spec.domains
     )
     env = {
         **os.environ,
@@ -634,16 +634,10 @@ def stack(
     if not _docker_ready():
         pytest.skip("docker daemon is not available; e2e needs it")
 
-    optional = [
-        "060_otel.alloy",
-        "070_host-metrics.alloy",
-        "075_container-metrics.alloy",
-        "080_host-logs.alloy",
-    ]
     secrets_dir = tmp_path_factory.mktemp("alloy-secrets")
     spec = _StackSpec(
         project=f"xad-e2e-{uuid.uuid4().hex[:8]}",
-        optional=optional,
+        domains=COMBOS["all"],
         secrets_dir=secrets_dir,
         extra_env={
             "RU_3OPS_DISCOVERY_HOSTNAME": E2E_HOSTNAME,
@@ -707,13 +701,12 @@ def snmp_stack(
         ],
         auths={},
     )
-    # The all-snmp combination, not 037 alone: it is the exact merged
-    # graph `nox -s demo` hands a reader, and it had no runtime coverage
-    # at all -- the main fixture runs 060+070+075, this one ran 037 by
-    # itself, and nothing ever loaded the two together outside `validate`.
+    # The all-snmp combination, not snmp alone: the main fixture runs every
+    # other domain, so only this stack loads snmp merged with the rest
+    # outside `validate`.
     spec = _StackSpec(
         project=f"xad-snmp-{uuid.uuid4().hex[:8]}",
-        optional=list(COMBOS["all-snmp"]),
+        domains=COMBOS["all-snmp"],
         secrets_dir=secrets_dir,
         extra_env={
             # Empty overrides an inherited value: this stack pins the

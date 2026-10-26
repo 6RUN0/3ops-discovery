@@ -16,7 +16,7 @@ import pytest
 
 from tests.static import manifest_doc as md
 from tools import release
-from tools.materialize import BASE_DIR, COMBOS, OPTIONAL_DIR
+from tools.materialize import BASE_DIR, COMBOS, OPTIONAL_DIR, files_for
 
 
 def _members(archive: Path) -> set[str]:
@@ -71,23 +71,34 @@ def test_pre_release_suffix_forces_a_pre_release() -> None:
 
 
 def test_archive_ships_every_validated_alloy_file(built: Path) -> None:
-    # The set alloy_check validates: base plus every overlay named by a
-    # combo. An overlay added to the repo but forgotten here would ship
-    # a config nobody validated -- or not ship at all.
-    validated = {f"alloy/{path.name}" for path in BASE_DIR.glob("*.alloy")}
-    validated |= {
-        f"alloy-optional/{name}" for names in COMBOS.values() for name in names
+    # The set alloy_check validates: the files of every domain of every
+    # combo, each under the directory it lives in. A file added to the
+    # repo but left out of DOMAIN_FILES would ship a config nobody
+    # validated -- or not ship at all.
+    validated = {
+        f"implementations/alloy/{directory.name}/{name}"
+        for domains in COMBOS.values()
+        for name in files_for(domains)
+        for directory in (BASE_DIR, OPTIONAL_DIR)
+        if (directory / name).is_file()
     }
     shipped = {name for name in _members(built) if name.endswith(".alloy")}
     assert shipped == validated
+    assert "implementations/alloy/README.md" in _members(built)
 
 
-def test_every_optional_file_is_named_by_a_combo() -> None:
-    # Guards the other direction of the check above: an overlay that no
-    # combo mentions would satisfy it while never being validated.
-    on_disk = {path.name for path in OPTIONAL_DIR.glob("*.alloy")}
-    in_combos = {name for names in COMBOS.values() for name in names}
-    assert on_disk == in_combos
+def test_every_alloy_file_is_selected_by_a_combo() -> None:
+    # Guards the other direction of the check above: a file that no
+    # combo selects would satisfy it while never being validated.
+    on_disk = {
+        path.name
+        for directory in (BASE_DIR, OPTIONAL_DIR)
+        for path in directory.glob("*.alloy")
+    }
+    selected = {
+        name for domains in COMBOS.values() for name in files_for(domains)
+    }
+    assert on_disk == selected
 
 
 def test_archive_carries_the_contract_and_the_deployment_readme(
@@ -113,10 +124,10 @@ def test_archive_carries_the_contract_and_the_deployment_readme(
 
 def test_archive_carries_nothing_else(built: Path) -> None:
     # The first build of this archive copied whole directories and swept
-    # an untracked .omc/ session directory into alloy/. Nothing outside
-    # the declared contents may ship, secrets and scratch state least of
-    # all.
-    allowed_roots = {"alloy", "alloy-optional", "docs"}
+    # an untracked .omc/ session directory into the alloy directory.
+    # Nothing outside the declared contents may ship, secrets and scratch
+    # state least of all.
+    allowed_roots = {"implementations", "docs"}
     for name in _members(built):
         head, _, tail = name.partition("/")
         if tail:

@@ -1,0 +1,24 @@
+// Metrics backend shared by all pipelines. Together with 091 this is the
+// integration point with storage: swap or extend it without touching the
+// discovery and pipeline files.
+//
+// prometheus.remote_write speaks the Prometheus remote_write protocol,
+// so any compatible backend works unchanged: Mimir, VictoriaMetrics,
+// Thanos, Grafana Cloud. For OTLP backends (Tempo, vendor APM) convert
+// the stream with otelcol.receiver.prometheus and export via
+// otelcol.exporter.otlp, replacing the receiver referenced in
+// forward_to lists.
+//
+// Environment overrides (RU_3OPS_DISCOVERY_ = 3ops Discovery):
+//   RU_3OPS_DISCOVERY_REMOTE_WRITE_URL  metrics endpoint (Prometheus remote_write)
+//
+// Do not embed credentials in this URL (https://user:pass@host): the
+// value is a plain string and can surface in the Alloy UI and logs. Use
+// a basic_auth or authorization block inside endpoint, with the secret
+// read via local.file (is_secret = true).
+
+prometheus.remote_write "default" {
+	endpoint {
+		url = coalesce(sys.env("RU_3OPS_DISCOVERY_REMOTE_WRITE_URL"), "http://prometheus:9090/api/v1/write")
+	}
+}

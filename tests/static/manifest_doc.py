@@ -423,6 +423,19 @@ def base_files() -> set[str]:
     return {_plain(row["Файл"]) for row in table("14.4")}
 
 
+def reference_file_domains() -> dict[str, set[str]]:
+    """Sections 14.4 and 14.4.3: reference file name -> its domains."""
+    mapping = {
+        _plain(row["Файл"]): set(re.findall(r"`([^`]+)`", row["Домены"]))
+        for number in ("14.4", "14.4.3")
+        for row in table(number)
+    }
+    empty = sorted(name for name, domains in mapping.items() if not domains)
+    if empty:
+        raise AnchorError(f"reference files without domains: {empty}")
+    return mapping
+
+
 def alloy_image_tag() -> str:
     """Section 14.4: the pinned grafana/alloy image tag."""
     m = re.search(

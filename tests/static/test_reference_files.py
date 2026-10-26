@@ -1,4 +1,4 @@
-"""Manifest 14.4 file table vs alloy/ contents; image pin."""
+"""Manifest 14.4 file table vs implementations/alloy/base; image pin."""
 
 import re
 from pathlib import Path
@@ -14,13 +14,8 @@ from noxfile import (
 from tests.static import alloy_config as ac
 from tests.static import manifest_doc as md
 
-_COMPOSE = (
-    Path(__file__).resolve().parents[2]
-    / "tests"
-    / "e2e"
-    / "stack"
-    / "docker-compose.yml"
-)
+_REPO = Path(__file__).resolve().parents[2]
+_COMPOSE = _REPO / "tests" / "e2e" / "stack" / "docker-compose.yml"
 
 
 def test_file_table_matches_directory_both_ways() -> None:
@@ -70,3 +65,43 @@ def test_fmt_verdict_reports_the_cause_it_was_given() -> None:
         alloy_fmt_verdict(125, "Error response from daemon: toomanyrequests")
     with pytest.raises(AlloyFmtError, match="<no stderr>"):
         alloy_fmt_verdict(126, "   ")
+
+
+def test_reference_lives_under_implementations() -> None:
+    root = _REPO / "implementations" / "alloy"
+    assert sorted(p.name for p in (root / "base").glob("*.alloy"))
+    assert sorted(p.name for p in (root / "optional").glob("*.alloy"))
+    assert (root / "README.md").is_file()
+    # Hidden entries are tool session state (.omc/), never config.
+    for old in ("alloy", "alloy-optional"):
+        folder = _REPO / old
+        left = (
+            [p.name for p in folder.iterdir() if not p.name.startswith(".")]
+            if folder.is_dir()
+            else []
+        )
+        assert not left, f"{old}/ still holds {left}"
+
+
+def test_split_keeps_every_component_once() -> None:
+    blocks = ac.component_blocks()
+    assert len(blocks) == len(set(blocks))
+    for block in [
+        ("discovery.docker", "containers"),
+        ("discovery.docker", "docker_logs"),
+        ("prometheus.remote_write", "default"),
+        ("loki.write", "default"),
+    ]:
+        assert blocks.count(block) == 1
+
+
+def test_shared_files_are_split_by_domain() -> None:
+    files = ac.files_by_component()
+    expected = {
+        ("discovery.docker", "containers"): "010_discovery-scrape.alloy",
+        ("discovery.docker", "docker_logs"): "011_discovery-logs.alloy",
+        ("prometheus.remote_write", "default"): "090_output-metrics.alloy",
+        ("loki.write", "default"): "091_output-logs.alloy",
+    }
+    for block, name in expected.items():
+        assert files[block] == name

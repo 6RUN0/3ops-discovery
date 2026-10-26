@@ -1,5 +1,5 @@
-// Opt-in OTLP receiver (manifest 10.5). Lives in alloy-optional/, outside
-// the base alloy/: the base config is valid and complete without it, and
+// Opt-in OTLP receiver (manifest 10.5). Lives in optional/, outside
+// base/: the base config is valid and complete without it, and
 // every reference points from this file INTO the base outputs (090), never
 // the other way. The e2e stack materializes base + this file, exercising
 // the opt-in composition itself.

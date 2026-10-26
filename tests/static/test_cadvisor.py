@@ -1,4 +1,4 @@
-"""Manifest 6.1 provenance vs alloy-optional/075_container-metrics.alloy."""
+"""Manifest 6.1 provenance vs the 075_container-metrics overlay."""
 
 import re
 

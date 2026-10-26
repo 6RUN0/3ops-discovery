@@ -4,7 +4,7 @@
 // reduce discovery.docker to exactly one target per container: the
 // keepequal rule collapses the per-port fan-out, and several Docker
 // networks do not fan out at all (match_first_network keeps the first
-// network by name, alloy/README.md).
+// network by name, implementations/alloy/README.md).
 // The DSN is read from a secret file via local.file; labels carry only
 // the logical secret id, never credentials.
 // The foreach block is experimental as of Alloy v1.21: run and validate

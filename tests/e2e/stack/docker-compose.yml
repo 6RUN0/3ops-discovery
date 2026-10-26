@@ -7,7 +7,7 @@
 # One telemetry network for every service: with several networks
 # discovery.docker only targets the alphabetically first one
 # (match_first_network default), which may not be the network Alloy
-# can reach (alloy/README.md).
+# can reach (implementations/alloy/README.md).
 #
 # That shared network is also why Alloy's HTTP server (12345) and the
 # opt-in OTLP receiver (4317/4318) are reachable by every workload here,

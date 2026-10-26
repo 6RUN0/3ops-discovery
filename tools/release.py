@@ -24,8 +24,8 @@ REPO = Path(__file__).resolve().parents[1]
 MANIFEST = REPO / "docs" / "manifest.ru.md"
 
 #: Files and directories the archive carries, repo-relative. Directories
-#: ship whole; test_release.py pins the *.alloy set against COMBOS, so a
-#: new overlay cannot quietly stay behind.
+#: ship whole; test_release.py pins the *.alloy set against the files
+#: COMBOS selects, so a new file cannot quietly stay behind.
 CONTENTS: tuple[str, ...] = (
     "LICENSE",
     "CHANGELOG.md",
@@ -33,8 +33,7 @@ CONTENTS: tuple[str, ...] = (
     "docs/manifest.md",
     "docs/manifest.ru.md",
     "docs/series",
-    "alloy",
-    "alloy-optional",
+    "implementations/alloy",
 )
 
 #: Deployment instructions, renamed into the archive root: the
@@ -132,7 +131,8 @@ def tracked_files() -> tuple[str, ...]:
     Enumerated by git rather than walked: a plain copy of a directory
     also picks up whatever untracked state happens to sit inside it,
     and the first build of this archive shipped an .omc/ session
-    directory out of alloy/. What ships must equal what is versioned.
+    directory out of the alloy directory. What ships must equal what is
+    versioned.
     """
     listed = subprocess.run(
         ["git", "ls-files", "-z", "--", *CONTENTS],

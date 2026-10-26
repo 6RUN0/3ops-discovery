@@ -22,6 +22,7 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 import nox
@@ -137,16 +138,40 @@ def _alloy_fmt_would_change(config_dir: Path, name: str) -> bool:
     return alloy_fmt_verdict(result.returncode, result.stderr)
 
 
+def alloy_validate_args(domains: Iterable[str]) -> list[str]:
+    """
+    Return the `alloy validate` arguments for a domain combination.
+
+    The experimental stability flag is added only where the set needs it,
+    so a combo without database proves it loads at the default level.
+    """
+    from tools.materialize import needs_experimental
+
+    stability = (
+        ["--stability.level=experimental"]
+        if needs_experimental(domains)
+        else []
+    )
+    return ["validate", *stability, "/etc/alloy"]
+
+
 @nox.session
 def alloy_check(session: nox.Session) -> None:
     """
-    Fmt (non-mutating -t) + validate for every directory combination.
+    Fmt (non-mutating -t) + validate for every domain combination.
 
     Combinations come from tools.materialize.COMBOS; each is
     materialized into a temp dir and mounted as one read-only volume,
-    exercising the same overlay mechanism the e2e stack uses.
+    exercising the same composition the e2e stack uses. The experimental
+    stability flag is passed only where the set needs it, so a combo
+    without database proves it loads at the default stability level.
     """
-    from tools.materialize import COMBOS, materialize, provider_files
+    from tools.materialize import (
+        COMBOS,
+        files_for,
+        materialize,
+        provider_files,
+    )
     from tools.snmp_fixtures import write_snmp_fixtures
 
     if shutil.which("docker") is None:
@@ -155,14 +180,14 @@ def alloy_check(session: nox.Session) -> None:
     # output, so an image fetched lazily inside them would fail with the
     # reason hidden; here a registry problem is reported as one.
     session.run("docker", "pull", ALLOY_IMAGE, external=True)
-    for combo, optional in COMBOS.items():
+    for combo, domains in COMBOS.items():
         # resolve(): create_tmp() hands back a path relative to the repo,
         # and docker needs an absolute one to see a host directory.
         config_dir = materialize(
-            (Path(session.create_tmp()) / combo).resolve(), optional
+            (Path(session.create_tmp()) / combo).resolve(), domains
         )
         docker_env: list[str] = []
-        if provider_files(optional):
+        if provider_files(files_for(domains)):
             # An overlay whose top-level local.file needs a side-car file
             # cannot even be validated without it. Empty stubs are
             # enough: an empty device list is 0 targets (healthy-idle)
@@ -180,6 +205,8 @@ def alloy_check(session: nox.Session) -> None:
             session.error(
                 f"[{combo}] alloy fmt would change: " + ", ".join(unformatted)
             )
+        validate_args = alloy_validate_args(domains)
+        experimental = "--stability.level=experimental" in validate_args
         session.run(
             "docker",
             "run",
@@ -188,12 +215,13 @@ def alloy_check(session: nox.Session) -> None:
             "-v",
             alloy_config_mount(config_dir),
             ALLOY_IMAGE,
-            "validate",
-            "--stability.level=experimental",
-            "/etc/alloy",
+            *validate_args,
             external=True,
         )
-        session.log(f"[{combo}] fmt + validate OK")
+        session.log(
+            f"[{combo}] fmt + validate OK (experimental: "
+            f"{'yes' if experimental else 'no'})"
+        )
 
 
 @nox.session
@@ -265,29 +293,29 @@ COMPOSE_FILE = REPO / "tests" / "e2e" / "stack" / "docker-compose.yml"
 #: is e2e-only: its read-write host cgroup mount must not reach the
 #: long-lived demo (tests/static/test_demo.py pins this).
 DEMO_COMPOSE_FILES = (COMPOSE_FILE,)
-#: 080 reads the journal only the e2e journal-host overlay provides; the
-#: demo mounts no journal, so 080 would have nothing to read there.
-DEMO_EXCLUDED_OVERLAYS = ("080_host-logs.alloy",)
+#: host-logs (080) reads the journal only the e2e journal-host overlay
+#: provides; the demo mounts no journal, so it would have nothing to read.
+DEMO_EXCLUDED_DOMAINS = ("host-logs",)
 
 
-def demo_optional() -> tuple[str, ...]:
-    """Return the optional files the demo loads: all-snmp minus exclusions."""
+def demo_domains() -> tuple[str, ...]:
+    """Return the domains the demo loads: all-snmp minus exclusions."""
     from tools.materialize import COMBOS
 
     return tuple(
-        name
-        for name in COMBOS["all-snmp"]
-        if name not in DEMO_EXCLUDED_OVERLAYS
+        domain
+        for domain in COMBOS["all-snmp"]
+        if domain not in DEMO_EXCLUDED_DOMAINS
     )
 
 
 def _materialize_demo(dest: Path) -> Path:
-    """Materialize base + the demo's optional files + snmp for the demo."""
+    """Materialize the demo's domains (snmp included) for the demo."""
     from tools.materialize import materialize
 
     if dest.exists():
         shutil.rmtree(dest)
-    return materialize(dest, demo_optional())
+    return materialize(dest, demo_domains())
 
 
 @nox.session

@@ -2,12 +2,12 @@
 
 The Grafana Alloy configuration that implements every domain of the
 3ops Discovery contract. The normative parts live in the manifest,
-section [14.4](../docs/manifest.md#144-reference-implementation-alloy):
+section [14.4](../../docs/manifest.md#144-reference-implementation-alloy):
 the pinned Alloy tag, the run and `validate` commands, the base file
-table, customization ([14.4.1](../docs/manifest.md#1441-customization)),
-extension points ([14.4.2](../docs/manifest.md#1442-extension-points))
-and the optional files of [`../alloy-optional/`](../alloy-optional/)
-([14.4.3](../docs/manifest.md#1443-optional-files)). This file explains
+table, customization ([14.4.1](../../docs/manifest.md#1441-customization)),
+extension points ([14.4.2](../../docs/manifest.md#1442-extension-points))
+and the optional files of [`optional/`](optional/)
+([14.4.3](../../docs/manifest.md#1443-optional-files)). This file explains
 how the configuration is built; it adds no requirement.
 
 This is not a complete production configuration but the base structure
@@ -23,10 +23,34 @@ pipeline flow: discovery, then domains, then outputs). It does not
 affect how Alloy works: every file of the directory merges into a single
 component graph and cross-file references resolve regardless of order.
 
+## Composing by domain
+
+A deployment copies the union of the files of the domains it needs into
+one directory and runs Alloy on it. The `Domains` column of the file
+tables in manifest sections
+[14.4](../../docs/manifest.md#144-reference-implementation-alloy) and
+[14.4.3](../../docs/manifest.md#1443-optional-files) says which files a
+domain needs; [`base/`](base/) alone is the default domain set
+(`metrics`, `database`, `blackbox`, `logs`, `ipmi`). The logs domain
+alone, for example, is:
+
+```text
+base/011_discovery-logs.alloy
+base/040_logs.alloy
+base/050_log-profiles.alloy
+base/091_output-logs.alloy
+```
+
+Only the `database` domain uses an experimental feature (`foreach` in
+[`030_database.alloy`](base/030_database.alloy)), so
+`--stability.level=experimental` is needed exactly when the set includes
+`database`; every other set loads without the flag. The `snmp` domain
+also needs its device and auth files (manifest section 14.4.3).
+
 ## Environment parameters
 
 Every deployment value of manifest section
-[14.1](../docs/manifest.md#141-environment-parameters) is read as
+[14.1](../../docs/manifest.md#141-environment-parameters) is read as
 `coalesce(sys.env("..."), <default>)`, so an unset variable falls back
 to the default of that table.
 
@@ -62,9 +86,11 @@ be attached to a single network visible to Alloy.
 
 ## Outputs and stores
 
-[`090_outputs.alloy`](090_outputs.alloy) is the single integration point
-with the stores; replacing a store does not touch the discovery and
-pipeline files. Alloy is not limited to the Prometheus plus Loki pair:
+[`090_output-metrics.alloy`](base/090_output-metrics.alloy) and
+[`091_output-logs.alloy`](base/091_output-logs.alloy) are the integration
+points with the stores (metrics and logs respectively); replacing a
+store does not touch the discovery and pipeline files. Alloy is not
+limited to the Prometheus plus Loki pair:
 
 - `prometheus.remote_write` works with any remote_write-compatible
   store: Mimir, VictoriaMetrics, Thanos, Grafana Cloud.
@@ -78,10 +104,11 @@ Swapping a single URL is enough only for unauthenticated endpoints.
 Mimir and Grafana Cloud require authentication and/or the
 `X-Scope-OrgID` header: beyond the variables of manifest section 14.1,
 add `basic_auth`/`authorization`/`headers` blocks inside `endpoint` in
-`090_outputs.alloy`, with the secret read from `local.file`
-(`is_secret = true`). Credentials never go into the URL (manifest
-section [14.2](../docs/manifest.md#142-output-protocols-and-stores)):
-the variable value is an ordinary string and may show up in the Alloy UI
+`090_output-metrics.alloy` or `091_output-logs.alloy`, with the secret
+read from `local.file` (`is_secret = true`). Credentials never go into
+the URL (manifest section
+[14.2](../../docs/manifest.md#142-output-protocols-and-stores)): the
+variable value is an ordinary string and may show up in the Alloy UI
 and in the logs.
 
 ## State and persistent storage

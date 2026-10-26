@@ -15,8 +15,8 @@ from functools import cache
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-ALLOY_DIR = REPO / "alloy"
-OPTIONAL_DIR = REPO / "alloy-optional"
+ALLOY_DIR = REPO / "implementations/alloy/base"
+OPTIONAL_DIR = REPO / "implementations/alloy/optional"
 
 _LABEL = "__meta_docker_container_label_ru_3ops_discovery"
 
@@ -47,6 +47,25 @@ def optional_sources() -> dict[str, str]:
 def _component_names(text: str) -> set[str]:
     """Every "type.label" component declared in a config text."""
     return {f"{typ}.{label}" for typ, label in _COMPONENT_DECL.findall(text)}
+
+
+def component_blocks() -> list[tuple[str, str]]:
+    """Every (component type, label) declared in base/ and optional/."""
+    return [
+        pair
+        for text in (*sources().values(), *optional_sources().values())
+        for pair in _COMPONENT_DECL.findall(text)
+    ]
+
+
+def files_by_component() -> dict[tuple[str, str], str]:
+    """Map (component type, label) to the file that declares it."""
+    return {
+        pair: name
+        for group in (sources(), optional_sources())
+        for name, text in group.items()
+        for pair in _COMPONENT_DECL.findall(text)
+    }
 
 
 def base_component_names() -> set[str]:
