@@ -79,5 +79,5 @@ def test_manifest_states_why_ssrf_is_excluded() -> None:
     # the address construction alone for the whole reason. The contract
     # states the redirect rule neutrally; the setting lives in the reference
     # notes of 14.4.4.
-    assert "редирект" in md.section("13.5")
+    assert "не следует HTTP-редиректам" in md.section("13.5")
     assert "follow_redirects = false" in md.section("14.4.4")

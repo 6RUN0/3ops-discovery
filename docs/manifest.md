@@ -896,9 +896,9 @@ The receiver listens on the conventional OTLP ports: `4317` (gRPC) and `4318` (H
 
 This domain mostly documents the expected behavior of the application. An implementation usually runs one shared OTLP receiver rather than a receiver per container.
 
-The `otel.enabled` flag is therefore declarative: it does not govern OTLP ingestion (the receiver is shared and static) but records the intent of the service and serves inventory purposes. The remaining labels of the domain are declarative for the same reason. Traces are outside the perimeter in `0.2`: the reference receiver has no traces output, so a trace export is rejected with an explicit client-side error rather than accepted silently.
+The `otel.enabled` flag is therefore declarative: it does not govern OTLP ingestion (the receiver is shared and static) but records the intent of the service and serves inventory purposes. The remaining labels of the domain are declarative for the same reason. Traces are outside the perimeter in `0.2`: a trace export is rejected with an explicit client-side error rather than accepted silently.
 
-The OTLP path is an exception to the provenance of section [6.1](#61-labels-added-by-the-implementation): the shared receiver is static and has no Docker metadata, so it produces no `environment`/`team`/`container` provenance labels. Only an allowlisted set of OTLP resource attributes is promoted into indexed fields (section [6.2](#62-log-fields); in the reference configuration only `service.name` becomes `service_name`); the rest of the identification is supplied by the sending application itself through resource attributes.
+The OTLP path is an exception to the provenance of section [6.1](#61-labels-added-by-the-implementation): the shared receiver is static and has no Docker metadata, so it produces no `environment`/`team`/`container` provenance labels. Only an allowlisted set of OTLP resource attributes is promoted into indexed fields (section [6.2](#62-log-fields)); the rest of the identification is supplied by the sending application itself through resource attributes.
 
 ### 10.6. Domain: snmp
 
@@ -908,9 +908,9 @@ The device file (`snmp_targets.yaml`) is a list of entries; every value is store
 
 | Field | Mandatory | Value |
 |---|---|---|
-| `name` | no | A human-readable device name (provenance); when absent the reference substitutes `address` -- the exporter requires `name` on every entry. The value reaches the series as the `device` label (`instance` carries the address) |
-| `address` | yes | The `host:port` of the SNMP agent (presence check in relabel) |
-| `module` | yes | An snmp_exporter module from the allowlist; in the reference these are `if_mib` (interfaces) and `system` (device identity and uptime: `sysUpTime`, `sysName`) -- an open example list, as in blackbox [10.4](#104-domain-blackbox). One entry means one module; a device with several modules corresponds to several entries with different `name` values |
+| `name` | no | A human-readable device name (provenance); when absent, `address` is used instead. The value reaches the series as the `device` label (`instance` carries the address) |
+| `address` | yes | The `host:port` of the SNMP agent (presence is checked) |
+| `module` | yes | An snmp_exporter module from the allowlist set by the implementation's configuration, for example `if_mib` (interfaces) and `system` (device identity and uptime: `sysUpTime`, `sysName`); the list is open, as in blackbox [10.4](#104-domain-blackbox). One entry means one module; a device with several modules corresponds to several entries with different `name` values |
 | `auth` | yes | The name of an auth profile from [10.6.1](#1061-snmp-auth) (presence check; resolved by the exporter) |
 | `environment` | no | A provenance label (passed through as non-reserved) |
 | `team` | no | A provenance label (passed through as non-reserved) |
@@ -948,11 +948,11 @@ priv_protocol:  DES | AES | AES192 | AES192C | AES256 | AES256C
 
 The exporter also accepts `context_name`; the contract does not use it.
 
-**Where the secret lives:** the device file stores the profile NAME only; the credentials live solely in `snmp_auths.yaml`, whose value the implementation hides as a secret (section [9](#9-secret-contract)), and never in labels or in the device list. This reinforces [13.1](#131-must-not-be-stored-in-docker-labels) (SNMP communities are forbidden in labels); section [9](#9-secret-contract) treats it as an exception to the "one file per `<auth-id>`" convention. Relabel checks only the PRESENCE of `auth` (`keep auth != ""`): no name format is imposed.
+**Where the secret lives:** the device file stores the profile NAME only; the credentials live solely in `snmp_auths.yaml`, whose value the implementation hides as a secret (section [9](#9-secret-contract)), and never in labels or in the device list. This reinforces [13.1](#131-must-not-be-stored-in-docker-labels) (SNMP communities are forbidden in labels); section [9](#9-secret-contract) treats it as an exception to the "one file per `<auth-id>`" convention. Only the PRESENCE of `auth` is checked: no name format is imposed.
 
-**Known limitation:** `merge` preserves the built-in defaults, including the insecure `public_v2` (community `public`, v2c) and `public_v1` (`version: 1`, outside the `{2, 3}` allowlist); `auth: "public_v2"` resolves successfully because relabel checks presence rather than membership. Control by name is impossible in the reference (auth names depend on the deployment) -- a documented risk, like the one-sided module gate.
+**Known limitation:** an implementation that keeps the exporter's built-in auth profiles leaves the insecure `public_v2` (community `public`, v2c) and `public_v1` (`version: 1`, outside the `{2, 3}` allowlist) available; `auth: "public_v2"` resolves successfully because the presence of the name is checked, not whether it is among the profiles. The contract does not require a check by name (auth names depend on the deployment) -- a documented risk, like the one-sided module gate.
 
-**An unknown auth name** (a typo, absent from the merged `auths:`) leads to an exporter-side error during the scrape rather than to a drop at discovery time (relabel cannot consult the secret file). Documented; no separate e2e is added.
+**An unknown auth name** (a typo, the name is not among the profiles) leads to an exporter-side error during the scrape rather than to a drop at discovery time: discovery checks only the presence of `auth` and does not consult the secret file. Documented; no separate e2e is added.
 
 ### 10.7. Domain: ipmi
 
@@ -1005,12 +1005,12 @@ The snmp file provider checks its counterparts fail-closed in the same way: an e
 3. The target appears: the implementation starts scraping the metrics or reading the logs of the container.
 4. Metrics or logs start reaching the store.
 
-Up to one `RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL` interval passes from the container start to the appearance of the target (section [14.1](#141-environment-parameters)); the first metric series arrive after the first scrape of the target at the interval of its profile (section [8.2](#82-scrape-profiles)).
+Up to one `RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL` interval passes from the container start to the appearance of the target (section [14.1](#141-environment-parameters)), plus processing time; the first metric series arrive after the first scrape of the target at the interval of its profile (section [8.2](#82-scrape-profiles)).
 
 ### 12.2. Removing a target
 
 1. The container is stopped or removed.
-2. The target disappears: the implementation stops collecting it within one `RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL` interval.
+2. The target disappears: the implementation stops collecting it within one `RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL` interval plus processing time.
 3. New data stops arriving.
 4. Historical data stays in the store until retention expires.
 
@@ -1054,7 +1054,7 @@ the metrics path
 
 ### 13.3. Docker socket
 
-An implementation uses the Docker API read-only: it discovers containers and reads their metadata and logs. It gets the logs and metadata of containers through the Docker API alone; reading the files of `/var/lib/docker` is forbidden. Access to the Docker API must take the following into account:
+An implementation uses the Docker API read-only: it discovers containers and reads their metadata and logs. It gets the logs and metadata of containers through the Docker API alone; obtaining them from the files of `/var/lib/docker` is forbidden. Access to the Docker API must take the following into account:
 
 - a read-only mount of `/var/run/docker.sock` does not make the Docker API strictly read-only;
 - access to the Docker socket is effectively highly privileged;
@@ -1255,9 +1255,9 @@ The contract sections state their requirements without naming an implementation.
 - [§10.3.1](#1031-default-collection-policy): the reference excludes the container before the source: `discovery.relabel` drops a target with `logs.enabled=false`, and `loki.source.docker` never opens the stream of that container. The chain: `discovery.docker` (every container) -> `discovery.relabel` (excludes `logs.enabled=false` only) -> `loki.source.docker` -> `loki.process` (the profile dispatcher) -> `loki.write`.
 - [§10.3.4](#1034-unknown-profile): the reference fulfils items 1-2 with an allowlist rule in `discovery.relabel` that replaces an unknown profile with `raw-v1`. The reference does not fulfil items 3-4: the diagnostic message and the metric are unavailable at the relabel level.
 - [§10.4](#104-domain-blackbox): the module allowlist is `http_2xx`, `tcp_connect`, `icmp`, `tls_connect`; it is set by a `discovery.relabel` keep rule and by the inline `config` of the `prometheus.exporter.blackbox` component ([`035_blackbox.alloy`](../alloy/035_blackbox.alloy)).
-- [§10.5](#105-domain-otel): the receiver is `otelcol.receiver.otlp` in the overlay [`060_otel.alloy`](../alloy-optional/060_otel.alloy); a different port is an edit of that overlay, a customization under section [14.4.1](#1441-customization).
-- [§10.6](#106-domain-snmp): the domain ships as the overlay file [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) (section [14.4.3](#1443-optional-files)) rather than as a base file: its top-level `local.file` becomes unhealthy without a file on disk and brings the graph down in a cascade, so the overlay is loaded only together with the device file and the auth profile file. `encoding.from_yaml` decodes the device file into `list(map(string))`.
-- [§10.6.1](#1061-snmp-auth): `snmp_auths.yaml` is fed to `prometheus.exporter.snmp` as an inline `config` from a `local.file` with `is_secret = true` and merged (`merge`) with the exporter's built-in auth profiles; the Alloy configuration does not inspect the file content.
+- [§10.5](#105-domain-otel): the receiver is `otelcol.receiver.otlp` in the overlay [`060_otel.alloy`](../alloy-optional/060_otel.alloy); a different port is an edit of that overlay, a customization under section [14.4.1](#1441-customization). The receiver has no traces output, so a trace export is rejected. Of the OTLP resource attributes only `service.name` is promoted into indexed fields, as `service_name`.
+- [§10.6](#106-domain-snmp): the domain ships as the overlay file [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) (section [14.4.3](#1443-optional-files)) rather than as a base file: its top-level `local.file` becomes unhealthy without a file on disk and brings the graph down in a cascade, so the overlay is loaded only together with the device file and the auth profile file. `encoding.from_yaml` decodes the device file into `list(map(string))`. `prometheus.exporter.snmp` requires `name` on every entry, so the configuration substitutes `address` when `name` is absent. The reference module allowlist is `if_mib` and `system`.
+- [§10.6.1](#1061-snmp-auth): `snmp_auths.yaml` is fed to `prometheus.exporter.snmp` as an inline `config` from a `local.file` with `is_secret = true` and merged (`merge`) with the exporter's built-in auth profiles; the Alloy configuration does not inspect the file content. The built-in `public_v2` and `public_v1` therefore stay available in the reference, and `discovery.relabel` checks only the presence of `auth` (`keep auth != ""`) and cannot consult the secret file.
 - [§10.7](#107-domain-ipmi): Alloy has no native IPMI component, unlike snmp with its built-in `prometheus.exporter.snmp`, so the reference ships no ipmi overlay. A dedicated overlay will appear only if Alloy gains a native IPMI component.
 - [§11](#11-validation-rules): the `path`, `scheme`, `profile` and `secret-id` checks are `discovery.relabel` rules; relabel removes a label with an empty value. The `port` check is implicit: `keepequal` matches the declared port against `__meta_docker_port_private`. Comparing two empty strings succeeds, so the presence of `metrics.port`, `metrics.job` and `blackbox.port` is checked by explicit keep rules with the regular expression `(.+)`. The snmp file provider ([`037_snmp.alloy`](../alloy-optional/037_snmp.alloy)) checks `module`, `auth` and `address` with `discovery.relabel` keep rules on top of the list from `encoding.from_yaml`. A syntactically broken device file as a whole breaks `from_yaml`, and Alloy holds on to the last valid arguments: the targets do not change (the **fail-STALE** mode, neither fail-closed nor an empty list). On a cold start there is no last valid value, so `discovery.relabel` is unhealthy and the target set is empty (the exporter starts with zero devices, healthy-idle). The row-by-row drop (semantics) and the whole-file fail-STALE (syntax) are two different modes.
 - [§12](#12-lifecycle): `discovery.docker` discovers the container, `discovery.relabel` checks the domain labels, and for the database domain `foreach` builds a pipeline; the target is visible in the Alloy UI. When the container is removed, the `foreach` pipeline of the database domain is removed, while the static scrape components of the other domains simply lose the target.
