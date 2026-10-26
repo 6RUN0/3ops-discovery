@@ -241,7 +241,7 @@ def secret_formats() -> dict[str, str]:
 
 def snmp_auth_versions() -> set[int]:
     """Section 10.6.1: the numeric `version` values the contract allows."""
-    m = re.search(r"`version ∈ \{([^}]+)\}`", section("10.6.1"))
+    m = re.search(r"`version in \{([^}]+)\}`", section("10.6.1"))
     if m is None:
         raise AnchorError("snmp auth version allowlist not found in 10.6.1")
     parts = [part.strip() for part in m.group(1).split(",")]

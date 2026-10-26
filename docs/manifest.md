@@ -601,7 +601,7 @@ services:
       ru.3ops.discovery.metrics.profile: "fast-v1"
 ```
 
-The profile picks one of the relabel/scrape pairs of the Alloy configuration; the reference configuration ships pairs for every base profile of section [8.2](#82-scrape-profiles) (see section [14.4](#144-reference-implementation-alloy)).
+The profile sets the scrape cadence of this target; an implementation of the metrics domain supports every base profile of section [8.2](#82-scrape-profiles).
 
 ### 10.2. Domain: database
 
@@ -617,11 +617,11 @@ redis
 mongodb
 ```
 
-Actual support depends on the presence of the corresponding `prometheus.exporter.*` in the Alloy version in use.
+An implementation of the database domain supports every base type.
 
 `type` denotes the wire protocol and the exporter, not the database vendor. Protocol-compatible builds are labeled with the base type and get no type of their own: Percona Server for MySQL and Percona XtraDB Cluster are `type: mysql`; Percona Server for MongoDB is `type: mongodb` (just like managed databases such as RDS/Aurora MySQL). MariaDB is the exception: it is a type in its own right that shares the mysql exporter, because operators perceive it as a separate product.
 
-`database.port` (and the standard port in its absence) is a target selector rather than a connection parameter: the value is checked against the real private ports of the container (`keepequal`, fail-closed -- a target with a non-existent port is dropped), whereas the exporter connection address comes entirely from `.dsn` (section [9](#9-secret-contract)). A mismatch between the port in the label and in the DSN is not detected by the configuration.
+`database.port` (and the standard port in its absence) is a target selector rather than a connection parameter: the value is checked against the real private ports of the container (fail-closed: a target with a non-existent port is dropped), whereas the exporter connection address comes entirely from `.dsn` (section [9](#9-secret-contract)). The contract does not require detecting a mismatch between the port in the label and in the DSN.
 
 The standard ports per type (they apply when `database.port` is not set):
 
@@ -716,21 +716,9 @@ ru.3ops.discovery.logs.enabled=false:
   explicitly exclude the container from log collection
 ```
 
-For logs, `ru.3ops.discovery.enabled` is not a precondition. This is deliberate, so that a container without manifest labels is still visible in Loki.
+For logs, `ru.3ops.discovery.enabled` is not a precondition. This is deliberate, so that a container without manifest labels is still visible in the log store.
 
-The recommended chain:
-
-```text
-discovery.docker
-    ↓ every container
-discovery.relabel
-    ↓ exclude logs.enabled=false only
-loki.source.docker
-    ↓
-loki.process
-    ↓ profile dispatcher
-Loki
-```
+The lines of a container with `ru.3ops.discovery.logs.enabled=false` are not delivered to the store. How to achieve that is up to the implementation: it may leave the stream of such a container unopened, or read the stream and drop the lines before sending.
 
 #### 10.3.2. `logs.profile`
 
@@ -742,7 +730,7 @@ Example:
 ru.3ops.discovery.logs.profile: "app-type-1-v1"
 ```
 
-The value must not be an arbitrary list of stages: Alloy picks a profile only from the allowlist defined in the configuration.
+The value must not be an arbitrary list of stages: the implementation picks a profile only from the allowlist of section [8.3](#83-log-profiles).
 
 #### 10.3.3. Raw fallback
 
@@ -769,12 +757,10 @@ If a container names a profile that is absent from the allowlist, the implementa
 
 1. keep collecting the logs;
 2. apply `raw-v1`;
-3. write a diagnostic message into the Alloy log;
+3. write a diagnostic message into the collector's own log;
 4. where possible, increment an internal discovery configuration error metric.
 
 An unknown profile must never cause the loss of a container's logs.
-
-The reference configuration implements items 1-2 with an allowlist rule in `discovery.relabel` (an unknown profile is replaced by `raw-v1`); the diagnostic message and the metric (items 3-4) are unavailable at the relabel level and are not implemented in the reference.
 
 #### 10.3.5. Labels
 
@@ -865,15 +851,15 @@ Used for HTTP, TCP, ICMP and TLS checks.
 | `ru.3ops.discovery.blackbox.path` | No | The HTTP path |
 | `ru.3ops.discovery.blackbox.profile` | No | A scrape profile from the allowlist; defaults to `normal-v1` |
 
-The `module` value must belong to the blackbox exporter module allowlist defined by the Alloy configuration. Arbitrary modules from labels are not accepted.
+The `module` value must belong to the blackbox exporter module allowlist defined by the implementation's configuration. Arbitrary modules from labels are not accepted.
 
-`blackbox.address` carries the host ONLY (`example.com` or an IP): no scheme, no port, no path. The probe target is assembled by the implementation from `address`, `scheme`, `port` and `path`, differently for each module, so a port written into `address` itself would produce a target with two ports. The shape of the probe target depends on the module: HTTP modules receive the URL `scheme://host:port/path`, TCP and TLS modules receive `host:port`, ICMP modules receive the host alone. Alloy adds a `module` label carrying the name of the module used to every blackbox probe series.
+`blackbox.address` carries the host ONLY (`example.com` or an IP): no scheme, no port, no path. The probe target is assembled by the implementation from `address`, `scheme`, `port` and `path`, differently for each module, so a port written into `address` itself would produce a target with two ports. The shape of the probe target depends on the module: HTTP modules receive the URL `scheme://host:port/path`, TCP and TLS modules receive `host:port`, ICMP modules receive the host alone. Every blackbox probe series carries a `module` label with the name of the module used.
 
 For ICMP modules the `blackbox.port` value is not part of the probe itself (ICMP has no port), but the label stays mandatory and goes through the same validation: the declared port must match a real exposed port of the container, otherwise the target is dropped. The rule holds for an external `blackbox.address` too: the port is checked against the private ports of the container itself, so a probe with `address: example.com` and `port: 443` from a container that does not expose port 443 is dropped silently. The consequences of `blackbox.address` for the trust model are covered in section [13.5](#135-trust-in-labels).
 
-ICMP probes need no extra privileges in a typical Docker environment: the standard capability set (`NET_RAW`) or unprivileged ICMP sockets (Docker opens `net.ipv4.ping_group_range` for every group by default) is enough. In hardened environments where `NET_RAW` is dropped and `ping_group_range` is narrowed at the same time, ICMP probes will not work; the way out is to restore `cap_add: [NET_RAW]` or to widen `sysctls: net.ipv4.ping_group_range` on the Alloy container.
+ICMP probes need no extra privileges in a typical Docker environment: the standard capability set (`NET_RAW`) or unprivileged ICMP sockets (Docker opens `net.ipv4.ping_group_range` for every group by default) is enough. In hardened environments where `NET_RAW` is dropped and `ping_group_range` is narrowed at the same time, ICMP probes will not work; the way out is to restore `cap_add: [NET_RAW]` or to widen `sysctls: net.ipv4.ping_group_range` on the collector container.
 
-The reference TLS module (`tls_connect`) checks that the TLS handshake succeeds and reports certificate expiry metrics (`probe_ssl_earliest_cert_expiry`, `probe_tls_version_info`), but deliberately does not verify the trust chain: the label contract has no channel for delivering CA material into Alloy -- labels carry strings only. Chain verification for internal CAs is a property of a particular environment: it is done by a separate module with `ca_file` in the blackbox exporter configuration, which is outside the scope of the reference.
+The `tls_connect` module checks that the TLS handshake succeeds and reports certificate expiry metrics (`probe_ssl_earliest_cert_expiry`, `probe_tls_version_info`), but deliberately does not verify the trust chain: the label contract has no channel for delivering CA material into the collector - labels carry strings only. Chain verification for internal CAs is a property of a particular environment: it is done by a separate module with `ca_file` in the blackbox exporter configuration, which is outside the scope of the contract.
 
 #### 10.4.2. Example
 
@@ -893,7 +879,7 @@ labels:
 
 Used for services that send OTLP telemetry.
 
-The receiver listens on the conventional OTLP ports: `4317` (gRPC) and `4318` (HTTP). The values are fixed by the contract and are not parameterized by an environment variable -- unlike the endpoints of section [14.1](#141-environment-parameters), this is not a deployment value but an address senders know in advance: changing the port would require changing the configuration of every client. A deployment that needs a different port changes the [`060_otel`](../alloy-optional/060_otel.alloy) overlay -- a customization under section [14.4.1](#1441-customization), not a parameter.
+The receiver listens on the conventional OTLP ports: `4317` (gRPC) and `4318` (HTTP). The values are fixed by the contract and are not parameterized by an environment variable -- unlike the endpoints of section [14.1](#141-environment-parameters), this is not a deployment value but an address senders know in advance: changing the port would require changing the configuration of every client. A deployment that needs a different port changes the receiver configuration in the implementation - a customization, not a parameter.
 
 #### 10.5.1. Labels
 
@@ -906,17 +892,17 @@ The receiver listens on the conventional OTLP ports: `4317` (gRPC) and `4318` (H
 | `ru.3ops.discovery.otel.metrics` | No | `true`/`false` |
 | `ru.3ops.discovery.otel.logs` | No | `true`/`false` |
 
-This domain mostly documents the expected behavior of the application. Alloy usually runs one shared OTLP receiver rather than a receiver per container.
+This domain mostly documents the expected behavior of the application. An implementation usually runs one shared OTLP receiver rather than a receiver per container.
 
 The `otel.enabled` flag is therefore declarative: it does not govern OTLP ingestion (the receiver is shared and static) but records the intent of the service and serves inventory purposes. The remaining labels of the domain are declarative for the same reason. Traces are outside the perimeter in `0.2`: the reference receiver has no traces output, so a trace export is rejected with an explicit client-side error rather than accepted silently.
 
-The OTLP path is an exception to the provenance of section [6.1](#61-labels-added-by-the-implementation): the shared receiver is static and has no Docker metadata, so it produces no `environment`/`team`/`container` provenance labels. Only an allowlisted set of OTLP resource attributes is promoted into the Loki stream (section [6.2](#62-log-fields); in the reference configuration only `service.name` becomes `service_name`); the rest of the identification is supplied by the sending application itself through resource attributes.
+The OTLP path is an exception to the provenance of section [6.1](#61-labels-added-by-the-implementation): the shared receiver is static and has no Docker metadata, so it produces no `environment`/`team`/`container` provenance labels. Only an allowlisted set of OTLP resource attributes is promoted into indexed fields (section [6.2](#62-log-fields); in the reference configuration only `service.name` becomes `service_name`); the rest of the identification is supplied by the sending application itself through resource attributes.
 
 ### 10.6. Domain: snmp
 
-The only domain not driven by Docker labels: external network equipment (switches, routers) has no container, so targets are enumerated in a file rather than discovered. The domain ships as the opt-in overlay file [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) (section [14.4.3](#1443-optional-files)) rather than as a base domain: its top-level `local.file` becomes unhealthy without a file on disk and brings the whole graph down with it, so it is only loaded together with the device and auth files.
+The only domain not driven by Docker labels: external network equipment (switches, routers) has no container, so targets are enumerated in a file rather than discovered. The domain is opt-in: it is off by default, and a deployment turns it on together with the device file and the auth profile file (section [10.6.1](#1061-snmp-auth)).
 
-The device file (`snmp_targets.yaml`) is a list of entries; every value is stored as a string (`encoding.from_yaml` decodes the list into `list(map(string))`):
+The device file (`snmp_targets.yaml`) is a list of entries; every value is stored as a string:
 
 | Field | Mandatory | Value |
 |---|---|---|
@@ -935,7 +921,7 @@ The [10.7](#107-domain-ipmi) (ipmi) domain is structurally similar but stays a l
 
 The auth model of the domain: named profiles in `snmp_auths.yaml`, referenced by name from a device through the `auth` field.
 
-**Version allowlist:** SNMPv2c and SNMPv3. In the file the version is set by the `version` field as a NUMBER, not as the string `v2c`/`v3`: `version: 2` means v2c and `version: 3` means v3. The check is advisory only: the secret file is parsed by the exporter and the Alloy configuration never inspects it. The single control point in the repository is the static validator of the auth fixture (`tools/snmp_fixtures.py`, `validate_auths`): `version ∈ {2, 3}` (NOT the exporter range 1..3 -- SNMPv1 is forbidden by the contract).
+**Version allowlist:** SNMPv2c and SNMPv3. In the file the version is set by the `version` field as a NUMBER, not as the string `v2c`/`v3`: `version: 2` means v2c and `version: 3` means v3. The check is advisory only: the secret file is parsed by the exporter, and discovery never inspects it. The single control point in the repository is the static validator of the auth fixture (`tools/snmp_fixtures.py`, `validate_auths`): `version in {2, 3}` (NOT the exporter range 1..3: SNMPv1 is forbidden by the contract).
 
 **Profile fields per version** (names and types follow `snmp_exporter` v0.29.0, the `Auth` struct):
 
@@ -960,7 +946,7 @@ priv_protocol:  DES | AES | AES192 | AES192C | AES256 | AES256C
 
 The exporter also accepts `context_name`; the contract does not use it.
 
-**Where the secret lives:** the device file stores the profile NAME only; the credentials live solely in `snmp_auths.yaml`, supplied as an inline `config` from a `local.file` with `is_secret = true` -- never in labels and never in the device list. This reinforces [13.1](#131-must-not-be-stored-in-docker-labels) (SNMP communities are forbidden in labels); section [9](#9-secret-contract) treats it as an exception to the "one file per `<auth-id>`" convention. Relabel checks only the PRESENCE of `auth` (`keep auth != ""`) -- no name format is imposed.
+**Where the secret lives:** the device file stores the profile NAME only; the credentials live solely in `snmp_auths.yaml`, whose value the implementation hides as a secret (section [9](#9-secret-contract)), and never in labels or in the device list. This reinforces [13.1](#131-must-not-be-stored-in-docker-labels) (SNMP communities are forbidden in labels); section [9](#9-secret-contract) treats it as an exception to the "one file per `<auth-id>`" convention. Relabel checks only the PRESENCE of `auth` (`keep auth != ""`): no name format is imposed.
 
 **Known limitation:** `merge` preserves the built-in defaults, including the insecure `public_v2` (community `public`, v2c) and `public_v1` (`version: 1`, outside the `{2, 3}` allowlist); `auth: "public_v2"` resolves successfully because relabel checks presence rather than membership. Control by name is impossible in the reference (auth names depend on the deployment) -- a documented risk, like the one-sided module gate.
 
@@ -968,7 +954,7 @@ The exporter also accepts `context_name`; the contract does not use it.
 
 ### 10.7. Domain: ipmi
 
-BMC/IPMI monitoring through an external `ipmi_exporter` (or another adapter). Alloy has no native IPMI component -- unlike snmp, where a built-in `prometheus.exporter.snmp` exists -- so ipmi is not a mechanism of its own but a **special case of the [metrics](#101-domain-metrics) domain**: an external exporter polls the BMC over IPMI and publishes a Prometheus endpoint, and Alloy scrapes that endpoint as an ordinary metrics target. There is no IPMI-specific configuration on the Alloy side.
+BMC/IPMI monitoring through an external `ipmi_exporter` (or another adapter). ipmi is not a mechanism of its own but a **special case of the [metrics](#101-domain-metrics) domain**: an external exporter polls the BMC over IPMI and publishes a Prometheus endpoint, and the collector scrapes that endpoint as an ordinary metrics target. The contract requires no IPMI-specific configuration in the collector.
 
 #### 10.7.1. Labels
 
@@ -980,9 +966,9 @@ ru.3ops.discovery.ipmi.secret-id
 ru.3ops.discovery.ipmi.profile
 ```
 
-The labels describe the intent (the BMC address, the exporter module, the secret, the profile), but the role of Alloy comes down to scraping the HTTP endpoint of an external exporter: there is no domain pipeline on the Alloy side as there is for snmp ([10.6](#106-domain-snmp)). Every ipmi label in `0.2` is declarative/inventory (neither the reference nor any domain pipeline reads them); `ipmi.profile` refers to the scrape profiles of section [8.2](#82-scrape-profiles) -- ipmi has no profile family of its own. The secret file is `/run/alloy-secrets/<secret-id>.ipmi` per the shared contract of section [9](#9-secret-contract); the BMC credentials are consumed by the exporter itself, not by Alloy.
+The labels describe the intent (the BMC address, the exporter module, the secret, the profile), but the role of the collector comes down to scraping the HTTP endpoint of an external exporter: there is no domain pipeline in the collector as there is for snmp ([10.6](#106-domain-snmp)). Every ipmi label in `0.2` is declarative/inventory (no implementation and no domain pipeline reads them); `ipmi.profile` refers to the scrape profiles of section [8.2](#82-scrape-profiles): ipmi has no profile family of its own. The secret file is `/run/alloy-secrets/<secret-id>.ipmi` per the shared contract of section [9](#9-secret-contract); the BMC credentials are consumed by the exporter itself, not by the collector.
 
-The reference configuration ships no ipmi overlay (unlike [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy)): the recommended path is to mark the `ipmi_exporter` container with the labels of the [metrics](#101-domain-metrics) domain and scrape it through the existing metrics pipeline. A dedicated overlay will appear only if Alloy gains a native IPMI component.
+The recommended path is to mark the `ipmi_exporter` container with the labels of the [metrics](#101-domain-metrics) domain and scrape it through the collector's metrics pipeline.
 
 ## 11. Validation rules
 
@@ -998,34 +984,33 @@ The minimal checks before a pipeline is created:
 - `path` starts with `/`;
 - `scheme` belongs to the allowlist.
 
-An unknown `type` value drops the target entirely (fail-closed) and is reflected in the Alloy log where possible.
+An unknown `type` value drops the target entirely (fail-closed) and is reflected in the collector's own log where possible.
 
-An empty value of any label is equivalent to the label being absent: the default of the corresponding domain applies (during relabeling a label with an empty value is removed, so empty values never reach the series).
+An empty value of any label is equivalent to the label being absent: the default of the corresponding domain applies, and empty values never reach the series.
 
-A mandatory label has no default, so for those the same rule means dropping: an empty mandatory label = an absent mandatory label = the target is dropped (fail-closed). This is a consequence rather than a special case: an implementation must check the presence of a non-empty value separately, because comparing an empty declared port against empty metadata (`keepequal`) succeeds and lets the target through. The reference implements it with explicit presence keep rules for `metrics.port`, `metrics.job` and `blackbox.port`.
+A mandatory label has no default, so for those the same rule means dropping: an empty mandatory label = an absent mandatory label = the target is dropped (fail-closed). This is a consequence rather than a special case: an implementation must check the presence of a non-empty value separately, because comparing an empty declared port against an empty port from the container metadata succeeds and lets the target through. The presence check is mandatory for `metrics.port`, `metrics.job` and `blackbox.port`.
 
-The reference configuration implements the `path`, `scheme`, `profile` and `secret-id` checks with relabel rules. The `port` check is implicit and fail-closed: `keepequal` matches the declared port against the real private ports of the container, so a non-numeric, out-of-range or non-existent value drops the target.
+The `port` check is fail-closed, by matching the declared port against the real private ports of the container: a non-numeric, out-of-range or non-existent value drops the target.
 
-The snmp file provider (overlay 037) checks its counterparts with the same fail-closed `discovery.relabel` keep rules on top of the `from_yaml` list: the `module` allowlist, the presence of `auth` and the presence of `address` -- a semantically invalid entry is dropped row by row. The `port` check through `keepequal` does not apply (there is no container). A separate **fail-STALE** mode applies as well: a syntactically broken device file as a whole breaks `from_yaml`, and Alloy holds on to the last valid arguments (the targets do not change -- this is not fail-closed and not an empty list). On a cold start there is no last valid value, so `discovery.relabel` is unhealthy and the target set is empty (the exporter starts with zero devices, healthy-idle). The row-by-row drop (semantics) and the whole-file fail-STALE (syntax) are two different modes.
+The snmp file provider checks its counterparts fail-closed in the same way: an entry with a `module` outside the allowlist, without `auth` or without `address` is dropped row by row, while the other entries of the file keep being collected. Matching `port` against container ports does not apply (there is no container). A syntactically broken device file as a whole is a different failure mode, not a row-by-row one: the row-by-row check does not apply to it, and its behaviour is set by the implementation.
 
 ## 12. Lifecycle
 
 ### 12.1. Adding a target
 
 1. The container starts with `ru.3ops.discovery.enabled=true` (the logs domain is the exception: collection is on by default, section [10.3.1](#1031-default-collection-policy)).
-2. `discovery.docker` discovers the container.
-3. `discovery.relabel` checks the domain labels.
-4. Alloy builds the corresponding pipeline.
-5. The target appears in the Alloy UI.
-6. Metrics or logs start reaching the backend.
+2. The implementation discovers the container and checks the domain labels (section [11](#11-validation-rules)); a container that fails the check does not become a target.
+3. The target appears: the implementation starts scraping the metrics or reading the logs of the container.
+4. Metrics or logs start reaching the store.
+
+Up to one `RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL` interval passes from the container start to the appearance of the target (section [14.1](#141-environment-parameters)); the first metric series arrive after the first scrape of the target at the interval of its profile (section [8.2](#82-scrape-profiles)).
 
 ### 12.2. Removing a target
 
 1. The container is stopped or removed.
-2. The target disappears from Docker discovery.
-3. For the database domain the dynamic `foreach` pipeline is removed; the static scrape components of the other domains simply lose the target.
-4. New telemetry samples stop arriving.
-5. Historical data stays in the backend until retention expires.
+2. The target disappears: the implementation stops collecting it within one `RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL` interval.
+3. New data stops arriving.
+4. Historical data stays in the store until retention expires.
 
 ### 12.3. Changing labels
 
@@ -1033,7 +1018,7 @@ Docker does not allow changing the labels of a running container. Changes take e
 
 ## 13. Security requirements
 
-The collector's own logs are sensitive data. Alloy writes configuration-load diagnostics into them, and those may contain fragments of the values it read, including ones marked `is_secret` (the limits of redaction are in section [9](#9-secret-contract)). The reference configuration collects the stdout/stderr of every container, the Alloy container included -- a deliberate choice in favour of observing the collector, not an oversight. If the log backend is trusted less than the secret directory, collection for the collector is switched off with an explicit `ru.3ops.discovery.logs.enabled=false` on its container.
+The collector's own logs are sensitive data. The implementation writes configuration-load diagnostics into them, and those may contain fragments of the values it read, hidden ones included (the limits of hiding are in section [9](#9-secret-contract)). By default the logs domain collects the stdout/stderr of every container, the collector's own container included (section [10.3.1](#1031-default-collection-policy)): a deliberate choice in favour of observing the collector, not an oversight. If the log store is trusted less than the secret directory, collection for the collector is switched off with an explicit `ru.3ops.discovery.logs.enabled=false` on its container.
 
 ### 13.1. Must not be stored in Docker labels
 
@@ -1067,16 +1052,16 @@ the metrics path
 
 ### 13.3. Docker socket
 
-If Alloy uses `/var/run/docker.sock`, the following must be taken into account:
+An implementation uses the Docker API read-only: it discovers containers and reads their metadata and logs. It gets the logs and metadata of containers through the Docker API alone; reading the files of `/var/lib/docker` is forbidden. Access to the Docker API must take the following into account:
 
-- a read-only mount does not make the Docker API strictly read-only;
+- a read-only mount of `/var/run/docker.sock` does not make the Docker API strictly read-only;
 - access to the Docker socket is effectively highly privileged;
-- a socket proxy allowing read endpoints only is preferable;
-- the Alloy UI must not be published outward without authentication.
+- a socket proxy allowing read endpoints only is recommended;
+- the collector UI must not be published outward without authentication.
 
-A socket proxy narrows the privilege without removing it. The proxy allowlist works by API section rather than by individual path: permitting `/containers` permits EVERY GET in that section -- including `/containers/{id}/json` (the container's environment variables, meaning passwords passed through `environment`), `/containers/{id}/archive?path=/` (reading an arbitrary file out of any container) and `/containers/{id}/export`. Discovery cannot work otherwise: `loki.source.docker` reads logs through the same section. What follows in practice: a collector with access to the proxy is equivalent to a reader of every container's secrets on that host, and the proxy belongs on an internal network unreachable by the workloads -- it lowers the risk of the daemon being compromised, not the risk of someone else's data being read.
+A socket proxy narrows the privilege without removing it. The proxy allowlist works by API section rather than by individual path: permitting `/containers` permits EVERY GET in that section, including `/containers/{id}/json` (the container's environment variables, meaning passwords passed through `environment`), `/containers/{id}/archive?path=/` (reading an arbitrary file out of any container) and `/containers/{id}/export`. Discovery cannot work otherwise: container logs are read through the same section. What follows in practice: a collector with access to the proxy is equivalent to a reader of every container's secrets on that host, and the proxy belongs on an internal network unreachable by the workloads: it lowers the risk of the daemon being compromised, not the risk of someone else's data being read.
 
-The requirement "Alloy must not be reachable from an untrusted Docker network" cannot be met in full, and that is a property of the model rather than an oversight in the configuration. Scraping a container means sharing a network with it, so a collector is always a neighbour of what it collects from: the Alloy HTTP server (`/metrics`, the unauthenticated `/api/v0/web/components`) and the opt-in OTLP receiver are visible to every container on that network. Splitting networks does not help -- with several networks `discovery.docker` takes only the alphabetically first one ([`alloy/README.md`](../alloy/README.md#per-port-fan-out-and-multiple-networks)), so the collector still has to sit in the network of the things it observes. What follows in practice: untrusted workloads are separated by a collector of their own, not by a network of the same one; on a shared network, assume neighbours can read the component list and its arguments (values marked `is_secret` are redacted).
+The requirement "the collector must not be reachable from an untrusted Docker network" cannot be met in full, and that is a property of the model rather than an oversight in the configuration. Scraping a container means sharing a network with it, so a collector is always a neighbour of what it collects from: the collector's HTTP server (its metrics and UI) and the opt-in OTLP receiver are visible to every container on that network. Splitting networks does not help: to scrape a container, the collector has to sit in its network. What follows in practice: untrusted workloads are separated by a collector of their own, not by a network of the same one; on a shared network, assume neighbours can reach the collector UI, and with it the configuration it shows (hidden values in it are replaced by the marker, section [9](#9-secret-contract)).
 
 ### 13.4. Secret path traversal
 
@@ -1098,13 +1083,13 @@ postgres-orders
 
 Labels are declared by the container itself, so the right to start containers on the host means the right to declare any values of `job`, `instance`, `team`, `environment`, `service_name`, `compose_project` and `compose_service` -- including someone else's. The boundaries of that trust:
 
-- for the metrics and database domains SSRF is excluded by two conditions at once, and the second is as mandatory as the first. The scrape address is built only from `__meta_docker_network_ip` and a private port of the container itself (for database, from the secret file, which labels do not choose beyond `secret-id`), so labels cannot redirect collection to another host. The scrape response is an untrusted input too: `prometheus.scrape` follows redirects by default, and a container answering `302` with a link-local address would send the next request there on the collector's behalf. Every `prometheus.scrape` in the reference therefore sets `follow_redirects = false`; a configuration that does not meet this condition does not carry the guarantee;
-- the blackbox domain is a deliberate exception: `blackbox.address` (section [10.4.1](#1041-labels)) points a probe at an arbitrary host, and the result (`probe_success`, the status, the certificate expiry) is visible in the metrics -- the container gains a network reachability oracle acting as Alloy. The probe port is limited to the private ports of the container itself, but the container declares its own exposed ports, so with untrusted neighbours `blackbox.address` should be constrained by an allowlist rule in `discovery.relabel`;
-- the opt-in OTLP receiver (overlay [`060_otel`](../alloy-optional/060_otel.alloy)) listens without authentication and produces no provenance labels (section [10.5](#105-domain-otel)): network access to its ports equals the right to write telemetry with an arbitrary identity; the receiver should be kept on an internal network or fronted by an authenticating reverse proxy;
-- `container` is added from the Docker engine metadata and `host` from the deployment parameter `RU_3OPS_DISCOVERY_HOSTNAME`, which defaults to the hostname of the Alloy collector; neither can be forged through labels (section [6.1](#61-labels-added-by-the-implementation));
-- consequently, series and streams with forged `job`/`team`/`service_name` still carry the honest `container` and `host` of the sender: they do not merge with the data of the real owner and stay distinguishable -- but alert rules and dashboards that filter by `team`/`job` alone without regard for `container` will see the forged data too;
-- fields taken from log content are not promoted into stream labels (section [6.2](#62-log-fields));
-- with untrusted neighbours on the host, the values of `team`/`environment`/`service_name` should additionally be constrained by allowlist rules in `discovery.relabel`; the reference configuration contains no such rules;
+- for the metrics and database domains SSRF is excluded by two conditions at once, and the second is as mandatory as the first. The scrape address is built only from the IP address of the container itself in its Docker network and from its private port (for database, from the secret file, which labels do not choose beyond `secret-id`), so labels cannot redirect collection to another host. The scrape response is an untrusted input too: a container answering `302` with a link-local address would send the next request there on the collector's behalf. The implementation therefore does not follow HTTP redirects when scraping; an implementation that follows them does not carry the guarantee;
+- the blackbox domain is a deliberate exception: `blackbox.address` (section [10.4.1](#1041-labels)) points a probe at an arbitrary host, and the result (`probe_success`, the status, the certificate expiry) is visible in the metrics: the container gains a network reachability oracle acting as the collector. The probe port is limited to the private ports of the container itself, but the container declares its own exposed ports, so with untrusted neighbours `blackbox.address` should be constrained by an allowlist rule;
+- the opt-in OTLP receiver of the otel domain listens without authentication and produces no provenance labels (section [10.5](#105-domain-otel)): network access to its ports equals the right to write telemetry with an arbitrary identity; the receiver should be kept on an internal network or fronted by an authenticating reverse proxy;
+- `container` is added from the Docker engine metadata and `host` from the deployment parameter `RU_3OPS_DISCOVERY_HOSTNAME`, which defaults to the collector hostname; labels set neither of them (section [6.1](#61-labels-added-by-the-implementation));
+- consequently, series and log streams with forged `job`/`team`/`service_name` still carry the honest `container` and `host` of the sender: they do not merge with the data of the real owner and stay distinguishable, but alert rules and dashboards that filter by `team`/`job` alone without regard for `container` will see the forged data too;
+- fields taken from log content are not promoted into indexed fields (section [6.2](#62-log-fields));
+- with untrusted neighbours on the host, the values of `team`/`environment`/`service_name` should additionally be constrained by allowlist rules; the contract sets no such rules;
 - the contract sets no limit on telemetry volume: a container can generate load through log volume and through the number of opt-in targets; the defence is rate limits on the backend side (Loki limits, remote_write endpoint limits).
 
 ## 14. Implementations
@@ -1264,6 +1249,18 @@ The contract sections state their requirements without naming an implementation.
 - [§9](#9-secret-contract): a secret file is read by `local.file` at `coalesce(sys.env("RU_3OPS_DISCOVERY_SECRETS_DIR"), "/run/alloy-secrets")` + `/<secret-id>.<suffix>`; hiding comes from `is_secret = true`, and the Alloy API and component exports hand the value out as `(secret)`. The address-only redis `.dsn` is read with `is_secret = false`: the exporter's `redis_addr` argument takes a plain string rather than a secret; the password from `.redispass` goes through `redis_password`.
 - [§9](#9-secret-contract), the hiding limit: when the declared type and the file content disagree, the Alloy configuration-load error message may quote a fragment of the value read. This is Alloy behaviour, and no configuration changes it.
 - [§9](#9-secret-contract), the failure radius: in the database domain a missing secret file takes down the WHOLE `foreach` block of its database type. A container declaring a regex-valid `secret-id` with no file behind it fails the evaluation of the entire block, and legitimate databases OF THE SAME TYPE stop being collected with it; databases of other types live in their own blocks and are untouched. The failure is reversible: once the container is removed, the block recovers on its own. The reading "a `local.file` per iteration, therefore a per-iteration failure" is wrong: that is established by reproduction rather than derived from how `foreach` is built. The separation by type is a side effect of the configuration's structure, not a protection; the health of Alloy components needs monitoring. A top-level `local.file` (the snmp file provider, section [10.6](#106-domain-snmp)) has no localization at all: its path is set by the operator, and a missing file brings the graph down in a cascade, so overlay 037 is loaded only together with its files.
+- [§10.2](#102-domain-database): each type is served by an Alloy exporter: `prometheus.exporter.postgres`, `prometheus.exporter.mysql` (also for `mariadb`), `prometheus.exporter.redis`, `prometheus.exporter.mongodb`. The port is matched by a `keepequal` rule against `__meta_docker_port_private`; the reference does not detect a mismatch between the port in the label and in the DSN.
+- [§10.3.1](#1031-default-collection-policy): the reference excludes the container before the source: `discovery.relabel` drops a target with `logs.enabled=false`, and `loki.source.docker` never opens the stream of that container. The chain: `discovery.docker` (every container) -> `discovery.relabel` (excludes `logs.enabled=false` only) -> `loki.source.docker` -> `loki.process` (the profile dispatcher) -> `loki.write`.
+- [§10.3.4](#1034-unknown-profile): the reference fulfils items 1-2 with an allowlist rule in `discovery.relabel` that replaces an unknown profile with `raw-v1`. The reference does not fulfil items 3-4: the diagnostic message and the metric are unavailable at the relabel level.
+- [§10.4](#104-domain-blackbox): the module allowlist is `http_2xx`, `tcp_connect`, `icmp`, `tls_connect`; it is set by a `discovery.relabel` keep rule and by the inline `config` of the `prometheus.exporter.blackbox` component ([`035_blackbox.alloy`](../alloy/035_blackbox.alloy)).
+- [§10.5](#105-domain-otel): the receiver is `otelcol.receiver.otlp` in the overlay [`060_otel.alloy`](../alloy-optional/060_otel.alloy); a different port is an edit of that overlay, a customization under section [14.4.1](#1441-customization).
+- [§10.6](#106-domain-snmp): the domain ships as the overlay file [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) (section [14.4.3](#1443-optional-files)) rather than as a base file: its top-level `local.file` becomes unhealthy without a file on disk and brings the graph down in a cascade, so the overlay is loaded only together with the device file and the auth profile file. `encoding.from_yaml` decodes the device file into `list(map(string))`.
+- [§10.6.1](#1061-snmp-auth): `snmp_auths.yaml` is fed to `prometheus.exporter.snmp` as an inline `config` from a `local.file` with `is_secret = true` and merged (`merge`) with the exporter's built-in auth profiles; the Alloy configuration does not inspect the file content.
+- [§10.7](#107-domain-ipmi): Alloy has no native IPMI component, unlike snmp with its built-in `prometheus.exporter.snmp`, so the reference ships no ipmi overlay. A dedicated overlay will appear only if Alloy gains a native IPMI component.
+- [§11](#11-validation-rules): the `path`, `scheme`, `profile` and `secret-id` checks are `discovery.relabel` rules; relabel removes a label with an empty value. The `port` check is implicit: `keepequal` matches the declared port against `__meta_docker_port_private`. Comparing two empty strings succeeds, so the presence of `metrics.port`, `metrics.job` and `blackbox.port` is checked by explicit keep rules with the regular expression `(.+)`. The snmp file provider ([`037_snmp.alloy`](../alloy-optional/037_snmp.alloy)) checks `module`, `auth` and `address` with `discovery.relabel` keep rules on top of the list from `encoding.from_yaml`. A syntactically broken device file as a whole breaks `from_yaml`, and Alloy holds on to the last valid arguments: the targets do not change (the **fail-STALE** mode, neither fail-closed nor an empty list). On a cold start there is no last valid value, so `discovery.relabel` is unhealthy and the target set is empty (the exporter starts with zero devices, healthy-idle). The row-by-row drop (semantics) and the whole-file fail-STALE (syntax) are two different modes.
+- [§12](#12-lifecycle): `discovery.docker` discovers the container, `discovery.relabel` checks the domain labels, and for the database domain `foreach` builds a pipeline; the target is visible in the Alloy UI. When the container is removed, the `foreach` pipeline of the database domain is removed, while the static scrape components of the other domains simply lose the target.
+- [§13.3](#133-docker-socket): the Docker API is used by `discovery.docker` and `loki.source.docker`; `loki.source.docker` reads logs through the `/containers` section. The Alloy HTTP server serves `/metrics` and the unauthenticated `/api/v0/web/components` with the component list and their arguments; values marked `is_secret` are replaced there by the `(secret)` marker. With several container networks `discovery.docker` takes only the alphabetically first one ([`alloy/README.md`](../alloy/README.md#per-port-fan-out-and-multiple-networks)).
+- [§13.5](#135-trust-in-labels): the reference builds the scrape address from `__meta_docker_network_ip` and `__meta_docker_port_private`. `prometheus.scrape` follows redirects by default, so every `prometheus.scrape` of the reference sets `follow_redirects = false`. The reference contains no allowlist rules for `blackbox.address`, `team`, `environment` and `service_name`; with untrusted neighbours they are added to the `discovery.relabel` of the corresponding domain. The OTLP receiver is the overlay [`060_otel.alloy`](../alloy-optional/060_otel.alloy).
 
 ## 15. Usage
 
