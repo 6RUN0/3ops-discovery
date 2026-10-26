@@ -4,9 +4,9 @@ import re
 from pathlib import Path
 
 import yaml
-from noxfile import DEMO_COMPOSE_FILES, demo_optional
+from noxfile import DEMO_COMPOSE_FILES, DEMO_EXCLUDED_DOMAINS, demo_domains
 
-from tools.materialize import COMBOS
+from tools.materialize import COMBOS, files_for
 
 _STACK = Path(__file__).resolve().parents[2] / "tests" / "e2e" / "stack"
 _COMPOSE = _STACK / "docker-compose.yml"
@@ -110,8 +110,11 @@ def test_demo_never_mounts_the_host_cgroup_tree_writable() -> None:
 
 
 def test_demo_does_not_load_host_logs_without_a_journal() -> None:
-    # 080 reads the journal only the e2e journal-host overlay provides;
-    # the control proves the demo's source combination does contain 080,
-    # so its absence below is the exclusion, not a missing overlay.
-    assert "080_host-logs.alloy" in COMBOS["all-snmp"]
-    assert "080_host-logs.alloy" not in demo_optional()
+    # host-logs reads the journal only the e2e journal-host overlay
+    # provides; the control proves the demo's source combination does
+    # contain host-logs, so its absence below is the exclusion.
+    assert DEMO_EXCLUDED_DOMAINS == ("host-logs",)
+    assert "host-logs" in COMBOS["all-snmp"]
+    assert "host-logs" not in demo_domains()
+    assert "080_host-logs.alloy" not in files_for(demo_domains())
+    assert "snmp" in demo_domains()

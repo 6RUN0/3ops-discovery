@@ -24,8 +24,8 @@ REPO = Path(__file__).resolve().parents[1]
 MANIFEST = REPO / "docs" / "manifest.ru.md"
 
 #: Files and directories the archive carries, repo-relative. Directories
-#: ship whole; test_release.py pins the *.alloy set against COMBOS, so a
-#: new overlay cannot quietly stay behind.
+#: ship whole; test_release.py pins the *.alloy set against the files
+#: COMBOS selects, so a new file cannot quietly stay behind.
 CONTENTS: tuple[str, ...] = (
     "LICENSE",
     "CHANGELOG.md",
