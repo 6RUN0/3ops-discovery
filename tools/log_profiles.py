@@ -24,6 +24,11 @@ LOG_PROFILE_CONTAINERS: dict[str, str] = {
 _LOGFMT_PAIR = re.compile(r'(?:^|\s)([^\s="]+)=(?:"[^"]+"|[^\s"=][^\s]*)')
 
 
+#: The mixed-v1 dispatcher sends a line to the logfmt parser only when one of
+#: these keys starts the line or follows a space (050_log-profiles.alloy).
+_LOGFMT_ANCHOR = re.compile(r"(?:^|\s)(?:level|msg|status)=")
+
+
 def _json_keys(line: str) -> set[str]:
     """Top-level keys of a JSON object line; empty for anything else."""
     try:
@@ -52,5 +57,7 @@ def keys(profile: str, line: str) -> set[str]:
     if profile == "mixed-v1":
         if line.lstrip().startswith("{"):
             return _json_keys(line)
-        return _logfmt_keys(line)
+        if _LOGFMT_ANCHOR.search(line):
+            return _logfmt_keys(line)
+        return set()
     return set()

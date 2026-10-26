@@ -43,3 +43,11 @@ def test_mixed_profile_treats_an_indented_object_as_json() -> None:
     # trailing-space check would send this line to the logfmt parser.
     assert keys("mixed-v1", '  {"event":"tick"}') == {"event"}
     assert keys("mixed-v1", '{"a": 1}  ') == {"a"}
+
+
+def test_mixed_profile_parses_logfmt_only_after_a_known_anchor() -> None:
+    # The dispatcher sends a line to the logfmt parser only when it carries
+    # level=, msg= or status= at the start or after a space.
+    assert keys("mixed-v1", "request_id=1 trace_id=2") == set()
+    assert keys("mixed-v1", "xlevel=info seq=1") == set()
+    assert keys("mixed-v1", "seq=1 level=info") == {"seq", "level"}
