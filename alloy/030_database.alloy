@@ -629,9 +629,10 @@ foreach "mongodb" {
 		// (collect_all) is already the maximum, so extended-v1 is an
 		// accepted equivalent of standard-v1 (manifest 8.4).
 		// collect_all alone leaves the first scrape of each exporter with
-		// mongodb_up only: mongodb_exporter v0.47.2 widens it into the enable_*
-		// flags after copying the options that scrape uses. Spelling out every
-		// flag collect_all sets makes the first scrape complete as well.
+		// mongodb_up, the fcv series and collector_scrape_time_ms only:
+		// mongodb_exporter v0.47.2 widens it into the enable_* flags after
+		// copying the options that scrape uses. Spelling out every flag
+		// collect_all sets makes the first scrape complete as well.
 		prometheus.exporter.mongodb "db" {
 			mongodb_uri = local.file.dsn.content
 

@@ -216,5 +216,8 @@ def test_mongodb_standard_profile_serves_server_status(stack: Stack) -> None:
         if name == "mongodb_up":
             ups = [float(ts) for ts, v in series["values"] if float(v) == 1.0]
             first_up = min([first_up, *ups])
+    assert first_up != float("inf"), (
+        "no mongodb_up == 1 sample in the window: the first scrape is unknown"
+    )
     late = sorted(name for name, ts in earliest.items() if ts > first_up)
     assert not late, f"missing from the first mongodb scrape: {late}"
