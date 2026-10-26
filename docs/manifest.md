@@ -13,7 +13,7 @@
 
 ## 1. Purpose
 
-`3ops Discovery` is a declarative mini-framework for automatic discovery and configuration of telemetry targets in Grafana Alloy, driven by Docker labels.
+`3ops Discovery` is a declarative mini-framework for automatic discovery and configuration of telemetry targets, driven by Docker labels.
 
 A container describes:
 
@@ -21,32 +21,40 @@ A container describes:
 - which integration/exporter type to use;
 - where to take the metrics or logs from;
 - how to name the target;
-- where Alloy should look for secrets;
+- where the implementation should look for secrets;
 - which extra labels to attach to the telemetry.
 
-Alloy:
+The implementation:
 
 1. discovers containers through the Docker API;
 2. filters targets by labels;
 3. normalizes the metadata;
-4. builds the scrape/exporter/logging pipeline;
-5. sends metrics to Prometheus/VictoriaMetrics/Mimir;
-6. sends logs to Loki;
+4. builds the metrics and logs collection pipeline;
+5. sends metrics to a store that accepts Prometheus remote_write (Prometheus, VictoriaMetrics, Mimir);
+6. sends logs to Loki or VictoriaLogs;
 7. never receives secrets directly from Docker labels.
+
+The contract fixes the labels, the behaviour and the result in the store. It does not fix which agent collects the telemetry or how that agent is configured: the implementations are listed in section [14](#14-implementations). The reference implementation is Grafana Alloy (section [14.4](#144-reference-implementation-alloy)).
 
 ## 2. Base model
 
 ```text
-Docker labels
-    ↓
-discovery.docker
-    ↓
-discovery.relabel
-    ↓
-foreach / prometheus.scrape / loki.source.docker
-    ↓
-prometheus.remote_write / loki.write
+container Docker labels
+    |
+    v
+domain (section 10)
+    |
+    v
+domain implementation (section 14)
+    |
+    v
+output protocol (section 14.2)
+    |
+    v
+store
 ```
+
+Labels assign a container to domains. Each domain on a host is served by one implementation; it collects the domain's data and sends it over the output protocol to the store: metrics over Prometheus remote_write, logs over a protocol the log store accepts. The snmp domain and the host domains take their targets from elsewhere than labels: snmp from the device file, the host domains from the host itself (section [10](#10-domains)).
 
 ## 3. Namespace and naming convention
 
@@ -87,21 +95,21 @@ labels:
   ru.3ops.discovery.database.secret-id: "postgres-orders"
 ```
 
-## 4. Docker label normalization in Alloy
+## 4. Label key normalization
 
-The Docker label:
+Two label keys that coincide after replacing `.` and `-` with `_` are forbidden: of such spellings the contract declares only one.
+
+The rule exists because implementations normalize keys. An example is Docker service discovery in Prometheus: a container label reaches the relabeling rules as a meta label, and dots, hyphens and other unsuitable characters in its name are replaced with `_`. The Docker label
 
 ```text
 ru.3ops.discovery.database.secret-id
 ```
 
-appears in `discovery.docker` as:
+becomes part of the meta label name as:
 
 ```text
-__meta_docker_container_label_ru_3ops_discovery_database_secret_id
+ru_3ops_discovery_database_secret_id
 ```
-
-Dots, hyphens and other unsuitable characters are converted into `_`.
 
 Because of that, the following labels collide after normalization:
 
@@ -118,7 +126,7 @@ Only the first spelling may be used.
 
 The mandatory flag that opts a container into discovery for the metrics, database and blackbox domains: without `enabled == true` a container does not enter the pipeline of those domains.
 
-Declaring and reading are different things, and they do not coincide everywhere. For the otel and ipmi domains the label is declared by the same rule, but neither the reference nor any implementation reads it: the OTLP receiver of otel is shared and static and cannot relate a push to the container that declared the label (section [10.5](#105-domain-otel)), while ipmi has no domain pipeline on the Alloy side at all (section [10.7](#107-domain-ipmi)). For those two domains `enabled` is an inventory declaration of intent rather than a control flag; the contract cannot require an implementation to read it.
+Declaring and reading are different things, and they do not coincide everywhere. For the otel and ipmi domains the label is declared by the same rule, but implementations do not read it: the OTLP receiver of otel is shared and static and cannot relate a push to the container that declared the label (section [10.5](#105-domain-otel)), while ipmi has no domain pipeline at all: the external exporter is scraped as a target of the metrics domain (section [10.7](#107-domain-ipmi)). For those two domains `enabled` is an inventory declaration of intent rather than a control flag; the contract cannot require an implementation to read it.
 
 Exception: the `logs` domain collects stdout/stderr of every container by default and does not require this label (see section [10.3.1](#1031-default-collection-policy)). The `snmp` domain is driven by a device file rather than by Docker labels (section [10.6](#106-domain-snmp)), so the global `enabled` does not apply to it.
 
@@ -139,9 +147,9 @@ Example:
 ru.3ops.discovery.version: "0.2"
 ```
 
-If the label is absent, the contract version configured as the default by the Alloy configuration applies.
+If the label is absent, the contract version the implementation accepts by default applies.
 
-In version `0.2` the label is reserved: the reference configuration does not read it and processes every container by the `0.2` rules. Version validation will arrive together with the first change that alters label semantics (section [7](#7-contract-versioning)).
+In version `0.2` the label is reserved: the implementation processes every container by the `0.2` rules, whatever its value. Version validation will arrive together with the first change that alters label semantics (section [7](#7-contract-versioning)).
 
 ### `ru.3ops.discovery.instance`
 
@@ -178,9 +186,9 @@ ru.3ops.discovery.team: "payments"
 
 ## 6. Common telemetry labels
 
-### 6.1. Labels added by Alloy
+### 6.1. Labels added by the implementation
 
-Alloy must add the following labels to metrics and logs whenever they are available:
+The implementation must add the following labels to metrics and logs whenever they are available:
 
 ```text
 instance
@@ -190,8 +198,10 @@ container
 compose_project
 compose_service
 host
-collector="alloy"
+collector
 ```
+
+The value of `collector` is the implementation name from the registry of section [14](#14-implementations): it shows which implementation collected a series or a line.
 
 Duplication of semantically identical labels must be avoided:
 
@@ -213,9 +223,9 @@ compose_project
 compose_service
 ```
 
-The log path adds `service_name`, `log_profile` and `source` to this set; the full list of permitted stream labels is in section [6.2](#62-loki-label-cardinality), which governs cardinality rather than composition. There is no single place listing every emitted label, by construction: metrics and logs have different sets, and section [6.2](#62-loki-label-cardinality) is the normative source for logs.
+The log path adds `service_name`, `log_profile` and `source` to this set; the full list of permitted indexed log fields is in section [6.2](#62-log-fields), which governs cardinality rather than composition. There is no single place listing every emitted label, by construction: metrics and logs have different sets, and section [6.2](#62-log-fields) is the normative source for logs.
 
-The `container` label comes from the Docker engine metadata and `host` from the deployment parameter `RU_3OPS_DISCOVERY_HOSTNAME`, which defaults to the hostname of the Alloy collector; neither is set by container labels, so a container cannot forge their values. The remaining labels are declared by the container itself (see section [13.5](#135-trust-in-labels)). For logs the set is additionally constrained by the allowlist of section [6.2](#62-loki-label-cardinality).
+The `container` label comes from the Docker engine metadata and `host` from the deployment parameter `RU_3OPS_DISCOVERY_HOSTNAME`, which defaults to the collector hostname; neither is set by container labels, so a container cannot forge their values. The remaining labels are declared by the container itself (see section [13.5](#135-trust-in-labels)). For logs the set is additionally constrained by the allowlist of section [6.2](#62-log-fields).
 
 The `instance` label belongs to metrics; for logs its counterpart is `service_name` (see section [10.3.5](#1035-labels)). The analogy is incomplete and must not be leaned on as a rule: `service_name` is derived from `logs.service` alone, whereas the global `instance` does not extend to logs.
 
@@ -234,9 +244,9 @@ In the host-metrics and container-metrics domains `job` and `instance` are a del
 
 The blackbox domain is a documented exception to the global `instance` rule of section [5](#5-global-labels): for a probe the instance is the probe target itself, so the global value does not apply here and does not override the address. An `instance` declared on a container with a blackbox probe belongs to its own metrics, not to its probes.
 
-### 6.2. Loki label cardinality
+### 6.2. Log fields
 
-Only low-cardinality fields may be placed into Loki labels:
+The fields of a log record fall into two classes: indexed fields define the stream, and the store builds its index on them; non-indexed fields are kept with the line without an index. Only low-cardinality fields may be indexed:
 
 ```text
 service_name
@@ -251,9 +261,9 @@ collector
 source
 ```
 
-Stream labels are built solely from discovery metadata and container labels. Fields extracted from the content of a line are never promoted into stream labels: the content is under the control of the application, and such promotion opens the door to label spoofing and unbounded stream cardinality. The reference does not promote `level` (it is absent from the allowlist above and stays in the list below); a customization may promote `level` only if it normalizes the value to a bounded set and extends the allowlist.
+Indexed fields are built solely from discovery metadata and container labels. Fields extracted from the content of a line are never promoted into indexed fields: the content is under the control of the application, and such promotion opens the door to label spoofing and unbounded stream cardinality. By default `level` is not indexed (it is absent from the allowlist above and stays in the list below); a deployment may promote it only if it normalizes the value to a bounded set and extends the allowlist.
 
-The following fields must stay inside the line or in structured metadata:
+The following fields must stay inside the line or in non-indexed fields:
 
 ```text
 level
@@ -268,11 +278,22 @@ full_path
 pid
 ```
 
+Stores name the classes in their own terms:
+
+| Store | Indexed fields | Non-indexed fields |
+|---|---|---|
+| Loki | stream labels | structured metadata |
+| VictoriaLogs | stream fields | ordinary record fields |
+
+Non-indexed fields do not affect cardinality, but the size of their values is controlled by the application. Size is bounded by the store's limits.
+
+#### 6.2.1. Loki
+
 For filtering by level, Loki 3.x computes `detected_level` on its own from the line content and structured metadata.
 
-Structured metadata is neither indexed nor cardinality-bearing, but the size of the values is controlled by the application. Size is bounded by Loki limits (`max_structured_metadata_size`); the reference configuration does not truncate values.
+The size of structured metadata is bounded by the Loki limit `max_structured_metadata_size`.
 
-Structured metadata requires Loki 3.x with schema v13 (TSDB) and `allow_structured_metadata` enabled. On an older schema the push is rejected as a whole: profiles that parse silently stop delivering lines while `raw-v1` keeps working -- on partial log loss this is the first thing worth checking.
+Structured metadata requires Loki 3.x with schema v13 (TSDB) and `allow_structured_metadata` enabled. On an older schema the push is rejected as a whole: profiles that parse silently stop delivering lines while `raw-v1` keeps working - on partial log loss this is the first thing worth checking.
 
 ## 7. Contract versioning
 
@@ -287,9 +308,11 @@ Rules:
 - patch changes do not alter the meaning of existing labels;
 - minor changes may add new optional labels;
 - major changes may alter semantics or remove fields;
-- starting from the first change that alters label semantics, the Alloy configuration must state the supported versions explicitly (in `0.2` the check is reserved, see section [5](#5-global-labels)).
+- starting from the first change that alters label semantics, the implementation must state the supported versions explicitly (in `0.2` the check is reserved, see section [5](#5-global-labels)).
 
-The label carries the major and minor parts only: patch changes by definition do not alter label semantics and are not reflected in the contract. The format is `<major>.<minor>`, both parts decimal without leading zeros: `^\d+\.\d+$`. The values `0.2.0`, `v0.2` and `0.2-rc1` do not conform; the specification version in the header of this document is a full SemVer and deliberately does not share the format of this label -- that one versions the text, this one versions the meaning of the labels.
+The label versions the meaning of the labels, not the specification text: its major and minor move by the rules above, not after the major.minor in the document header. Patch changes by definition do not alter label semantics, so the label carries the major and minor parts only. The format is `<major>.<minor>`, both parts decimal without leading zeros: `^\d+\.\d+$`. The values `0.2.0`, `v0.2` and `0.2-rc1` do not conform; the specification version in the header of this document is a full SemVer and deliberately does not share the format of this label - that one versions the text, this one versions the meaning of the labels.
+
+The label value moves only together with a change in the meaning of the labels. A new optional label changes the meaning of the label set, so it moves the value to the next minor version. A minor version of the specification text that leaves the meaning of the labels intact does not touch the label value: containers with `ru.3ops.discovery.version: "0.2"` stay valid.
 
 Behaviour on an unsupported version is undefined in `0.2` because the check is reserved: an implementation must accept any value and may not drop a target based on it. When the check does arrive, it must obey the rule of the logs domain (section [10.3.4](#1034-unknown-profile)): logs are not lost under any version, and dropping by version is admissible only for domains with fail-closed semantics.
 
@@ -889,7 +912,7 @@ This domain mostly documents the expected behavior of the application. Alloy usu
 
 The `otel.enabled` flag is therefore declarative: it does not govern OTLP ingestion (the receiver is shared and static) but records the intent of the service and serves inventory purposes. The remaining labels of the domain are declarative for the same reason. Traces are outside the perimeter in `0.2`: the reference receiver has no traces output, so a trace export is rejected with an explicit client-side error rather than accepted silently.
 
-The OTLP path is an exception to the provenance of section [6.1](#61-labels-added-by-alloy): the shared receiver is static and has no Docker metadata, so it produces no `environment`/`team`/`container` provenance labels. Only an allowlisted set of OTLP resource attributes is promoted into the Loki stream (section [6.2](#62-loki-label-cardinality); in the reference configuration only `service.name` becomes `service_name`); the rest of the identification is supplied by the sending application itself through resource attributes.
+The OTLP path is an exception to the provenance of section [6.1](#61-labels-added-by-the-implementation): the shared receiver is static and has no Docker metadata, so it produces no `environment`/`team`/`container` provenance labels. Only an allowlisted set of OTLP resource attributes is promoted into the Loki stream (section [6.2](#62-log-fields); in the reference configuration only `service.name` becomes `service_name`); the rest of the identification is supplied by the sending application itself through resource attributes.
 
 ### 10.6. Domain: snmp
 
@@ -1080,15 +1103,15 @@ Labels are declared by the container itself, so the right to start containers on
 - for the metrics and database domains SSRF is excluded by two conditions at once, and the second is as mandatory as the first. The scrape address is built only from `__meta_docker_network_ip` and a private port of the container itself (for database, from the secret file, which labels do not choose beyond `secret-id`), so labels cannot redirect collection to another host. The scrape response is an untrusted input too: `prometheus.scrape` follows redirects by default, and a container answering `302` with a link-local address would send the next request there on the collector's behalf. Every `prometheus.scrape` in the reference therefore sets `follow_redirects = false`; a configuration that does not meet this condition does not carry the guarantee;
 - the blackbox domain is a deliberate exception: `blackbox.address` (section [10.4.1](#1041-labels)) points a probe at an arbitrary host, and the result (`probe_success`, the status, the certificate expiry) is visible in the metrics -- the container gains a network reachability oracle acting as Alloy. The probe port is limited to the private ports of the container itself, but the container declares its own exposed ports, so with untrusted neighbours `blackbox.address` should be constrained by an allowlist rule in `discovery.relabel`;
 - the opt-in OTLP receiver (overlay [`060_otel`](../alloy-optional/060_otel.alloy)) listens without authentication and produces no provenance labels (section [10.5](#105-domain-otel)): network access to its ports equals the right to write telemetry with an arbitrary identity; the receiver should be kept on an internal network or fronted by an authenticating reverse proxy;
-- `container` is added from the Docker engine metadata and `host` from the deployment parameter `RU_3OPS_DISCOVERY_HOSTNAME`, which defaults to the hostname of the Alloy collector; neither can be forged through labels (section [6.1](#61-labels-added-by-alloy));
+- `container` is added from the Docker engine metadata and `host` from the deployment parameter `RU_3OPS_DISCOVERY_HOSTNAME`, which defaults to the hostname of the Alloy collector; neither can be forged through labels (section [6.1](#61-labels-added-by-the-implementation));
 - consequently, series and streams with forged `job`/`team`/`service_name` still carry the honest `container` and `host` of the sender: they do not merge with the data of the real owner and stay distinguishable -- but alert rules and dashboards that filter by `team`/`job` alone without regard for `container` will see the forged data too;
-- fields taken from log content are not promoted into stream labels (section [6.2](#62-loki-label-cardinality));
+- fields taken from log content are not promoted into stream labels (section [6.2](#62-log-fields));
 - with untrusted neighbours on the host, the values of `team`/`environment`/`service_name` should additionally be constrained by allowlist rules in `discovery.relabel`; the reference configuration contains no such rules;
 - the contract sets no limit on telemetry volume: a container can generate load through log volume and through the number of opt-in targets; the defence is rate limits on the backend side (Loki limits, remote_write endpoint limits).
 
 ## 14. Implementations
 
-An implementation is an agent with its own configuration that fulfils the contract for one or more domains of section [10](#10-domains). The implementation name is the value of the `collector` label (section [6.1](#61-labels-added-by-alloy)).
+An implementation is an agent with its own configuration that fulfils the contract for one or more domains of section [10](#10-domains). The implementation name is the value of the `collector` label (section [6.1](#61-labels-added-by-the-implementation)).
 
 | Implementation | Domains | Agent | Directory |
 |---|---|---|---|
@@ -1128,7 +1151,7 @@ The scrape profile parameters (interval/timeout) are not configurable through en
 
 An implementation sends metrics over the Prometheus remote_write protocol to the `RU_3OPS_DISCOVERY_REMOTE_WRITE_URL` address. Any store that accepts remote_write fits: Prometheus, Mimir, VictoriaMetrics, Thanos, Grafana Cloud.
 
-For logs the contract fixes the result in the store rather than the protocol: the indexed and non-indexed fields of section [6.2](#62-loki-label-cardinality) and the profile fields of section [8.3](#83-log-profiles). The implementation chooses the protocol (Loki push, the store's native ingestion, OTLP) and declares the stores it supports. Over Loki push the logs are accepted by both Loki and VictoriaLogs: in both cases the address is set by `RU_3OPS_DISCOVERY_LOKI_PUSH_URL`.
+For logs the contract fixes the result in the store rather than the protocol: the indexed and non-indexed fields of section [6.2](#62-log-fields) and the profile fields of section [8.3](#83-log-profiles). The implementation chooses the protocol (Loki push, the store's native ingestion, OTLP) and declares the stores it supports. Over Loki push the logs are accepted by both Loki and VictoriaLogs: in both cases the address is set by `RU_3OPS_DISCOVERY_LOKI_PUSH_URL`.
 
 VictoriaLogs without the `-loki.disableMessageParsing` flag parses a JSON line received over Loki push into fields: the store gains fields beyond sections 6.2 and 8.3, and `_msg` no longer holds the original line. A deployment that needs exactly the contract fields runs VictoriaLogs with this flag.
 
@@ -1138,7 +1161,7 @@ The contract sets no delivery guarantee stronger than at-least-once: a restart o
 
 ### 14.3. Series catalog
 
-The series catalog is a normative machine-readable appendix to the manifest: the names and labels of the series of every domain, identical across all implementations of that domain. It lives in [`docs/series/`](series/): one `<domain>.yaml` file per domain of the identity table in section [6.1](#61-labels-added-by-alloy).
+The series catalog is a normative machine-readable appendix to the manifest: the names and labels of the series of every domain, identical across all implementations of that domain. It lives in [`docs/series/`](series/): one `<domain>.yaml` file per domain of the identity table in section [6.1](#61-labels-added-by-the-implementation).
 
 ```yaml
 domain: database
@@ -1155,7 +1178,7 @@ The catalog is a lower bound: series and labels beyond it are allowed. It pins o
 
 The catalog is snapshotted from the e2e stack of the reference implementation at the pinned version (section [14.4](#144-reference-implementation-alloy)) and reviewed by a maintainer. It is rebuilt on every change of the pinned version and on every exporter upgrade in a second implementation. A divergence between an implementation and the catalog is resolved either by editing the catalog - a contract change with a CHANGELOG entry - or by a row with a reason in [`tests/static/asymmetries.py`](../tests/static/asymmetries.py). The same file lists the type/profile pairs of the `database` domain the catalog does not carry: no e2e container runs them.
 
-Logs have no series and no catalog of their own: the fields of their records are set by sections [6.2](#62-loki-label-cardinality) and [8.3](#83-log-profiles).
+Logs have no series and no catalog of their own: the fields of their records are set by sections [6.2](#62-log-fields) and [8.3](#83-log-profiles).
 
 ### 14.4. Reference implementation: Alloy
 
@@ -1219,10 +1242,20 @@ The [`alloy-optional/`](../alloy-optional/) directory holds overlay files added 
 | File | Content |
 |---|---|
 | [`060_otel.alloy`](../alloy-optional/060_otel.alloy) | Opt-in OTLP receiver: `otelcol.receiver.otlp`, with metrics going to `prometheus.remote_write` and logs to `loki.write` through an allowlist processor |
-| [`070_host-metrics.alloy`](../alloy-optional/070_host-metrics.alloy) | Opt-in host metrics: `prometheus.exporter.unix` (`node_*` series) into `prometheus.remote_write`; rootfs/procfs/sysfs through `RU_3OPS_DISCOVERY_HOST_*`; provenance per [6.1](#61-labels-added-by-alloy): `host`/`collector` are added by `discovery.relabel` before the scrape |
-| [`075_container-metrics.alloy`](../alloy-optional/075_container-metrics.alloy) | Opt-in per-container metrics: `prometheus.exporter.cadvisor` (series `container_cpu_*`/`container_memory_*`/`container_network_*`; `container_fs_*` is outside the perimeter) into `prometheus.remote_write`. The Docker API goes through `docker_host` (reusing `RU_3OPS_DISCOVERY_DOCKER_HOST`, socket proxy: a GET allowlist of the `CONTAINERS`/`INFO`/`VERSION`/`PING` sections is enough); with the Docker API unavailable the output is practically empty (`docker_only`). Provenance per [6.1](#61-labels-added-by-alloy): allowlisted container labels become `environment`/`team`/`compose_*`, `name` becomes `container`; raw `container_label_*`/`id`/`name` are dropped; `instance` is the collector hostname and `job` is `integrations/cadvisor` (the exporter's own label; both are deliberate gaps). Cardinality: `store_container_labels = false` plus the allowlist, root cgroup statistics disabled, `disabled_metrics`/`enabled_metrics` tunable. Deployment privileges (the host cgroup namespace) are covered in section [14.4.1](#1441-customization); per-container opt-out is not supported. |
-| [`080_host-logs.alloy`](../alloy-optional/080_host-logs.alloy) | Opt-in host logs: `loki.source.journal` (systemd journal) into `loki.write`; the static labels `host`/`collector`/`source` (allowlisted in [6.2](#62-loki-label-cardinality)) |
+| [`070_host-metrics.alloy`](../alloy-optional/070_host-metrics.alloy) | Opt-in host metrics: `prometheus.exporter.unix` (`node_*` series) into `prometheus.remote_write`; rootfs/procfs/sysfs through `RU_3OPS_DISCOVERY_HOST_*`; provenance per [6.1](#61-labels-added-by-the-implementation): `host`/`collector` are added by `discovery.relabel` before the scrape |
+| [`075_container-metrics.alloy`](../alloy-optional/075_container-metrics.alloy) | Opt-in per-container metrics: `prometheus.exporter.cadvisor` (series `container_cpu_*`/`container_memory_*`/`container_network_*`; `container_fs_*` is outside the perimeter) into `prometheus.remote_write`. The Docker API goes through `docker_host` (reusing `RU_3OPS_DISCOVERY_DOCKER_HOST`, socket proxy: a GET allowlist of the `CONTAINERS`/`INFO`/`VERSION`/`PING` sections is enough); with the Docker API unavailable the output is practically empty (`docker_only`). Provenance per [6.1](#61-labels-added-by-the-implementation): allowlisted container labels become `environment`/`team`/`compose_*`, `name` becomes `container`; raw `container_label_*`/`id`/`name` are dropped; `instance` is the collector hostname and `job` is `integrations/cadvisor` (the exporter's own label; both are deliberate gaps). Cardinality: `store_container_labels = false` plus the allowlist, root cgroup statistics disabled, `disabled_metrics`/`enabled_metrics` tunable. Deployment privileges (the host cgroup namespace) are covered in section [14.4.1](#1441-customization); per-container opt-out is not supported. |
+| [`080_host-logs.alloy`](../alloy-optional/080_host-logs.alloy) | Opt-in host logs: `loki.source.journal` (systemd journal) into `loki.write`; the static labels `host`/`collector`/`source` (allowlisted in [6.2](#62-log-fields)) |
 | [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) | The snmp domain (opt-in overlay): the file provider (`local.file` plus `encoding.from_yaml`), `prometheus.exporter.snmp` (modules `if_mib`/`system`, profile `snmp-standard-v1`), auth from an inline `config` secret (`local.file` with `is_secret`) through merge. Enabled only together with the device and auth files (a top-level `local.file` without a file is unhealthy). |
+
+#### 14.4.4. How the reference fulfils the contract
+
+The contract sections state their requirements without naming an implementation. This list collects, section by section, how Alloy fulfils them; it adds no requirement of its own.
+
+- [§2](#2-base-model): the component graph of the reference is Docker labels -> `discovery.docker` -> `discovery.relabel` -> `foreach` / `prometheus.scrape` / `loki.source.docker` -> `prometheus.remote_write` / `loki.write`.
+- [§4](#4-label-key-normalization): `discovery.docker` hands a container label over as `__meta_docker_container_label_<name>`, replacing dots, hyphens and other unsuitable characters in the name with `_`; the configuration reads the label `ru.3ops.discovery.database.secret-id` as `__meta_docker_container_label_ru_3ops_discovery_database_secret_id`.
+- [§5](#5-global-labels): the reference does not read the `ru.3ops.discovery.version` label and processes every container by the `0.2` rules.
+- [§6.1](#61-labels-added-by-the-implementation): `collector` equals `alloy`; every file that produces series or streams, except [`060_otel.alloy`](../alloy-optional/060_otel.alloy), computes `host` as `coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)`, so an unset or empty parameter yields the hostname of the Alloy container. The OTLP path is an exemption from provenance (section [10.5](#105-domain-otel)): its series and streams carry neither `host` nor `collector`.
+- [§6.2](#62-log-fields): logs leave through `loki.write` over the Loki push API, to Loki and to VictoriaLogs alike; indexed fields become stream labels, non-indexed ones structured metadata (`stage.structured_metadata` in [`050_log-profiles.alloy`](../alloy/050_log-profiles.alloy)). The reference does not promote `level` into stream labels and does not truncate structured metadata values.
 
 ## 15. Usage
 
@@ -1279,7 +1312,7 @@ rule applies in two places in opposite directions:
   value looks like `map[x-key:value]`. Discovery does not see that label,
   and the container is left with a garbage one. This is exactly why the
   namespace of the contract is reverse-DNS rather than an `x-` prefix
-  (section [4](#4-docker-label-normalization-in-alloy)).
+  (section [4](#4-label-key-normalization)).
 
 The anchor key is visible only to the YAML parser and reaches no container
 at all -- its name is free apart from the mandatory `x-`.

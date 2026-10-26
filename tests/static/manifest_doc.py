@@ -394,12 +394,12 @@ def secret_id_pattern() -> str:
 
 
 def loki_label_allowlist() -> set[str]:
-    """Section 6.2: labels allowed in Loki streams."""
+    """Section 6.2: the allowlist of indexed log fields."""
     return set(code_block("6.2").split())
 
 
 def provenance_labels() -> set[str]:
-    """Section 6.1: label names Alloy must attach when available."""
+    """Section 6.1: label names an implementation attaches when available."""
     names = {
         line.split("=")[0].strip()
         for line in code_block("6.1").splitlines()
