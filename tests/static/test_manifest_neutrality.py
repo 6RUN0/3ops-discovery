@@ -22,10 +22,11 @@ def test_tokens_stay_in_sections_the_table_allows() -> None:
 
 def test_translation_stays_within_the_table() -> None:
     en = (md.REPO / "docs" / "manifest.md").read_text(encoding="utf-8")
-    extra = set(md.implementation_mentions(en)) - set(
-        asymmetries.MANIFEST_IMPLEMENTATION_MENTIONS
+    found = set(md.implementation_mentions(en))
+    allowed = set(asymmetries.MANIFEST_IMPLEMENTATION_MENTIONS)
+    assert found == allowed, (
+        f"docs/manifest.md: extra {found - allowed}, missing {allowed - found}"
     )
-    assert extra == set(), f"docs/manifest.md mentions the agent in {extra}"
 
 
 def test_token_scanner_counts_components_and_skips_the_reference() -> None:
@@ -56,3 +57,27 @@ def test_mentions_of_one_section_add_up_across_its_subheadings() -> None:
 def test_text_before_the_first_numbered_heading_is_skipped() -> None:
     text = "# Title\n\nAlloy\n\n## Preface\n\nAlloy\n\n## 1. A\n\nAlloy\n"
     assert md.implementation_mentions(text) == {"1": 1}
+
+
+def test_scanner_knows_relabel_and_river_vocabulary() -> None:
+    for token in (
+        "`prometheus.relabel`",
+        "`loki.relabel`",
+        "`discovery.file`",
+        "`source_labels`",
+        "`target_label`",
+        "`__address__`",
+        "River",
+        "`stability.level`",
+        "run alloy here",
+    ):
+        text = f"## 5. X\n\n{token}\n"
+        assert md.implementation_mentions(text) == {"5": 1}, token
+
+
+def test_scanner_ignores_contract_paths_and_label_names() -> None:
+    text = (
+        "## 5. X\n\n`/etc/alloy/x.yaml` `ru.3ops.discovery.version` "
+        "x-alloy-discovery\n"
+    )
+    assert md.implementation_mentions(text) == {}

@@ -463,8 +463,10 @@ REFERENCE_SECTION = "14.4"
 #: /etc/alloy/... is a contract value, not a mention, hence the lookbehind.
 IMPLEMENTATION_TOKENS = re.compile(
     r"Alloy|(?<![/\w])alloy(?:-optional)?/|\.alloy\b"
-    r"|discovery\.(?:docker|relabel)|loki\.(?:source|process|write)"
-    r"|prometheus\.(?:scrape|remote_write|exporter)|otelcol\."
+    r"|(?<![\w.])discovery\.[a-z]+|loki\.(?:source|process|write|relabel)"
+    r"|prometheus\.(?:scrape|remote_write|exporter|relabel)|otelcol\."
+    r"|source_labels|target_label|__address__|\bRiver\b|stability\.level"
+    r"|(?<![/\w.-])alloy(?![/\w-])"
     r"|foreach|__meta_docker|constants\.|coalesce\(|sys\.env|local\.file"
     r"|is_secret|keepequal|stage\.\w+"
 )
