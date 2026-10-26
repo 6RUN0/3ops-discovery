@@ -63,13 +63,17 @@ def test_postgres_exporter_authenticated(stack: Stack) -> None:
 
 
 def test_self_metrics_via_contract(stack: Stack) -> None:
-    # Dogfooding: alloy/prometheus/loki carry the full mandatory
-    # metrics.* label set and are scraped by Alloy itself.
-    for family, job in (
+    # Dogfooding: the collectors and the stores carry the full mandatory
+    # metrics.* label set and are scraped by the metrics-domain collector,
+    # which on vmagent reports itself through vm_app_version.
+    expected = [
         ("alloy_build_info", "alloy"),
         ("prometheus_build_info", "prometheus"),
         ("loki_build_info", "loki"),
-    ):
+    ]
+    if stack.collector("metrics") == "vmagent":
+        expected.append(("vm_app_version", "vmagent"))
+    for family, job in expected:
 
         def _present(
             family: str = family, job: str = job
@@ -92,7 +96,7 @@ def test_provenance_labels_on_native_series(stack: Stack) -> None:
     labels = series[0]["metric"]
     assert labels["environment"] == "e2e"
     assert labels["team"] == "apps"
-    assert labels["collector"] == "alloy"
+    assert labels["collector"] == stack.collector("metrics")
     assert "app-metrics" in labels["container"]
     assert labels["host"] == E2E_HOSTNAME
 

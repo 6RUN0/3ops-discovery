@@ -14,6 +14,8 @@ is ``nox -s lint tests``.
     uv run nox -s tests         # static consistency + mini-app units
     uv run nox -s e2e           # docker compose delivery checks
     uv run nox -s e2e_victoria  # the same on VictoriaMetrics + VictoriaLogs
+    uv run nox -s e2e_vmagent   # contract subset, metrics domain on vmagent
+    uv run nox -s e2e_vmagent_victoria  # the same on the Victoria stores
     uv run nox -s preflight     # everything
 """
 
@@ -294,6 +296,28 @@ def tests(session: nox.Session) -> None:
     _uv(session, "pytest", "tests/static", "tests/app", *session.posargs)
 
 
+def _run_e2e(
+    session: nox.Session, backend: str, metrics_impl: str, *pytest_args: str
+) -> None:
+    """Run tests/e2e with both e2e axes set explicitly, never inherited."""
+    session.env["RU_3OPS_DISCOVERY_E2E_BACKEND"] = backend
+    session.env["RU_3OPS_DISCOVERY_E2E_METRICS_IMPL"] = metrics_impl
+    _uv(
+        session,
+        "pytest",
+        "tests/e2e",
+        "-o",
+        "timeout=900",
+        *pytest_args,
+        *session.posargs,
+    )
+
+
+#: Checks that read Alloy internals describe the reference, not the
+#: contract: on vmagent the Alloy metrics pipeline they inspect is absent.
+_CONFORMANCE_ONLY = ("-m", "not alloy_internals")
+
+
 @nox.session
 def e2e(session: nox.Session) -> None:
     """
@@ -303,15 +327,25 @@ def e2e(session: nox.Session) -> None:
     healthchecks, the mini-app image build, and a metrics budget of
     RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL + 30s scrape + flush.
     """
-    session.env["RU_3OPS_DISCOVERY_E2E_BACKEND"] = "prometheus-loki"
-    _uv(session, "pytest", "tests/e2e", "-o", "timeout=900", *session.posargs)
+    _run_e2e(session, "prometheus-loki", "alloy")
 
 
 @nox.session
 def e2e_victoria(session: nox.Session) -> None:
     """Run the e2e suite against VictoriaMetrics + VictoriaLogs."""
-    session.env["RU_3OPS_DISCOVERY_E2E_BACKEND"] = "victoria"
-    _uv(session, "pytest", "tests/e2e", "-o", "timeout=900", *session.posargs)
+    _run_e2e(session, "victoria", "alloy")
+
+
+@nox.session
+def e2e_vmagent(session: nox.Session) -> None:
+    """Run the contract subset with vmagent as the metrics collector."""
+    _run_e2e(session, "prometheus-loki", "vmagent", *_CONFORMANCE_ONLY)
+
+
+@nox.session
+def e2e_vmagent_victoria(session: nox.Session) -> None:
+    """Run the vmagent contract subset against the Victoria stores."""
+    _run_e2e(session, "victoria", "vmagent", *_CONFORMANCE_ONLY)
 
 
 @nox.session
@@ -325,6 +359,8 @@ def preflight(session: nox.Session) -> None:
         "tests",
         "e2e",
         "e2e_victoria",
+        "e2e_vmagent",
+        "e2e_vmagent_victoria",
     ):
         session.notify(name)
 

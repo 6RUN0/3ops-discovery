@@ -27,12 +27,14 @@ import requests
 
 from tools.backends import (
     BACKEND_NAMES,
+    METRICS_IMPL_DOMAINS,
     LogQuery,
     LogRecord,
     LogsBackend,
     LokiBackend,
     VictoriaLogsBackend,
     selected_backend,
+    selected_metrics_implementation,
 )
 from tools.materialize import COMBOS, materialize
 from tools.snmp_fixtures import write_snmp_fixtures
@@ -60,6 +62,11 @@ JOURNAL_HOST = "journal-host"
 #: e2e-only overlay adding journal-host (read-write host cgroup mount);
 #: every e2e fixture passes it, `nox -s demo` never does.
 JOURNAL_HOST_COMPOSE = STACK_DIR / "docker-compose.journal-host.yml"
+#: Overlay adding vmagent as the metrics-domain collector; loaded only when
+#: RU_3OPS_DISCOVERY_E2E_METRICS_IMPL=vmagent.
+VMAGENT_COMPOSE = STACK_DIR / "docker-compose.vmagent.yml"
+#: vmagent HTTP port: /health, /metrics and /api/v1/targets.
+VMAGENT_PORT = 8429
 
 
 @dataclass(frozen=True)
@@ -70,6 +77,8 @@ class BackendSpec:
     compose_files: extra `-f` arguments layered over the base compose file.
     metrics_service / logs_service: compose services whose published ports
         serve the Prometheus query API and the log query API.
+    metrics_write_url: remote-write URL of the metrics store inside the
+        compose network, handed to a collector that has no store default.
     *_ready_path: HTTP path answering 2xx once the store accepts queries.
     logs_factory: builds the `LogsBackend` from the logs base URL.
     """
@@ -78,6 +87,7 @@ class BackendSpec:
     metrics_service: str
     metrics_port: int
     metrics_ready_path: str
+    metrics_write_url: str
     logs_service: str
     logs_port: int
     logs_ready_path: str
@@ -90,6 +100,7 @@ BACKENDS: dict[str, BackendSpec] = {
         metrics_service="prometheus",
         metrics_port=9090,
         metrics_ready_path="/-/ready",
+        metrics_write_url="http://prometheus:9090/api/v1/write",
         logs_service="loki",
         logs_port=3100,
         logs_ready_path="/ready",
@@ -100,6 +111,7 @@ BACKENDS: dict[str, BackendSpec] = {
         metrics_service="victoriametrics",
         metrics_port=8428,
         metrics_ready_path="/health",
+        metrics_write_url="http://victoriametrics:8428/api/v1/write",
         logs_service="victorialogs",
         logs_port=9428,
         logs_ready_path="/health",
@@ -113,12 +125,16 @@ if set(BACKENDS) != set(BACKEND_NAMES):
     )
 
 _BACKEND_KEY = pytest.StashKey[str]()
+_METRICS_IMPL_KEY = pytest.StashKey[str]()
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Resolve the storage variant once, before collection touches docker."""
+    """Resolve both e2e axes once, before collection touches docker."""
     try:
         config.stash[_BACKEND_KEY] = selected_backend(os.environ)
+        config.stash[_METRICS_IMPL_KEY] = selected_metrics_implementation(
+            os.environ
+        )
     except ValueError as exc:
         raise pytest.UsageError(str(exc)) from exc
 
@@ -185,6 +201,14 @@ class Stack:
     logs: LogsBackend
     backend: str
     alloy_url: str
+    metrics_impl: str
+    vmagent_url: str | None
+
+    def collector(self, domain: str) -> str:
+        """Return the `collector` label value expected on `domain` series."""
+        if domain in METRICS_IMPL_DOMAINS:
+            return self.metrics_impl
+        return "alloy"
 
     def prom_query(self, expr: str) -> list[dict[str, Any]]:
         """Instant PromQL query; returns data.result (possibly empty)."""
@@ -335,6 +359,10 @@ def _collect_diagnostics(stack: Stack, out_dir: Path) -> None:
     if stack.backend == "prometheus-loki":
         sources.append(
             ("prometheus-targets.json", f"{stack.metrics_url}/api/v1/targets")
+        )
+    if stack.vmagent_url is not None:
+        sources.append(
+            ("vmagent-targets.json", f"{stack.vmagent_url}/api/v1/targets")
         )
     for name, url in sources:
         try:
@@ -517,6 +545,7 @@ class _StackSpec:
     secrets_dir: Path
     extra_env: dict[str, str]
     backend: str
+    metrics_impl: str
 
 
 def _bring_up(
@@ -533,22 +562,32 @@ def _bring_up(
     materialize -> pre-clean -> up --build -d --wait -> readiness (journal-host
     boot included) -> yield -> diagnostics-on-failure -> down -v.
     """
+    backend = BACKENDS[spec.backend]
+    on_vmagent = spec.metrics_impl == "vmagent"
+    # vmagent replaces the Alloy metrics domain, so Alloy must not scrape
+    # the same targets a second time under collector="alloy".
+    alloy_domains = tuple(
+        d
+        for d in spec.domains
+        if not (on_vmagent and d in METRICS_IMPL_DOMAINS)
+    )
     config_dir = materialize(
-        tmp_path_factory.mktemp("alloy-config"), spec.domains
+        tmp_path_factory.mktemp("alloy-config"), alloy_domains
     )
     env = {
         **os.environ,
         "RU_3OPS_DISCOVERY_E2E_CONFIG_DIR": str(config_dir),
         "RU_3OPS_DISCOVERY_E2E_SECRETS_DIR": str(spec.secrets_dir),
+        "RU_3OPS_DISCOVERY_E2E_METRICS_WRITE_URL": backend.metrics_write_url,
         **spec.extra_env,
     }
-    backend = BACKENDS[spec.backend]
     compose_files = [
         "-f",
         str(STACK_DIR / "docker-compose.yml"),
         "-f",
         str(JOURNAL_HOST_COMPOSE),
         *backend.compose_files,
+        *(("-f", str(VMAGENT_COMPOSE)) if on_vmagent else ()),
     ]
     compose_cmd = ("docker", "compose", "-p", spec.project, *compose_files)
     # Pre-clean leftovers of a crashed previous run.
@@ -594,16 +633,25 @@ def _bring_up(
             logs=backend.logs_factory(logs_url),
             backend=spec.backend,
             alloy_url=_compose_port(compose_cmd, env, "alloy", 12345),
+            metrics_impl=spec.metrics_impl,
+            vmagent_url=(
+                _compose_port(compose_cmd, env, "vmagent", VMAGENT_PORT)
+                if on_vmagent
+                else None
+            ),
         )
+        ready_urls = [
+            (
+                backend.metrics_service,
+                f"{metrics_url}{backend.metrics_ready_path}",
+            ),
+            (backend.logs_service, f"{logs_url}{backend.logs_ready_path}"),
+            ("alloy", f"{instance.alloy_url}/-/ready"),
+        ]
+        if instance.vmagent_url is not None:
+            ready_urls.append(("vmagent", f"{instance.vmagent_url}/health"))
         try:
-            for name, url in (
-                (
-                    backend.metrics_service,
-                    f"{metrics_url}{backend.metrics_ready_path}",
-                ),
-                (backend.logs_service, f"{logs_url}{backend.logs_ready_path}"),
-                ("alloy", f"{instance.alloy_url}/-/ready"),
-            ):
+            for name, url in ready_urls:
                 wait_until(
                     partial(_endpoint_ok, url),
                     timeout=60,
@@ -644,6 +692,7 @@ def stack(
             **write_secrets(secrets_dir),
         },
         backend=request.config.stash[_BACKEND_KEY],
+        metrics_impl=request.config.stash[_METRICS_IMPL_KEY],
     )
     yield from _bring_up(
         spec, request=request, tmp_path_factory=tmp_path_factory
@@ -716,6 +765,7 @@ def snmp_stack(
             **write_secrets(secrets_dir),
         },
         backend=request.config.stash[_BACKEND_KEY],
+        metrics_impl=request.config.stash[_METRICS_IMPL_KEY],
     )
     yield from _bring_up(
         spec, request=request, tmp_path_factory=tmp_path_factory

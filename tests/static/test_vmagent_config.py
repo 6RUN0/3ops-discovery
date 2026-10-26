@@ -9,6 +9,7 @@ defaults and the section 14 registry row with its pinned image tag.
 """
 
 import copy
+import re
 from typing import Any
 
 import noxfile as nx
@@ -85,6 +86,17 @@ def test_vmagent_pin_matches_registry() -> None:
     assert md.implementation_agent("vmagent").endswith(
         nx.VMAGENT_IMAGE.split(":")[1]
     )
+
+
+def test_e2e_overlay_vmagent_image_matches_pin() -> None:
+    # vmagent_check and the e2e overlay must run the same pinned tag.
+    overlay = nx.REPO / "tests/e2e/stack/docker-compose.vmagent.yml"
+    images = set(
+        re.findall(
+            r"victoriametrics/vmagent:[\w.]+", overlay.read_text("utf-8")
+        )
+    )
+    assert images == {nx.VMAGENT_IMAGE}
 
 
 def test_registry_lists_vmagent_for_metrics_only() -> None:

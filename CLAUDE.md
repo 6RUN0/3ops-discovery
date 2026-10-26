@@ -38,6 +38,10 @@ bind them together.
 - `uv run nox -s e2e_victoria` - the same e2e suite with VictoriaMetrics +
   VictoriaLogs as the storage (`tests/e2e/stack/docker-compose.victoria.yml`
   overlay); takes `-- -k ...` like `e2e`.
+- `uv run nox -s e2e_vmagent` / `uv run nox -s e2e_vmagent_victoria` -
+  the contract subset (`-m "not alloy_internals"`) with vmagent as the
+  metrics-domain collector, on Prometheus + Loki / on the Victoria stores.
+  Run e2e sessions one at a time: they share one Docker daemon.
 - `uv run nox -s preflight` — everything.
 - `uv run nox -s release` — build `dist/<name>-<version>.tar.gz` +
   `SHA256SUMS` (contract + reference config + overlays + deployment
@@ -132,6 +136,17 @@ bind them together.
   logs through `tools.backends.LogQuery`, so one test runs on either store.
   In the victoria variant Prometheus and Loki still run (the base compose
   makes `alloy` depend on them) but receive nothing.
+- e2e metrics implementation: `RU_3OPS_DISCOVERY_E2E_METRICS_IMPL`
+  (`alloy`, the default, or `vmagent`; anything else is a usage error,
+  `tools.backends.selected_metrics_implementation`). With `vmagent` the
+  fixtures materialize Alloy without `tools.backends.METRICS_IMPL_DOMAINS`
+  (`metrics` and `ipmi`, which load the same Alloy files) and add
+  `tests/e2e/stack/docker-compose.vmagent.yml`, which mounts
+  `implementations/vmagent/` and writes to the store named by
+  `BackendSpec.metrics_write_url`. Metrics-domain checks compare
+  `collector` with `Stack.collector("metrics")`, never a literal
+  (`tests/static/test_backends.py` maps e2e files to domains and fails on
+  an `"alloy"` literal in a vmagent domain).
 - `@pytest.mark.alloy_internals` marks e2e checks that read Alloy internals
   (UI API, component graph) rather than the contract's output; they run on
   both storage variants, since Alloy is the collector in both. Loki drops
