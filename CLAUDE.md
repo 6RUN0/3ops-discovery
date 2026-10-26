@@ -11,7 +11,10 @@ that bind them together.
 - `uv run nox` — default gates: lint + docs_lint + alloy_check + tests.
   Honestly requires Docker (alloy_check) and network (lychee); the
   fully offline set is `uv run nox -s lint tests`.
-- `uv run nox -s lint` — pre-commit hooks on all files.
+- `uv run nox -s lint` - pre-commit hooks on all files. pre-commit is
+  not installed as a git hook here, so only this session runs it; its
+  detect-secrets hook rewrites `.secrets.baseline` line numbers after
+  any edit above a recorded finding, so stage the baseline after lint.
 - `uv run nox -s docs_lint` — rumdl + typos + lychee (system binaries).
 - `uv run nox -s alloy_check` — `alloy fmt -t` + `validate` for every
   config combination, inside the pinned Docker image.
@@ -69,15 +72,17 @@ that bind them together.
   `tests/static/test_series_catalog.py` (schema; an unknown key or empty
   `present` is a `CatalogError`), `tests/e2e/test_series_parity.py` (the
   reference serves every cell) and `tests/e2e/test_log_fields_parity.py`
-  (non-indexed fields per log profile equal the 8.3 table; fields a store adds itself are
-  listed per store in `asymmetries.STORE_DERIVED_LOG_FIELDS`).
+  (non-indexed fields per log profile equal the 8.3 table; fields a
+  store adds itself are listed per store in
+  `asymmetries.STORE_DERIVED_LOG_FIELDS`).
 - `alloy-optional/*.alloy` - opt-in overlay files (manifest §14.4.3):
   `037_snmp` (snmp domain; loads only with its device and auth files,
   `tools.materialize.PROVIDER_FILES`), `060_otel` (OTLP receiver),
   `070_host-metrics` (`prometheus.exporter.unix`, `node_*` series),
   `075_container-metrics` (`prometheus.exporter.cadvisor`, needs the host
-  cgroup namespace), `080_host-logs` (`loki.source.journal`). Composed via `tools.materialize.COMBOS`
-  (alloy_check validates every combination) and the e2e fixture, which
+  cgroup namespace), `080_host-logs` (`loki.source.journal`). Composed
+  via `tools.materialize.COMBOS` (alloy_check validates every
+  combination) and the e2e fixture, which
   loads all of them (080 reads the journal of `journal-host`, below).
 - `tests/static/` — manifest vs config consistency; allowed gaps live
   in `asymmetries.py` as one explicit table.
