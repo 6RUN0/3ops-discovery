@@ -11,7 +11,7 @@ most: the password itself.
 
 The reference collects the stdout/stderr of every container including
 Alloy's own (dogfooding), so if a credential ever surfaced in a
-diagnostic it would travel straight into Loki.
+diagnostic it would travel straight into the log store.
 """
 
 from tests.e2e.conftest import LOGS_BUDGET, Stack, wait_until

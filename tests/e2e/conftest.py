@@ -146,7 +146,7 @@ def wait_until[T](
     desc: str,
     interval: float = 2.0,
 ) -> T:
-    """Poll ``pred`` until it returns a truthy value or time runs out."""
+    """Poll `pred` until it returns a truthy value or time runs out."""
     deadline = time.monotonic() + timeout
     last_error: Exception | None = None
     while time.monotonic() < deadline:
@@ -289,7 +289,7 @@ class Stack:
     def compose_exec(
         self, service: str, *argv: str, timeout: float = 60.0
     ) -> subprocess.CompletedProcess[str]:
-        """Run ``argv`` in a running service; output captured, no check."""
+        """Run `argv` in a running service; output captured, no check."""
         return subprocess.run(
             [*self.compose_cmd, "exec", "-T", service, *argv],
             env=self.env,
@@ -507,9 +507,9 @@ class _StackSpec:
     """
     What a caller chooses when bringing a stack variant up.
 
-    Bundled into one object so ``_bring_up`` stays a 3-argument helper: the
+    Bundled into one object so `_bring_up` stays a 3-argument helper: the
     shared lifecycle is identical across variants, only these knobs differ.
-    ``secrets_dir`` is created and populated by the caller before bring-up.
+    `secrets_dir` is created and populated by the caller before bring-up.
     """
 
     project: str
@@ -526,9 +526,9 @@ def _bring_up(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Iterator[Stack]:
     """
-    Bring the compose stack up, yield a ``Stack``, tear it down.
+    Bring the compose stack up, yield a `Stack`, tear it down.
 
-    Shared lifecycle for every e2e stack variant (main + snmp): ``spec``
+    Shared lifecycle for every e2e stack variant (main + snmp): `spec`
     carries the overlay set and extra env (secrets, device-dir); this owns
     materialize -> pre-clean -> up --build -d --wait -> readiness (journal-host
     boot included) -> yield -> diagnostics-on-failure -> down -v.
