@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
 from typing import Any
 
 import pytest
@@ -97,6 +97,15 @@ def test_empty_contains_is_rejected() -> None:
     # `|= ""` matches every line: the query would pass for any stream.
     with pytest.raises(ValueError, match="contains"):
         LogQuery(stream={"compose_project": "p"}, contains="")
+
+
+def test_query_is_frozen_but_not_hashable() -> None:
+    # Documented in the LogQuery docstring: frozen for immutability, the
+    # dict fields make it unhashable.
+    with pytest.raises(FrozenInstanceError):
+        Q.contains = "x"  # type: ignore[misc]
+    with pytest.raises(TypeError, match="unhashable"):
+        hash(Q)
 
 
 def test_unscoped_query_rejected() -> None:

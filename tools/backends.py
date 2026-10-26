@@ -74,6 +74,10 @@ class LogQuery:
     field_present: the record has this field and it is non-empty.
     scoped: the query must be limited to one compose project (see
         `check_scope`); False declares a deliberately host-wide query.
+
+    Frozen so a query cannot change between translation and the request,
+    not to make it hashable: the mapping fields are dicts, so `hash()`
+    raises TypeError and a query cannot be a set member or dict key.
     """
 
     stream: Mapping[str, str]
