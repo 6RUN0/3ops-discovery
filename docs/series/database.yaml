@@ -71,3 +71,14 @@ cells:
     present:
       - up
       - mongodb_up
+      - mongodb_ss_uptime
+      - mongodb_ss_connections
+      - mongodb_ss_opcounters
+      - mongodb_ss_opLatencies_latency
+      - mongodb_ss_opLatencies_ops
+      - mongodb_ss_mem_resident
+      - mongodb_ss_mem_virtual
+      - mongodb_ss_network_bytesIn
+      - mongodb_ss_network_bytesOut
+      - mongodb_ss_asserts
+      - mongodb_ss_wt_cache_bytes_currently_in_the_cache

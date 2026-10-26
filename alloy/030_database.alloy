@@ -628,11 +628,28 @@ foreach "mongodb" {
 		// only the diagnostic serverStatus data. The exporter's default
 		// (collect_all) is already the maximum, so extended-v1 is an
 		// accepted equivalent of standard-v1 (manifest 8.4).
+		// collect_all alone leaves the first scrape of each exporter with
+		// mongodb_up only: mongodb_exporter v0.47.2 widens it into the enable_*
+		// flags after copying the options that scrape uses. Spelling out every
+		// flag collect_all sets makes the first scrape complete as well.
 		prometheus.exporter.mongodb "db" {
 			mongodb_uri = local.file.dsn.content
 
-			collect_all            = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
-			enable_diagnostic_data = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") == "basic-v1"
+			collect_all                  = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_diagnostic_data       = true
+			discovering_mode             = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_coll_stats            = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_currentop_metrics     = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_db_stats              = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_db_stats_free_storage = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_fcv                   = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_index_stats           = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_pbm_metrics           = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_profile               = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_replicaset_config     = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_replicaset_status     = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_shards                = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
+			enable_top_metrics           = coalesce(each["__meta_docker_container_label_ru_3ops_discovery_database_profile"], "standard-v1") != "basic-v1"
 		}
 
 		discovery.relabel "enrich_mongodb" {
