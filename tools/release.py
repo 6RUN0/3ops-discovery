@@ -33,8 +33,7 @@ CONTENTS: tuple[str, ...] = (
     "docs/manifest.md",
     "docs/manifest.ru.md",
     "docs/series",
-    "alloy",
-    "alloy-optional",
+    "implementations/alloy",
 )
 
 #: Deployment instructions, renamed into the archive root: the
@@ -132,7 +131,8 @@ def tracked_files() -> tuple[str, ...]:
     Enumerated by git rather than walked: a plain copy of a directory
     also picks up whatever untracked state happens to sit inside it,
     and the first build of this archive shipped an .omc/ session
-    directory out of alloy/. What ships must equal what is versioned.
+    directory out of the alloy directory. What ships must equal what is
+    versioned.
     """
     listed = subprocess.run(
         ["git", "ls-files", "-z", "--", *CONTENTS],

@@ -74,12 +74,18 @@ def test_archive_ships_every_validated_alloy_file(built: Path) -> None:
     # The set alloy_check validates: base plus every overlay named by a
     # combo. An overlay added to the repo but forgotten here would ship
     # a config nobody validated -- or not ship at all.
-    validated = {f"alloy/{path.name}" for path in BASE_DIR.glob("*.alloy")}
+    validated = {
+        f"implementations/alloy/base/{path.name}"
+        for path in BASE_DIR.glob("*.alloy")
+    }
     validated |= {
-        f"alloy-optional/{name}" for names in COMBOS.values() for name in names
+        f"implementations/alloy/optional/{name}"
+        for names in COMBOS.values()
+        for name in names
     }
     shipped = {name for name in _members(built) if name.endswith(".alloy")}
     assert shipped == validated
+    assert "implementations/alloy/README.md" in _members(built)
 
 
 def test_every_optional_file_is_named_by_a_combo() -> None:
@@ -113,10 +119,10 @@ def test_archive_carries_the_contract_and_the_deployment_readme(
 
 def test_archive_carries_nothing_else(built: Path) -> None:
     # The first build of this archive copied whole directories and swept
-    # an untracked .omc/ session directory into alloy/. Nothing outside
-    # the declared contents may ship, secrets and scratch state least of
-    # all.
-    allowed_roots = {"alloy", "alloy-optional", "docs"}
+    # an untracked .omc/ session directory into the alloy directory.
+    # Nothing outside the declared contents may ship, secrets and scratch
+    # state least of all.
+    allowed_roots = {"implementations", "docs"}
     for name in _members(built):
         head, _, tail = name.partition("/")
         if tail:

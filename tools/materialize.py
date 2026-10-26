@@ -16,8 +16,8 @@ from collections.abc import Iterable
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-BASE_DIR = REPO / "alloy"
-OPTIONAL_DIR = REPO / "alloy-optional"
+BASE_DIR = REPO / "implementations/alloy/base"
+OPTIONAL_DIR = REPO / "implementations/alloy/optional"
 
 #: Directory combinations validated by the alloy_check session:
 #: base standalone, base + each optional, base + all, and base + all +
@@ -66,8 +66,8 @@ def materialize(dest: Path, optional: Iterable[str] = ()) -> Path:
     """
     Copy the base config plus the chosen optional files into ``dest``.
 
-    ``optional`` holds file names inside ``alloy-optional/``. A name
-    collision with a base file is an error: Alloy would reject the
+    ``optional`` holds file names inside ``implementations/alloy/optional/``.
+    A name collision with a base file is an error: Alloy would reject the
     merged graph anyway, and failing here names the offending file.
     """
     dest.mkdir(parents=True, exist_ok=True)

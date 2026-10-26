@@ -25,7 +25,12 @@ _SPILLED = re.compile(r"\[[^\]]*\]\([^)\s]+\)(?=[0-9])")
 
 
 #: Directories whose markdown files the gate covers, non-recursively.
-MARKDOWN_DIRS: tuple[str, ...] = (".", "docs", "alloy", "packaging")
+MARKDOWN_DIRS: tuple[str, ...] = (
+    ".",
+    "docs",
+    "implementations/alloy",
+    "packaging",
+)
 
 
 def markdown_files() -> list[Path]:

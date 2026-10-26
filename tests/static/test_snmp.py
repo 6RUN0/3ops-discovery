@@ -1,4 +1,4 @@
-"""Manifest 8.5/10.6 vs alloy-optional/037_snmp.alloy."""
+"""Manifest 8.5/10.6 vs implementations/alloy/optional/037_snmp.alloy."""
 
 from pathlib import Path
 

@@ -16,8 +16,8 @@ the quality gates instead and is not shipped here.
 |---|---|
 | `docs/manifest.ru.md` | The normative contract (Russian). The source of truth for label names, domains, profiles, secrets and the pinned Alloy version. |
 | `docs/manifest.md` | English translation. Provided for readers; on any discrepancy the Russian original wins. |
-| `alloy/` | The reference configuration. Every file together forms one component graph. |
-| `alloy-optional/` | Opt-in overlay files. The base is valid and complete without them. |
+| `implementations/alloy/base/` | The reference configuration. Every file together forms one component graph. |
+| `implementations/alloy/optional/` | Opt-in overlay files. The base is valid and complete without them. |
 | `CHANGELOG.md`, `CHANGELOG.ru.md` | What changed between contract versions. |
 | `LICENSE` | MIT. |
 
@@ -26,14 +26,14 @@ the quality gates instead and is not shipped here.
 The base configuration alone:
 
 ```sh
-alloy run --stability.level=experimental alloy/
+alloy run --stability.level=experimental implementations/alloy/base/
 ```
 
 The `--stability.level=experimental` flag is required by the `foreach`
 block used by the database domain. Check the syntax without running:
 
 ```sh
-docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.21.2 \
+docker run --rm -v "$PWD/implementations/alloy/base:/etc/alloy:ro" grafana/alloy:v1.21.2 \
   validate --stability.level=experimental /etc/alloy
 ```
 
@@ -47,8 +47,8 @@ so composition is a copy -- there is no include directive:
 
 ```sh
 mkdir -p /etc/alloy
-cp alloy/*.alloy /etc/alloy/
-cp alloy-optional/070_host-metrics.alloy /etc/alloy/
+cp implementations/alloy/base/*.alloy /etc/alloy/
+cp implementations/alloy/optional/070_host-metrics.alloy /etc/alloy/
 ```
 
 Overlay files and what they need:

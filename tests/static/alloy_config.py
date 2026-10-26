@@ -15,8 +15,8 @@ from functools import cache
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-ALLOY_DIR = REPO / "alloy"
-OPTIONAL_DIR = REPO / "alloy-optional"
+ALLOY_DIR = REPO / "implementations/alloy/base"
+OPTIONAL_DIR = REPO / "implementations/alloy/optional"
 
 _LABEL = "__meta_docker_container_label_ru_3ops_discovery"
 

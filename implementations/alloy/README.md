@@ -2,12 +2,12 @@
 
 The Grafana Alloy configuration that implements every domain of the
 3ops Discovery contract. The normative parts live in the manifest,
-section [14.4](../docs/manifest.md#144-reference-implementation-alloy):
+section [14.4](../../docs/manifest.md#144-reference-implementation-alloy):
 the pinned Alloy tag, the run and `validate` commands, the base file
-table, customization ([14.4.1](../docs/manifest.md#1441-customization)),
-extension points ([14.4.2](../docs/manifest.md#1442-extension-points))
-and the optional files of [`../alloy-optional/`](../alloy-optional/)
-([14.4.3](../docs/manifest.md#1443-optional-files)). This file explains
+table, customization ([14.4.1](../../docs/manifest.md#1441-customization)),
+extension points ([14.4.2](../../docs/manifest.md#1442-extension-points))
+and the optional files of [`optional/`](optional/)
+([14.4.3](../../docs/manifest.md#1443-optional-files)). This file explains
 how the configuration is built; it adds no requirement.
 
 This is not a complete production configuration but the base structure
@@ -26,7 +26,7 @@ component graph and cross-file references resolve regardless of order.
 ## Environment parameters
 
 Every deployment value of manifest section
-[14.1](../docs/manifest.md#141-environment-parameters) is read as
+[14.1](../../docs/manifest.md#141-environment-parameters) is read as
 `coalesce(sys.env("..."), <default>)`, so an unset variable falls back
 to the default of that table.
 
@@ -62,7 +62,7 @@ be attached to a single network visible to Alloy.
 
 ## Outputs and stores
 
-[`090_outputs.alloy`](090_outputs.alloy) is the single integration point
+[`090_outputs.alloy`](base/090_outputs.alloy) is the single integration point
 with the stores; replacing a store does not touch the discovery and
 pipeline files. Alloy is not limited to the Prometheus plus Loki pair:
 
@@ -80,7 +80,7 @@ Mimir and Grafana Cloud require authentication and/or the
 add `basic_auth`/`authorization`/`headers` blocks inside `endpoint` in
 `090_outputs.alloy`, with the secret read from `local.file`
 (`is_secret = true`). Credentials never go into the URL (manifest
-section [14.2](../docs/manifest.md#142-output-protocols-and-stores)):
+section [14.2](../../docs/manifest.md#142-output-protocols-and-stores)):
 the variable value is an ordinary string and may show up in the Alloy UI
 and in the logs.
 

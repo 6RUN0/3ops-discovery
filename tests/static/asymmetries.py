@@ -112,7 +112,7 @@ ENV_DEFAULT_EXPRESSIONS: dict[str, tuple[str, str]] = {
 
 #: Config files that produce no series or streams of their own, and are
 #: therefore exempt from the manifest 6.1 provenance check. Everything
-#: else in alloy/ and alloy-optional/ must attach host and collector;
+#: else in implementations/alloy/ must attach host and collector;
 #: test_provenance.py derives the checked set by subtracting this table
 #: from the file glob, so a new domain file is covered on arrival rather
 #: than when someone remembers to list it.
@@ -206,7 +206,8 @@ STORE_DERIVED_LOG_FIELDS: dict[str, dict[str, str]] = {
         "(`unknown` when none is detected; "
         "limits_config.discover_log_levels, default true). "
         "Source: `docker run --rm grafana/loki:3.6.12 -help | "
-        "grep -A2 discover-log-levels`; no alloy/*.alloy file names it; "
+        "grep -A2 discover-log-levels`; no file under implementations/alloy/ "
+        "names it; "
         "seen as {'detected_level': 'unknown'} on a raw-v1 record.",
     },
     "victoria": {},

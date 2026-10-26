@@ -3,7 +3,7 @@
 Specification of a labels-driven telemetry discovery contract that any
 collector can implement (`docs/manifest.ru.md`, normative, Russian), its
 series catalog (`docs/series/`), the reference implementation in Grafana
-Alloy (`alloy/*.alloy`, `alloy-optional/*.alloy`) and the quality gates
+Alloy (`implementations/alloy/base/*.alloy`, `implementations/alloy/optional/*.alloy`) and the quality gates
 that bind them together.
 
 ## Commands
@@ -55,7 +55,7 @@ that bind them together.
   `tests/static/manifest_doc.py`. Restructuring the manifest breaks
   the gates loudly; deliberate counterexamples in the text are never
   extracted.
-- `alloy/*.alloy` — reference config; one directory = one merged
+- `implementations/alloy/base/*.alloy` — reference config; one directory = one merged
   component graph, unique component names, no overrides possible.
 - `docs/manifest.md` - English translation; not normative, but
   `tests/static/test_translation.py` demands the same structure as the
@@ -75,7 +75,7 @@ that bind them together.
   (non-indexed fields per log profile equal the 8.3 table; fields a
   store adds itself are listed per store in
   `asymmetries.STORE_DERIVED_LOG_FIELDS`).
-- `alloy-optional/*.alloy` - opt-in overlay files (manifest §14.4.3):
+- `implementations/alloy/optional/*.alloy` - opt-in overlay files (manifest §14.4.3):
   `037_snmp` (snmp domain; loads only with its device and auth files,
   `tools.materialize.PROVIDER_FILES`), `060_otel` (OTLP receiver),
   `070_host-metrics` (`prometheus.exporter.unix`, `node_*` series),

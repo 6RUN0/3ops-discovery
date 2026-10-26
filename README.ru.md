@@ -33,8 +33,8 @@ map-, и в list-форме.
 |---|---|
 | [`docs/manifest.ru.md`](docs/manifest.ru.md) | Нормативный контракт (русскоязычный). Единственный источник истины: имена меток, домены, профили, secret-контракт, требования безопасности, пин версии Alloy. |
 | [`docs/series/`](docs/series/) | Каталог рядов (манифест, раздел 14.3): по файлу на домен, имена рядов и labels идентичности, которые обязана выдавать каждая реализация домена. Нормативен, как и манифест. |
-| `alloy/*.alloy` | Референсная конфигурация Alloy: discovery, metrics, database, logs, log-profiles, outputs. |
-| [`alloy/README.md`](alloy/README.md) | Устройство эталонной конфигурации: порядок файлов, параметры окружения, пары профильных компонентов, хранилища и состояние коллектора. |
+| `implementations/alloy/base/*.alloy` | Референсная конфигурация Alloy: discovery, metrics, database, logs, log-profiles, outputs. |
+| [`implementations/alloy/README.md`](implementations/alloy/README.md) | Устройство эталонной конфигурации: порядок файлов, параметры окружения, пары профильных компонентов, хранилища и состояние коллектора. |
 | `tests/static/` | Статические гейты: сверяют нормативные факты манифеста с фактической конфигурацией в обе стороны. |
 | `tests/e2e/` | End-to-end стек (`docker compose`): метрики и логи реально доходят до настроенного хранилища (по умолчанию Prometheus + Loki); alloy/prometheus/loki мониторят сами себя через контракт (dogfooding). |
 | [`tools/materialize.py`](tools/materialize.py) | Сборка каталога конфигурации (base ∪ optional) для `alloy_check` и e2e. |
@@ -83,7 +83,7 @@ sha256. Публикация — workflow по тегу `vX.Y.Z`, который
 ## Как это держится вместе
 
 Статические гейты извлекают нормативные факты из [`docs/manifest.ru.md`](docs/manifest.ru.md)
-(по якорям: номер раздела + позиция) и из `alloy/*.alloy` (regex-сканером),
+(по якорям: номер раздела + позиция) и из `implementations/alloy/base/*.alloy` (regex-сканером),
 затем сверяют их. Реструктуризация манифеста ломает гейты громко.
 Расхождения, разрешённые сознательно, перечислены единой таблицей в
 [`tests/static/asymmetries.py`](tests/static/asymmetries.py). Контрактные значения (интервалы скрейпа,

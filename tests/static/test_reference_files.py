@@ -1,4 +1,4 @@
-"""Manifest 14.4 file table vs alloy/ contents; image pin."""
+"""Manifest 14.4 file table vs implementations/alloy/base; image pin."""
 
 import re
 from pathlib import Path
@@ -14,6 +14,7 @@ from noxfile import (
 from tests.static import alloy_config as ac
 from tests.static import manifest_doc as md
 
+_REPO = Path(__file__).resolve().parents[2]
 _COMPOSE = (
     Path(__file__).resolve().parents[2]
     / "tests"
@@ -70,3 +71,19 @@ def test_fmt_verdict_reports_the_cause_it_was_given() -> None:
         alloy_fmt_verdict(125, "Error response from daemon: toomanyrequests")
     with pytest.raises(AlloyFmtError, match="<no stderr>"):
         alloy_fmt_verdict(126, "   ")
+
+
+def test_reference_lives_under_implementations() -> None:
+    root = _REPO / "implementations" / "alloy"
+    assert sorted(p.name for p in (root / "base").glob("*.alloy"))
+    assert sorted(p.name for p in (root / "optional").glob("*.alloy"))
+    assert (root / "README.md").is_file()
+    # Hidden entries are tool session state (.omc/), never config.
+    for old in ("alloy", "alloy-optional"):
+        folder = _REPO / old
+        left = (
+            [p.name for p in folder.iterdir() if not p.name.startswith(".")]
+            if folder.is_dir()
+            else []
+        )
+        assert not left, f"{old}/ still holds {left}"

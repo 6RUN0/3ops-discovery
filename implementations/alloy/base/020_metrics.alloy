@@ -71,7 +71,7 @@ discovery.relabel "metrics" {
 	// so the port is the whole fan-out; keep the target whose private port
 	// matches the declared metrics port. The multi-network risk is not
 	// duplication but reachability: the chosen network is arbitrary, and
-	// an unreachable one shows up as up == 0 (alloy/README.md).
+	// an unreachable one shows up as up == 0 (implementations/alloy/README.md).
 	rule {
 		source_labels = ["__meta_docker_port_private"]
 		target_label  = "__tmp_metrics_port"
