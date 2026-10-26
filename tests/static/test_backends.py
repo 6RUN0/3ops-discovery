@@ -132,6 +132,19 @@ def test_seconds_of_duration() -> None:
     assert to_seconds("30m") == 1800.0
 
 
+@pytest.mark.parametrize("duration", ["-5s", "nans", "infs", "1e3s", " 5s", "s"])
+def test_duration_must_be_a_plain_non_negative_decimal(duration: str) -> None:
+    with pytest.raises(ValueError, match="bad duration"):
+        to_seconds(duration)
+
+
+@pytest.mark.parametrize("text", ['{="v"}', '{a b="v"}', '{1a="v"}'])
+def test_stream_key_must_be_a_label_name(text: str) -> None:
+    message = f"bad label name in stream string: {text!r}"
+    with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+        parse_stream(text)
+
+
 def test_victorialogs_rows_to_records() -> None:
     rows = [
         {

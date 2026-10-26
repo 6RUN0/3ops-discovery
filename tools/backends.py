@@ -21,6 +21,7 @@ from typing import Any, Protocol
 import requests
 
 _LABEL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_DURATION_NUMBER = re.compile(r"[0-9]+(?:\.[0-9]+)?")
 _SCOPE_LABEL = "compose_project"
 #: Storage variants the e2e suite can run against; the first is the default.
 BACKEND_NAMES: tuple[str, ...] = ("prometheus-loki", "victoria")
@@ -185,6 +186,8 @@ def parse_stream(text: str) -> dict[str, str]:
         if eq < 0 or body[eq + 1 : eq + 2] != '"':
             raise ValueError(f"malformed stream string: {text!r}")
         key = body[pos:eq].strip()
+        if not _LABEL_NAME.fullmatch(key):
+            raise ValueError(f"bad label name in stream string: {text!r}")
         value, pos = _read_quoted(body, eq + 2, text)
         result[key] = value
         pos = _skip_pair_separator(body, pos, text)
@@ -247,12 +250,11 @@ def to_seconds(duration: str) -> float:
     number, unit = duration[:-1], duration[-1:]
     if unit not in _DURATION_UNITS:
         raise ValueError(f"bad duration {duration!r}: unit must be s, m or h")
-    try:
-        return float(number) * _DURATION_UNITS[unit]
-    except ValueError:
+    if not _DURATION_NUMBER.fullmatch(number):
         raise ValueError(
             f"bad duration {duration!r}: no number before the unit"
-        ) from None
+        )
+    return float(number) * _DURATION_UNITS[unit]
 
 
 @dataclass(frozen=True)
