@@ -1,7 +1,7 @@
 # 3ops Discovery Manifest
 
 **Статус:** Draft  
-**Версия спецификации:** `0.2.0`  
+**Версия спецификации:** `0.3.0`  
 **Namespace:** `ru.3ops.discovery.*`  
 **История изменений:** [CHANGELOG.ru.md](../CHANGELOG.ru.md)
 

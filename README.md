@@ -1,11 +1,12 @@
 # 3ops Discovery
 
 A declarative contract for automatic discovery and configuration of
-telemetry targets in [Grafana Alloy](https://grafana.com/docs/alloy/)
-driven by Docker labels. An application declares how it wants to be
-collected through `ru.3ops.discovery.*` labels on its own container --
-Alloy picks them up on its own, with no edit to the collector
-configuration.
+telemetry targets driven by Docker labels. An application declares how it
+wants to be collected through `ru.3ops.discovery.*` labels on its own
+container, and the collector picks them up on its own, with no edit to its
+configuration. The contract is not tied to an agent: any implementation
+can fulfil it, and the reference implementation is
+[Grafana Alloy](https://grafana.com/docs/alloy/).
 
 ```yaml
 services:
@@ -33,8 +34,10 @@ the gates that bind the two together and keep them from drifting apart.
 | Path | Purpose |
 |---|---|
 | [`docs/manifest.ru.md`](docs/manifest.ru.md) | The normative contract (Russian). The single source of truth: label names, domains, profiles, the secret contract, security requirements, the Alloy version pin. |
-| [`docs/manifest.md`](docs/manifest.md) | English translation of the manifest. Provided for readers; not normative and not covered by the gates. |
+| [`docs/manifest.md`](docs/manifest.md) | English translation of the manifest. Provided for readers; not normative, and the gates check only that its structure matches the original. |
+| [`docs/series/`](docs/series/) | The series catalog (manifest section 14.3): one file per domain, the series names and identity labels every implementation of the domain must emit. Normative, like the manifest. |
 | `alloy/*.alloy` | The reference Alloy configuration: discovery, metrics, database, logs, log profiles, outputs. |
+| [`alloy/README.md`](alloy/README.md) | How the reference configuration is built: file order, environment parameters, profile component pairs, stores and collector state. |
 | `tests/static/` | Static gates: they check the normative facts of the manifest against the actual configuration in both directions. |
 | `tests/e2e/` | End-to-end stack (`docker compose`): metrics and logs really do reach the configured storage (Prometheus + Loki by default); alloy/prometheus/loki monitor themselves through the contract (dogfooding). |
 | [`tools/materialize.py`](tools/materialize.py) | Assembles the configuration directory (base union optional) for `alloy_check` and e2e. |
@@ -93,7 +96,9 @@ intervals, label names, defaults) are only ever changed in the manifest
 ## Contract basics
 
 - **Domains:** `metrics`, `database`, `logs`, `blackbox`, `otel`, `snmp`,
-  `ipmi` -- under the keys `ru.3ops.discovery.<domain>.<key>`.
+  `ipmi` -- under the keys `ru.3ops.discovery.<domain>.<key>`; the host
+  domains `host-metrics`, `container-metrics`, `host-logs` are not driven
+  by labels and are switched on by the deployment.
 - **Secrets** are passed as a logical identifier rather than a value
   (`ru.3ops.discovery.database.secret-id`); the secrets themselves reach
   neither labels nor git.

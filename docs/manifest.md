@@ -1,15 +1,16 @@
 # 3ops Discovery Manifest
 
 **Status:** Draft  
-**Specification version:** `0.2.0`  
+**Specification version:** `0.3.0`  
 **Namespace:** `ru.3ops.discovery.*`  
 **Change history:** [CHANGELOG.md](../CHANGELOG.md)
 
 > **Translation.** The normative contract is the Russian
 > [manifest.ru.md](manifest.ru.md): the static gates extract their facts
 > from that file and from it alone. This English text is provided for
-> readers and is not covered by the gates; on any discrepancy the Russian
-> original wins.
+> readers; the gates check only that its structure matches the original
+> (`tests/static/test_translation.py`), not its wording. On any discrepancy
+> the Russian original wins.
 
 ## 1. Purpose
 

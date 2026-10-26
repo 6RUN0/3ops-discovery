@@ -3,6 +3,38 @@
 Every notable change to the 3ops Discovery specification is recorded in
 this file. Russian original: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## 0.3.0 -- Draft
+
+The contract is no longer tied to one agent: sections 1-13 state requirements any implementation can meet, and Alloy becomes the reference implementation. For a consumer of `0.2.0` labels, defaults, series and log fields do not change, except for the three reference fixes at the end of this entry. The value of `ru.3ops.discovery.version` stays `"0.2"`: no label changed its meaning (section [7](docs/manifest.md#7-contract-versioning)).
+
+- Sections 1-13 name no implementation. The mechanics of the reference (Alloy components, overlay files, relabel rules) moved to [14.4.4](docs/manifest.md#1444-how-the-reference-fulfils-the-contract), ordered by contract section; that list adds no requirements. The static gate `tests/static/test_manifest_neutrality.py` counts implementation mentions per section and allows them only in sections 1 and 14 (the `MANIFEST_IMPLEMENTATION_MENTIONS` table). The gate sees agent and component names; it does not count generic words such as "reference".
+- Section [14](docs/manifest.md#14-implementations) "Implementations" replaces "Reference implementation": a registry of implementations with their domains, the duties of an implementation for each of its domains, and the rule "one collector per domain per host". Two collectors of one domain on a host produce duplicate series and lines the storage cannot tell from real data, so such a deployment is an error; the symptom is series or streams that differ only in `collector` or `host`.
+- The `collector` label carries the implementation name ([6.1](docs/manifest.md#61-labels-added-by-the-implementation)); for the reference it is still `alloy`.
+- The new environment parameter `RU_3OPS_DISCOVERY_HOSTNAME` ([14.1](docs/manifest.md#141-environment-parameters)) sets the value of the `host` label. An unset or empty parameter yields the collector hostname, as in `0.2.0`. In the host-metrics and container-metrics domains the parameter does not set `instance`: there it is the collector hostname, and it equals `host` only while the parameter is unset or empty.
+- Section [14.2](docs/manifest.md#142-output-protocols-and-stores) "Output protocols and stores" replaces "Backends". Metrics go over the remote_write protocol to any compatible store. For logs the contract fixes the result in the store (the fields of sections 6.2 and 8.3), not the protocol. VictoriaLogs without the `-loki.disableMessageParsing` flag adds fields from a JSON line and loses the original line in `_msg`. The delivery guarantee is no stronger than at-least-once: a collector restart may resend log history and lose unsent metrics.
+- The series catalog ([14.3](docs/manifest.md#143-series-catalog), [`docs/series/`](docs/series/)): one `<domain>.yaml` file per domain; a cell lists the series every implementation of the domain must emit and the identity labels of each series, and for database also the series the profile switches off. The catalog is a lower bound and pins names only: a change of unit or series type under the same name is invisible to it. It is snapshotted from the e2e stack of the reference at the pinned version and rebuilt on every pin change. The e2e gate `tests/e2e/test_series_parity.py` checks that the reference serves the catalog; `tests/e2e/test_log_fields_parity.py` checks that the non-indexed fields of every log profile are exactly those of the 8.3 table, and the fields the store adds by itself are listed per store in `asymmetries.STORE_DERIVED_LOG_FIELDS`.
+- The host domains host-metrics, container-metrics and host-logs joined section [10](docs/manifest.md#10-domains): they are not driven by labels, are off by default and require deployment privileges. In the reference they are the existing opt-in files 070, 075 and 080.
+- The database profiles of [8.4](docs/manifest.md#84-database-profiles) are described by series families rather than by exporter collectors; the families were checked against the exporter sources.
+- Renumbered and renamed sections. A link to an old anchor no longer resolves, because the anchor includes the heading:
+
+  | Was | Now |
+  |---|---|
+  | 4 "Docker label normalization in Alloy" | [4](docs/manifest.md#4-label-key-normalization) "Label key normalization" |
+  | 6.1 "Labels added by Alloy" | [6.1](docs/manifest.md#61-labels-added-by-the-implementation) "Labels added by the implementation" |
+  | 6.2 "Loki label cardinality" | [6.2](docs/manifest.md#62-log-fields) "Log fields"; the Loki part is [6.2.1](docs/manifest.md#621-loki) |
+  | 14 "Reference implementation" | [14](docs/manifest.md#14-implementations) "Implementations" |
+  | 14.2 "Backends" | [14.2](docs/manifest.md#142-output-protocols-and-stores) "Output protocols and stores" |
+  | 14.3 "Customizing the reference configuration" | [14.4.1](docs/manifest.md#1441-customization) "Customization" |
+  | 14.4 "Extension points" | [14.4.2](docs/manifest.md#1442-extension-points) "Extension points" |
+  | 14.5 "Optional files" | [14.4.3](docs/manifest.md#1443-optional-files) "Optional files" |
+  | - | [14.3](docs/manifest.md#143-series-catalog) "Series catalog", [14.4](docs/manifest.md#144-reference-implementation-alloy) "Reference implementation: Alloy", [14.4.4](docs/manifest.md#1444-how-the-reference-fulfils-the-contract) "How the reference fulfils the contract" |
+
+  Links in the earlier entries of this file already point at the new numbers.
+- Wording clarifications. The delays of section [12](docs/manifest.md#12-lifecycle) are one `RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL` interval plus processing time, not exactly one interval. The ban in [13.3](docs/manifest.md#133-docker-socket) covers obtaining container logs and metadata from the files of `/var/lib/docker`, so it does not contradict the host root mount of the opt-in host-metrics. The English translation of [10.3.6](docs/manifest.md#1036-examples) said `mixed-v1` "may" apply the parsers and lacked the rule that the branches are mutually exclusive and that `level=` is anchored to the line start or a space: a reader of the translation got a weaker contract; the paragraph is restored.
+- Fixed in the reference: postgres `extended-v1` replaced the exporter's default collectors instead of adding to them, so it collected less than `standard-v1` (no database size, locks, `pg_stat_database`, bgwriter, WAL or replication series). It now keeps the default collectors plus the four extras ([8.4](docs/manifest.md#84-database-profiles)).
+- Fixed in the reference: mongodb on `standard-v1` and `extended-v1` serves the full set from the first scrape of each exporter. mongodb_exporter v0.47.2 widens `collect_all` only after its first scrape, so the first scrape (and the 60 seconds after a container is discovered) returned `mongodb_up` only.
+- Known limitation of the reference: for redis `basic-v1` equals `standard-v1` in series. In redis_exporter v1.86.0 (embedded in the pinned Alloy v1.21.2) the `redis_metrics_only` flag drops only `redis_exporter_build_info` from the exporter's internal registry, which Alloy does not serve, so choosing `basic-v1` does not reduce the collection volume. The comment in [`030_database.alloy`](alloy/030_database.alloy) claimed that `basic-v1` drops the exporter's own Go runtime metrics and is corrected; the profile stays in the allowlist.
+
 ## 0.2.0 -- Draft
 
 - Docker stdout/stderr is collected by default for every container.

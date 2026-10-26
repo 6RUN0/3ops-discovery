@@ -1,10 +1,11 @@
 # 3ops Discovery
 
 Декларативный контракт автоматического обнаружения и настройки telemetry
-targets в [Grafana Alloy](https://grafana.com/docs/alloy/) на основе
-Docker labels. Приложение объявляет, как его собирать, метками вида
-`ru.3ops.discovery.*` на своём контейнере — Alloy подхватывает их сам, без
-правки конфигурации коллектора.
+targets на основе Docker labels. Приложение объявляет, как его собирать,
+метками вида `ru.3ops.discovery.*` на своём контейнере, и коллектор
+подхватывает их сам, без правки своей конфигурации. Контракт не привязан к
+агенту: его может выполнить любая реализация, а эталонная реализация -
+[Grafana Alloy](https://grafana.com/docs/alloy/).
 
 ```yaml
 services:
@@ -31,7 +32,9 @@ map-, и в list-форме.
 | Путь | Назначение |
 |---|---|
 | [`docs/manifest.ru.md`](docs/manifest.ru.md) | Нормативный контракт (русскоязычный). Единственный источник истины: имена меток, домены, профили, secret-контракт, требования безопасности, пин версии Alloy. |
+| [`docs/series/`](docs/series/) | Каталог рядов (манифест, раздел 14.3): по файлу на домен, имена рядов и labels идентичности, которые обязана выдавать каждая реализация домена. Нормативен, как и манифест. |
 | `alloy/*.alloy` | Референсная конфигурация Alloy: discovery, metrics, database, logs, log-profiles, outputs. |
+| [`alloy/README.md`](alloy/README.md) | Устройство эталонной конфигурации: порядок файлов, параметры окружения, пары профильных компонентов, хранилища и состояние коллектора. |
 | `tests/static/` | Статические гейты: сверяют нормативные факты манифеста с фактической конфигурацией в обе стороны. |
 | `tests/e2e/` | End-to-end стек (`docker compose`): метрики и логи реально доходят до настроенного хранилища (по умолчанию Prometheus + Loki); alloy/prometheus/loki мониторят сами себя через контракт (dogfooding). |
 | [`tools/materialize.py`](tools/materialize.py) | Сборка каталога конфигурации (base ∪ optional) для `alloy_check` и e2e. |
@@ -90,7 +93,9 @@ sha256. Публикация — workflow по тегу `vX.Y.Z`, который
 ## Основы контракта
 
 - **Домены:** `metrics`, `database`, `logs`, `blackbox`, `otel`, `snmp`,
-  `ipmi` — под ключами `ru.3ops.discovery.<domain>.<key>`.
+  `ipmi` - под ключами `ru.3ops.discovery.<domain>.<key>`; хост-домены
+  `host-metrics`, `container-metrics`, `host-logs` labels не управляются и
+  включаются развёртыванием.
 - **Секреты** передаются не значением, а логическим идентификатором
   (`ru.3ops.discovery.database.secret-id`); сами секреты в labels и в git
   не попадают.

@@ -1,9 +1,10 @@
 # 3ops Discovery
 
-Specification of a labels-driven telemetry discovery contract for
-Grafana Alloy (`docs/manifest.ru.md`, Russian-only) plus the reference
-Alloy configuration (`alloy/*.alloy`) and the quality gates that bind
-them together.
+Specification of a labels-driven telemetry discovery contract that any
+collector can implement (`docs/manifest.ru.md`, normative, Russian), its
+series catalog (`docs/series/`), the reference implementation in Grafana
+Alloy (`alloy/*.alloy`, `alloy-optional/*.alloy`) and the quality gates
+that bind them together.
 
 ## Commands
 
@@ -32,6 +33,12 @@ them together.
   README). Not a gate, so not in `preflight`; its invariants (version
   from the manifest header only, `.alloy` set == what `alloy_check`
   validates, reproducible bytes) live in `tests/static/test_release.py`.
+- `uv run python -m tools.series_catalog snapshot --metrics-url
+  http://127.0.0.1:<prometheus port> --project xad-demo` - prints, as
+  YAML, the series and label names a running stack serves for every
+  catalog probe; raw material for editing `docs/series/`, never copied in
+  unreviewed. Run it against `nox -s demo` after every target has been
+  scraped once: a cell scraped zero times comes out empty.
 - `uv run nox -s demo` — interactive sandbox: full stack + Grafana
   (`--profile demo`, anonymous access at `http://127.0.0.1:3000`,
   Prometheus + Loki datasources provisioned). Prints URLs, follows logs;
@@ -47,10 +54,29 @@ them together.
   extracted.
 - `alloy/*.alloy` — reference config; one directory = one merged
   component graph, unique component names, no overrides possible.
+- `docs/manifest.md` - English translation; not normative, but
+  `tests/static/test_translation.py` demands the same structure as the
+  Russian original (headings, section numbers, list items, table rows),
+  so both files change in one commit. Sections 1-13 name no
+  implementation: `tests/static/test_manifest_neutrality.py` allows
+  implementation mentions only in the sections listed in
+  `asymmetries.MANIFEST_IMPLEMENTATION_MENTIONS` (1 and 14); reference
+  mechanics go to 14.4.4.
+- `docs/series/<domain>.yaml` - the series catalog (manifest 14.3), a
+  lower bound on series and identity label names per profile or module.
+  Rebuild it from a snapshot (command above) whenever the Alloy pin
+  changes, since embedded exporters move with it. Gates:
+  `tests/static/test_series_catalog.py` (schema; an unknown key or empty
+  `present` is a `CatalogError`), `tests/e2e/test_series_parity.py` (the
+  reference serves every cell) and `tests/e2e/test_log_fields_parity.py`
+  (non-indexed fields per log profile equal the 8.3 table; fields a store adds itself are
+  listed per store in `asymmetries.STORE_DERIVED_LOG_FIELDS`).
 - `alloy-optional/*.alloy` - opt-in overlay files (manifest §14.4.3):
-  `060_otel` (OTLP receiver), `070_host-metrics`
-  (`prometheus.exporter.unix`, `node_*` series), `080_host-logs`
-  (`loki.source.journal`). Composed via `tools.materialize.COMBOS`
+  `037_snmp` (snmp domain; loads only with its device and auth files,
+  `tools.materialize.PROVIDER_FILES`), `060_otel` (OTLP receiver),
+  `070_host-metrics` (`prometheus.exporter.unix`, `node_*` series),
+  `075_container-metrics` (`prometheus.exporter.cadvisor`, needs the host
+  cgroup namespace), `080_host-logs` (`loki.source.journal`). Composed via `tools.materialize.COMBOS`
   (alloy_check validates every combination) and the e2e fixture, which
   loads all of them (080 reads the journal of `journal-host`, below).
 - `tests/static/` — manifest vs config consistency; allowed gaps live
@@ -118,8 +144,13 @@ them together.
   The e2e compose uses the map form on purpose, so the gate proves
   reverse-DNS keys survive compose parsing; the list form is equally
   valid.
-- The manifest is Russian-only by design; code, comments, commits and
-  shipped markdown are English.
+- The manifest is normative in Russian; `docs/manifest.md` and the
+  `*.md` twins of `README.ru.md`/`CHANGELOG.ru.md` are translations kept
+  in the same commit. Code, comments, commits and other shipped markdown
+  are English.
+- The contract version lives only in the manifest header
+  (`tests/static/test_release.py`); `ru.3ops.discovery.version` is the
+  label-semantics version and moves only when a label changes meaning.
 - VictoriaLogs in e2e runs with `-loki.disableMessageParsing`: without it
   a JSON line pushed over the Loki API is unpacked into fields and `_msg`
   no longer holds the line, so the structured-metadata checks would pass
