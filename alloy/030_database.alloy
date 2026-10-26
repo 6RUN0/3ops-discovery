@@ -95,7 +95,7 @@ foreach "postgres" {
 			is_secret = true
 		}
 
-		// Profile-driven collection scope (manifest 8.4): standard-v1 is
+		// Profile-driven collection scope (manifest 8.4, 14.4.4): standard-v1 is
 		// the exporter's default set; basic-v1 additionally drops the
 		// pg_settings collection; extended-v1 enables extra collectors
 		// restricted to ones that work on a vanilla server (no
@@ -282,7 +282,7 @@ foreach "mysql" {
 			is_secret = true
 		}
 
-		// Profile-driven collection scope (manifest 8.4). set_collectors
+		// Profile-driven collection scope (manifest 8.4, 14.4.4). set_collectors
 		// fully overrides the exporter's default set, so standard-v1
 		// pins today's upstream defaults explicitly: a profile's
 		// behaviour must not drift with an exporter upgrade (manifest
@@ -460,7 +460,7 @@ foreach "redis" {
 			is_secret = true
 		}
 
-		// Profile-driven collection scope (manifest 8.4): basic-v1 keeps
+		// Profile-driven collection scope (manifest 8.4, 14.4.4): basic-v1 keeps
 		// only redis_* series (drops the exporter's own Go runtime
 		// metrics); extended-v1 adds client-list and system memory
 		// metrics on top of the defaults.
@@ -624,7 +624,7 @@ foreach "mongodb" {
 			is_secret = true
 		}
 
-		// Profile-driven collection scope (manifest 8.4): basic-v1 keeps
+		// Profile-driven collection scope (manifest 8.4, 14.4.4): basic-v1 keeps
 		// only the diagnostic serverStatus data. The exporter's default
 		// (collect_all) is already the maximum, so extended-v1 is an
 		// accepted equivalent of standard-v1 (manifest 8.4).
