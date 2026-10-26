@@ -35,9 +35,7 @@ def test_reference_bullet_points_at_the_entry(doc: str) -> None:
     text = (md.REPO / "docs" / doc).read_text(encoding="utf-8")
     for key in asymmetries.MANIFEST_RULES_UNMET:
         number = _rule_section(key)
-        bullets = re.findall(
-            rf"(?m)^- \[§?{re.escape(number)}\]\(.*$", text
-        )
+        bullets = re.findall(rf"(?m)^- \[§?{re.escape(number)}\]\(.*$", text)
         # 14.4.4 is the last place a bullet for the section may live.
         assert any("MANIFEST_RULES_UNMET" in b for b in bullets), (
             f"{doc}: no 14.4.4 bullet for {number} names MANIFEST_RULES_UNMET"
