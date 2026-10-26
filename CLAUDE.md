@@ -3,8 +3,9 @@
 Specification of a labels-driven telemetry discovery contract that any
 collector can implement (`docs/manifest.ru.md`, normative, Russian), its
 series catalog (`docs/series/`), the reference implementation in Grafana
-Alloy (`implementations/alloy/base/*.alloy`, `implementations/alloy/optional/*.alloy`) and the quality gates
-that bind them together.
+Alloy (`implementations/alloy/base/*.alloy`,
+`implementations/alloy/optional/*.alloy`) and the quality gates that
+bind them together.
 
 ## Commands
 
@@ -55,8 +56,9 @@ that bind them together.
   `tests/static/manifest_doc.py`. Restructuring the manifest breaks
   the gates loudly; deliberate counterexamples in the text are never
   extracted.
-- `implementations/alloy/base/*.alloy` — reference config; one directory = one merged
-  component graph, unique component names, no overrides possible.
+- `implementations/alloy/base/*.alloy` - reference config, the default
+  domains; one materialized directory = one merged component graph,
+  unique component names, no overrides possible.
 - `docs/manifest.md` - English translation; not normative, but
   `tests/static/test_translation.py` demands the same structure as the
   Russian original (headings, section numbers, list items, table rows),
@@ -75,15 +77,21 @@ that bind them together.
   (non-indexed fields per log profile equal the 8.3 table; fields a
   store adds itself are listed per store in
   `asymmetries.STORE_DERIVED_LOG_FIELDS`).
-- `implementations/alloy/optional/*.alloy` - opt-in overlay files (manifest §14.4.3):
+- `implementations/alloy/optional/*.alloy` - opt-in overlay files
+  (manifest §14.4.3):
   `037_snmp` (snmp domain; loads only with its device and auth files,
   `tools.materialize.PROVIDER_FILES`), `060_otel` (OTLP receiver),
   `070_host-metrics` (`prometheus.exporter.unix`, `node_*` series),
   `075_container-metrics` (`prometheus.exporter.cadvisor`, needs the host
-  cgroup namespace), `080_host-logs` (`loki.source.journal`). Composed
-  via `tools.materialize.COMBOS` (alloy_check validates every
-  combination) and the e2e fixture, which
-  loads all of them (080 reads the journal of `journal-host`, below).
+  cgroup namespace), `080_host-logs` (`loki.source.journal`).
+- Composition is by domain: `tools.materialize.DOMAIN_FILES` maps each
+  domain of the manifest 14 registry to its files in `base/` and
+  `optional/` (the `Домены` column of manifest tables 14.4 and 14.4.3,
+  `tests/static/test_domain_files.py`). `COMBOS` maps a combo name to
+  domains: `base`, `all` (no snmp), `all-snmp` and `domain-<d>` for each
+  domain alone; alloy_check validates every combo. The e2e main fixture
+  loads `all` (080 reads the journal of `journal-host`, below), the snmp
+  fixture `all-snmp`.
 - `tests/static/` — manifest vs config consistency; allowed gaps live
   in `asymmetries.py` as one explicit table.
 - `tests/e2e/stack/` — compose stack: Alloy reaches the Docker API
@@ -101,7 +109,7 @@ that bind them together.
   the container write access to the host cgroup tree, so only the e2e
   fixtures pass the overlay (`-f`); `nox -s demo` uses
   `noxfile.DEMO_COMPOSE_FILES` without it and drops 080
-  (`DEMO_EXCLUDED_OVERLAYS`), pinned by `tests/static/test_demo.py`. The
+  (`DEMO_EXCLUDED_DOMAINS`), pinned by `tests/static/test_demo.py`. The
   fixture blocks on `systemctl is-system-running --wait` (via
   `docker compose exec`) before tests run and fails at once if the
   container exited; diagnostics (container status, exit code, `docker
@@ -109,8 +117,8 @@ that bind them together.
   `tests/e2e/_artifacts/<project>/journal-host-*.txt`. An e2e run without
   a cached image needs network: the build runs `apt-get` against
   deb.debian.org (about 2.5 min cold).
-- `tools/materialize.py` — builds the config dir (base + optional)
-  for both alloy_check and the e2e mount.
+- `tools/materialize.py` - builds the config dir (the union of the
+  chosen domains' files) for alloy_check, the e2e mount and the demo.
 - e2e storage: `RU_3OPS_DISCOVERY_E2E_BACKEND` (`prometheus-loki`, the
   default, or `victoria`; anything else is a usage error before docker
   starts) picks the `BackendSpec` in `tests/e2e/conftest.py`; checks query
@@ -128,7 +136,11 @@ that bind them together.
 
 - The Alloy image tag is pinned BY THE MANIFEST (section 14.4, currently
   v1.21.2); `noxfile.ALLOY_IMAGE` must match - a static test enforces
-  it. `foreach` is experimental: always `--stability.level=experimental`.
+  it. `foreach` (only in `030_database.alloy`, `EXPERIMENTAL_FILES`) is
+  experimental: `--stability.level=experimental` is passed exactly when
+  the domain set includes `database` (`needs_experimental`); alloy_check
+  validates every other combo without it, so the flag cannot mask an
+  experimental block elsewhere.
 - Contract values (scrape intervals, label names, defaults) are never
   changed to make a test pass; e2e accelerates only
   `RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL`.

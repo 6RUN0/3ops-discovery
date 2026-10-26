@@ -1170,25 +1170,25 @@ alloy run --stability.level=experimental implementations/alloy/base/
 Флаг `--stability.level=experimental` нужен блоку `foreach` в файле 030 (experimental в Alloy v1.21). Синтаксическая проверка без запуска:
 
 ```sh
-docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.21.2 \
+docker run --rm -v "$PWD/implementations/alloy/base:/etc/alloy:ro" grafana/alloy:v1.21.2 \
   validate --stability.level=experimental /etc/alloy
 ```
 
 Политика версии Alloy. Тег в команде выше нормативен: контракт проверен именно на нём, и он же обязан стоять в `noxfile.ALLOY_IMAGE` (сверяется статическим гейтом в обе стороны). Диапазон совместимых версий контракт не объявляет - не потому, что версии не важны, а потому что честно проверена ровно одна: обновление тега - изменение контракта и проходит те же гейты (`alloy fmt`, `validate` для всех комбинаций, e2e). Нижняя граница не указана намеренно: `foreach` экспериментален, а у экспериментальных блоков upstream не гарантирует ни стабильности синтаксиса, ни наличия в следующей версии.
 
-Конфигурации без экспериментальных возможностей эталон не предлагает: `foreach` находится в базовом файле [`030_database.alloy`](../implementations/alloy/base/030_database.alloy), поэтому флаг `--stability.level=experimental` обязателен для всего эталона, а не только для домена database. Развёртывание, которому экспериментальные возможности недопустимы, исключает файл 030 целиком - вместе с доменом database; остальные домены от `foreach` не зависят.
+Состав по доменам. Развёртывание берёт объединение файлов выбранных доменов из таблицы ниже и таблицы раздела [14.4.3](#1443-опциональные-файлы) (столбец `Домены`); каталог `implementations/alloy/base/` - объединение доменов по умолчанию (`metrics`, `database`, `blackbox`, `logs`, `ipmi`). Флаг `--stability.level=experimental` нужен, только когда в набор входит домен `database` (`foreach` в [`030_database.alloy`](../implementations/alloy/base/030_database.alloy)); остальные сочетания доменов загружаются без него: гейт `alloy_check` проверяет каждый домен отдельно и передаёт флаг только сочетаниям с `database`.
 
-| Файл | Содержимое |
-|---|---|
-| [`010_discovery-scrape.alloy`](../implementations/alloy/base/010_discovery-scrape.alloy) | `discovery.docker` для metrics/database: opt-in discovery только контейнеров с меткой `ru.3ops.discovery.enabled=true` |
-| [`011_discovery-logs.alloy`](../implementations/alloy/base/011_discovery-logs.alloy) | `discovery.docker` для логов: discovery всех контейнеров |
-| [`020_metrics.alloy`](../implementations/alloy/base/020_metrics.alloy) | Домен metrics: общий relabel (валидация + провенанс) и пара `discovery.relabel`/`prometheus.scrape` на каждый профиль раздела [8.2](#82-scrape-профили) |
-| [`030_database.alloy`](../implementations/alloy/base/030_database.alloy) | Домен database: `foreach`-pipeline на тип СУБД, DSN из файла секрета, объём сбора по `database.profile` (раздел [8.4](#84-database-профили)) |
-| [`035_blackbox.alloy`](../implementations/alloy/base/035_blackbox.alloy) | Домен blackbox: общий `discovery.relabel` + `prometheus.exporter.blackbox` (модули `http_2xx`/`tcp_connect`/`icmp`/`tls_connect`) и пара фильтр+scrape на каждый профиль раздела [8.2](#82-scrape-профили) |
-| [`040_logs.alloy`](../implementations/alloy/base/040_logs.alloy) | Домен logs: relabel-правила и `loki.source.docker` |
-| [`050_log-profiles.alloy`](../implementations/alloy/base/050_log-profiles.alloy) | Profile dispatcher: `loki.process` с базовыми log-профилями |
-| [`090_output-metrics.alloy`](../implementations/alloy/base/090_output-metrics.alloy) | Выход метрик: `prometheus.remote_write` |
-| [`091_output-logs.alloy`](../implementations/alloy/base/091_output-logs.alloy) | Выход логов: `loki.write` |
+| Файл | Домены | Содержимое |
+|---|---|---|
+| [`010_discovery-scrape.alloy`](../implementations/alloy/base/010_discovery-scrape.alloy) | `metrics`, `ipmi`, `database`, `blackbox` | `discovery.docker` для metrics/database: opt-in discovery только контейнеров с меткой `ru.3ops.discovery.enabled=true` |
+| [`011_discovery-logs.alloy`](../implementations/alloy/base/011_discovery-logs.alloy) | `logs` | `discovery.docker` для логов: discovery всех контейнеров |
+| [`020_metrics.alloy`](../implementations/alloy/base/020_metrics.alloy) | `metrics`, `ipmi` | Домен metrics: общий relabel (валидация + провенанс) и пара `discovery.relabel`/`prometheus.scrape` на каждый профиль раздела [8.2](#82-scrape-профили) |
+| [`030_database.alloy`](../implementations/alloy/base/030_database.alloy) | `database` | Домен database: `foreach`-pipeline на тип СУБД, DSN из файла секрета, объём сбора по `database.profile` (раздел [8.4](#84-database-профили)) |
+| [`035_blackbox.alloy`](../implementations/alloy/base/035_blackbox.alloy) | `blackbox` | Домен blackbox: общий `discovery.relabel` + `prometheus.exporter.blackbox` (модули `http_2xx`/`tcp_connect`/`icmp`/`tls_connect`) и пара фильтр+scrape на каждый профиль раздела [8.2](#82-scrape-профили) |
+| [`040_logs.alloy`](../implementations/alloy/base/040_logs.alloy) | `logs` | Домен logs: relabel-правила и `loki.source.docker` |
+| [`050_log-profiles.alloy`](../implementations/alloy/base/050_log-profiles.alloy) | `logs` | Profile dispatcher: `loki.process` с базовыми log-профилями |
+| [`090_output-metrics.alloy`](../implementations/alloy/base/090_output-metrics.alloy) | `metrics`, `ipmi`, `database`, `blackbox`, `otel`, `snmp`, `host-metrics`, `container-metrics` | Выход метрик: `prometheus.remote_write` |
+| [`091_output-logs.alloy`](../implementations/alloy/base/091_output-logs.alloy) | `logs`, `otel`, `host-logs` | Выход логов: `loki.write` |
 
 Порядок файлов, устройство профильных пар, fan-out targets по портам, хранение состояния и подключение хранилищ описаны в [`implementations/alloy/README.md`](../implementations/alloy/README.md).
 
@@ -1220,13 +1220,13 @@ Alloy сливает все `*.alloy`-файлы каталога в один г
 
 Каталог [`implementations/alloy/optional/`](../implementations/alloy/optional/) — overlay-файлы, добавляемые к базовому каталогу при материализации. Базовый `implementations/alloy/base/` валиден без них.
 
-| Файл | Содержимое |
-|---|---|
-| [`060_otel.alloy`](../implementations/alloy/optional/060_otel.alloy) | Opt-in OTLP receiver: `otelcol.receiver.otlp` → метрики в `prometheus.remote_write`, логи в `loki.write` через allowlist-processor |
-| [`070_host-metrics.alloy`](../implementations/alloy/optional/070_host-metrics.alloy) | Opt-in host-метрики: `prometheus.exporter.unix` (серии `node_*`) -> `prometheus.remote_write`; rootfs/procfs/sysfs через `RU_3OPS_DISCOVERY_HOST_*`; провенанс [§6.1](#61-labels-добавляемые-реализацией): `host`/`collector` добавляет `discovery.relabel` перед scrape |
-| [`075_container-metrics.alloy`](../implementations/alloy/optional/075_container-metrics.alloy) | Opt-in per-container метрики: `prometheus.exporter.cadvisor` (серии `container_cpu_*`/`container_memory_*`/`container_network_*`; `container_fs_*` вне периметра) -> `prometheus.remote_write`. Docker API - через `docker_host` (реюз `RU_3OPS_DISCOVERY_DOCKER_HOST`, socket-proxy: GET-allowlist разделов `CONTAINERS`/`INFO`/`VERSION`/`PING` достаточен); при недоступном Docker API вывод практически пуст (`docker_only`). Провенанс [§6.1](#61-labels-добавляемые-реализацией): allowlisted container-labels -> `environment`/`team`/`compose_*`, `name` -> `container`; сырые `container_label_*`/`id`/`name` отбрасываются; `instance` = hostname коллектора, `job` = `integrations/cadvisor` (метка экспортёра; оба - осознанные gap'ы). Кардинальность: `store_container_labels = false` + allowlist, root-cgroup-статистика отключена, `disabled_metrics`/`enabled_metrics` - tunable. Привилегии деплоя (host cgroup namespace) - раздел [14.4.1](#1441-кастомизация); per-container opt-out не поддерживается. |
-| [`080_host-logs.alloy`](../implementations/alloy/optional/080_host-logs.alloy) | Opt-in host-логи: `loki.source.journal` (systemd journal) -> `loki.write`; статические labels `host`/`collector`/`source` (в [§6.2](#62-поля-логов) allowlist) |
-| [`037_snmp.alloy`](../implementations/alloy/optional/037_snmp.alloy) | Домен snmp (opt-in overlay): файловый провайдер (`local.file` + `encoding.from_yaml`), `prometheus.exporter.snmp` (модули `if_mib`/`system`, профиль `snmp-standard-v1`), auth из inline `config`-секрета (`local.file` `is_secret`) через merge. Включается только вместе с device/auth-файлами (top-level `local.file` без файла unhealthy). |
+| Файл | Домены | Содержимое |
+|---|---|---|
+| [`060_otel.alloy`](../implementations/alloy/optional/060_otel.alloy) | `otel` | Opt-in OTLP receiver: `otelcol.receiver.otlp` -> метрики в `prometheus.remote_write`, логи в `loki.write` через allowlist-processor |
+| [`070_host-metrics.alloy`](../implementations/alloy/optional/070_host-metrics.alloy) | `host-metrics` | Opt-in host-метрики: `prometheus.exporter.unix` (серии `node_*`) -> `prometheus.remote_write`; rootfs/procfs/sysfs через `RU_3OPS_DISCOVERY_HOST_*`; провенанс [§6.1](#61-labels-добавляемые-реализацией): `host`/`collector` добавляет `discovery.relabel` перед scrape |
+| [`075_container-metrics.alloy`](../implementations/alloy/optional/075_container-metrics.alloy) | `container-metrics` | Opt-in per-container метрики: `prometheus.exporter.cadvisor` (серии `container_cpu_*`/`container_memory_*`/`container_network_*`; `container_fs_*` вне периметра) -> `prometheus.remote_write`. Docker API - через `docker_host` (реюз `RU_3OPS_DISCOVERY_DOCKER_HOST`, socket-proxy: GET-allowlist разделов `CONTAINERS`/`INFO`/`VERSION`/`PING` достаточен); при недоступном Docker API вывод практически пуст (`docker_only`). Провенанс [§6.1](#61-labels-добавляемые-реализацией): allowlisted container-labels -> `environment`/`team`/`compose_*`, `name` -> `container`; сырые `container_label_*`/`id`/`name` отбрасываются; `instance` = hostname коллектора, `job` = `integrations/cadvisor` (метка экспортёра; оба - осознанные gap'ы). Кардинальность: `store_container_labels = false` + allowlist, root-cgroup-статистика отключена, `disabled_metrics`/`enabled_metrics` - tunable. Привилегии деплоя (host cgroup namespace) - раздел [14.4.1](#1441-кастомизация); per-container opt-out не поддерживается. |
+| [`080_host-logs.alloy`](../implementations/alloy/optional/080_host-logs.alloy) | `host-logs` | Opt-in host-логи: `loki.source.journal` (systemd journal) -> `loki.write`; статические labels `host`/`collector`/`source` (в [§6.2](#62-поля-логов) allowlist) |
+| [`037_snmp.alloy`](../implementations/alloy/optional/037_snmp.alloy) | `snmp` | Домен snmp (opt-in overlay): файловый провайдер (`local.file` + `encoding.from_yaml`), `prometheus.exporter.snmp` (модули `if_mib`/`system`, профиль `snmp-standard-v1`), auth из inline `config`-секрета (`local.file` `is_secret`) через merge. Включается только вместе с device/auth-файлами (top-level `local.file` без файла unhealthy). |
 
 #### 14.4.4. Выполнение контракта эталоном
 

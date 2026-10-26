@@ -1177,25 +1177,25 @@ alloy run --stability.level=experimental implementations/alloy/base/
 The `--stability.level=experimental` flag is required by the `foreach` block in file 030 (experimental in Alloy v1.21). A syntax check without running:
 
 ```sh
-docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.21.2 \
+docker run --rm -v "$PWD/implementations/alloy/base:/etc/alloy:ro" grafana/alloy:v1.21.2 \
   validate --stability.level=experimental /etc/alloy
 ```
 
 The Alloy version policy. The tag in the command above is normative: the contract has been verified on exactly that tag, and the same one must appear in `noxfile.ALLOY_IMAGE` (checked both ways by a static gate). The contract declares no range of compatible versions -- not because versions do not matter, but because exactly one has honestly been verified: updating the tag is a change to the contract and passes the same gates (`alloy fmt`, `validate` for every combination, e2e). No lower bound is given deliberately: `foreach` is experimental, and upstream guarantees neither syntax stability nor the continued existence of an experimental block in the next release.
 
-The reference offers no configuration free of experimental features: `foreach` lives in the base file [`030_database.alloy`](../implementations/alloy/base/030_database.alloy), so `--stability.level=experimental` is mandatory for the whole reference rather than for the database domain alone. A deployment that cannot accept experimental features excludes file 030 entirely -- and with it the database domain; no other domain depends on `foreach`.
+Composition by domain. A deployment takes the union of the files of the chosen domains from the table below and the table of section [14.4.3](#1443-optional-files) (the `Domains` column); the `implementations/alloy/base/` directory is the union of the default domains (`metrics`, `database`, `blackbox`, `logs`, `ipmi`). The `--stability.level=experimental` flag is needed only when the set includes the `database` domain (`foreach` in [`030_database.alloy`](../implementations/alloy/base/030_database.alloy)); every other combination of domains loads without it: the `alloy_check` gate validates each domain on its own and passes the flag only to combinations with `database`.
 
-| File | Content |
-|---|---|
-| [`010_discovery-scrape.alloy`](../implementations/alloy/base/010_discovery-scrape.alloy) | `discovery.docker` for metrics/database: opt-in discovery of only the containers labelled `ru.3ops.discovery.enabled=true` |
-| [`011_discovery-logs.alloy`](../implementations/alloy/base/011_discovery-logs.alloy) | `discovery.docker` for logs: discovery of every container |
-| [`020_metrics.alloy`](../implementations/alloy/base/020_metrics.alloy) | The metrics domain: a shared relabel (validation plus provenance) and a `discovery.relabel`/`prometheus.scrape` pair per profile of section [8.2](#82-scrape-profiles) |
-| [`030_database.alloy`](../implementations/alloy/base/030_database.alloy) | The database domain: a `foreach` pipeline per database type, the DSN from a secret file, the collection volume from `database.profile` (section [8.4](#84-database-profiles)) |
-| [`035_blackbox.alloy`](../implementations/alloy/base/035_blackbox.alloy) | The blackbox domain: a shared `discovery.relabel` plus `prometheus.exporter.blackbox` (modules `http_2xx`/`tcp_connect`/`icmp`/`tls_connect`) and a filter-plus-scrape pair per profile of section [8.2](#82-scrape-profiles) |
-| [`040_logs.alloy`](../implementations/alloy/base/040_logs.alloy) | The logs domain: relabel rules and `loki.source.docker` |
-| [`050_log-profiles.alloy`](../implementations/alloy/base/050_log-profiles.alloy) | The profile dispatcher: `loki.process` with the base log profiles |
-| [`090_output-metrics.alloy`](../implementations/alloy/base/090_output-metrics.alloy) | The metrics output: `prometheus.remote_write` |
-| [`091_output-logs.alloy`](../implementations/alloy/base/091_output-logs.alloy) | The logs output: `loki.write` |
+| File | Domains | Content |
+|---|---|---|
+| [`010_discovery-scrape.alloy`](../implementations/alloy/base/010_discovery-scrape.alloy) | `metrics`, `ipmi`, `database`, `blackbox` | `discovery.docker` for metrics/database: opt-in discovery of only the containers labelled `ru.3ops.discovery.enabled=true` |
+| [`011_discovery-logs.alloy`](../implementations/alloy/base/011_discovery-logs.alloy) | `logs` | `discovery.docker` for logs: discovery of every container |
+| [`020_metrics.alloy`](../implementations/alloy/base/020_metrics.alloy) | `metrics`, `ipmi` | The metrics domain: a shared relabel (validation plus provenance) and a `discovery.relabel`/`prometheus.scrape` pair per profile of section [8.2](#82-scrape-profiles) |
+| [`030_database.alloy`](../implementations/alloy/base/030_database.alloy) | `database` | The database domain: a `foreach` pipeline per database type, the DSN from a secret file, the collection volume from `database.profile` (section [8.4](#84-database-profiles)) |
+| [`035_blackbox.alloy`](../implementations/alloy/base/035_blackbox.alloy) | `blackbox` | The blackbox domain: a shared `discovery.relabel` plus `prometheus.exporter.blackbox` (modules `http_2xx`/`tcp_connect`/`icmp`/`tls_connect`) and a filter-plus-scrape pair per profile of section [8.2](#82-scrape-profiles) |
+| [`040_logs.alloy`](../implementations/alloy/base/040_logs.alloy) | `logs` | The logs domain: relabel rules and `loki.source.docker` |
+| [`050_log-profiles.alloy`](../implementations/alloy/base/050_log-profiles.alloy) | `logs` | The profile dispatcher: `loki.process` with the base log profiles |
+| [`090_output-metrics.alloy`](../implementations/alloy/base/090_output-metrics.alloy) | `metrics`, `ipmi`, `database`, `blackbox`, `otel`, `snmp`, `host-metrics`, `container-metrics` | The metrics output: `prometheus.remote_write` |
+| [`091_output-logs.alloy`](../implementations/alloy/base/091_output-logs.alloy) | `logs`, `otel`, `host-logs` | The logs output: `loki.write` |
 
 The file order, the layout of the profile pairs, the per-port target fan-out, state storage and store integration are described in [`implementations/alloy/README.md`](../implementations/alloy/README.md).
 
@@ -1227,13 +1227,13 @@ The public API of the base configuration: the stable exports an overlay file may
 
 The [`implementations/alloy/optional/`](../implementations/alloy/optional/) directory holds overlay files added to the base directory at materialization time. The base `implementations/alloy/base/` is valid without them.
 
-| File | Content |
-|---|---|
-| [`060_otel.alloy`](../implementations/alloy/optional/060_otel.alloy) | Opt-in OTLP receiver: `otelcol.receiver.otlp`, with metrics going to `prometheus.remote_write` and logs to `loki.write` through an allowlist processor |
-| [`070_host-metrics.alloy`](../implementations/alloy/optional/070_host-metrics.alloy) | Opt-in host metrics: `prometheus.exporter.unix` (`node_*` series) into `prometheus.remote_write`; rootfs/procfs/sysfs through `RU_3OPS_DISCOVERY_HOST_*`; provenance per [6.1](#61-labels-added-by-the-implementation): `host`/`collector` are added by `discovery.relabel` before the scrape |
-| [`075_container-metrics.alloy`](../implementations/alloy/optional/075_container-metrics.alloy) | Opt-in per-container metrics: `prometheus.exporter.cadvisor` (series `container_cpu_*`/`container_memory_*`/`container_network_*`; `container_fs_*` is outside the perimeter) into `prometheus.remote_write`. The Docker API goes through `docker_host` (reusing `RU_3OPS_DISCOVERY_DOCKER_HOST`, socket proxy: a GET allowlist of the `CONTAINERS`/`INFO`/`VERSION`/`PING` sections is enough); with the Docker API unavailable the output is practically empty (`docker_only`). Provenance per [6.1](#61-labels-added-by-the-implementation): allowlisted container labels become `environment`/`team`/`compose_*`, `name` becomes `container`; raw `container_label_*`/`id`/`name` are dropped; `instance` is the collector hostname and `job` is `integrations/cadvisor` (the exporter's own label; both are deliberate gaps). Cardinality: `store_container_labels = false` plus the allowlist, root cgroup statistics disabled, `disabled_metrics`/`enabled_metrics` tunable. Deployment privileges (the host cgroup namespace) are covered in section [14.4.1](#1441-customization); per-container opt-out is not supported. |
-| [`080_host-logs.alloy`](../implementations/alloy/optional/080_host-logs.alloy) | Opt-in host logs: `loki.source.journal` (systemd journal) into `loki.write`; the static labels `host`/`collector`/`source` (allowlisted in [6.2](#62-log-fields)) |
-| [`037_snmp.alloy`](../implementations/alloy/optional/037_snmp.alloy) | The snmp domain (opt-in overlay): the file provider (`local.file` plus `encoding.from_yaml`), `prometheus.exporter.snmp` (modules `if_mib`/`system`, profile `snmp-standard-v1`), auth from an inline `config` secret (`local.file` with `is_secret`) through merge. Enabled only together with the device and auth files (a top-level `local.file` without a file is unhealthy). |
+| File | Domains | Content |
+|---|---|---|
+| [`060_otel.alloy`](../implementations/alloy/optional/060_otel.alloy) | `otel` | Opt-in OTLP receiver: `otelcol.receiver.otlp`, with metrics going to `prometheus.remote_write` and logs to `loki.write` through an allowlist processor |
+| [`070_host-metrics.alloy`](../implementations/alloy/optional/070_host-metrics.alloy) | `host-metrics` | Opt-in host metrics: `prometheus.exporter.unix` (`node_*` series) into `prometheus.remote_write`; rootfs/procfs/sysfs through `RU_3OPS_DISCOVERY_HOST_*`; provenance per [6.1](#61-labels-added-by-the-implementation): `host`/`collector` are added by `discovery.relabel` before the scrape |
+| [`075_container-metrics.alloy`](../implementations/alloy/optional/075_container-metrics.alloy) | `container-metrics` | Opt-in per-container metrics: `prometheus.exporter.cadvisor` (series `container_cpu_*`/`container_memory_*`/`container_network_*`; `container_fs_*` is outside the perimeter) into `prometheus.remote_write`. The Docker API goes through `docker_host` (reusing `RU_3OPS_DISCOVERY_DOCKER_HOST`, socket proxy: a GET allowlist of the `CONTAINERS`/`INFO`/`VERSION`/`PING` sections is enough); with the Docker API unavailable the output is practically empty (`docker_only`). Provenance per [6.1](#61-labels-added-by-the-implementation): allowlisted container labels become `environment`/`team`/`compose_*`, `name` becomes `container`; raw `container_label_*`/`id`/`name` are dropped; `instance` is the collector hostname and `job` is `integrations/cadvisor` (the exporter's own label; both are deliberate gaps). Cardinality: `store_container_labels = false` plus the allowlist, root cgroup statistics disabled, `disabled_metrics`/`enabled_metrics` tunable. Deployment privileges (the host cgroup namespace) are covered in section [14.4.1](#1441-customization); per-container opt-out is not supported. |
+| [`080_host-logs.alloy`](../implementations/alloy/optional/080_host-logs.alloy) | `host-logs` | Opt-in host logs: `loki.source.journal` (systemd journal) into `loki.write`; the static labels `host`/`collector`/`source` (allowlisted in [6.2](#62-log-fields)) |
+| [`037_snmp.alloy`](../implementations/alloy/optional/037_snmp.alloy) | `snmp` | The snmp domain (opt-in overlay): the file provider (`local.file` plus `encoding.from_yaml`), `prometheus.exporter.snmp` (modules `if_mib`/`system`, profile `snmp-standard-v1`), auth from an inline `config` secret (`local.file` with `is_secret`) through merge. Enabled only together with the device and auth files (a top-level `local.file` without a file is unhealthy). |
 
 #### 14.4.4. How the reference fulfils the contract
 
