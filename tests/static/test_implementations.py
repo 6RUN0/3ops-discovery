@@ -6,6 +6,8 @@ domain; a domain name that is not in section 10 cannot be assigned to
 anything, and a reference that skips a domain leaves it unimplemented.
 """
 
+import pytest
+
 from tests.static import manifest_doc as md
 
 
@@ -27,3 +29,12 @@ def test_host_domains_are_listed_apart() -> None:
         "host-logs",
     }
     assert md.host_domains() < md.domains()
+
+
+def test_an_empty_registry_is_an_anchor_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(md, "table", lambda _section: [])
+    with pytest.raises(md.AnchorError) as caught:
+        md.implementations()
+    assert str(caught.value) == "no implementations parsed from section 14"

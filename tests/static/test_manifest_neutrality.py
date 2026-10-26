@@ -46,3 +46,13 @@ def test_unnumbered_subheading_belongs_to_the_enclosing_section() -> None:
 def test_unnumbered_subheading_under_the_reference_is_skipped() -> None:
     text = "### 14.4. Reference\n\n#### `a`\n\nAlloy\n\n## 15. Y\n\nAlloy\n"
     assert md.implementation_mentions(text) == {"15": 1}
+
+
+def test_mentions_of_one_section_add_up_across_its_subheadings() -> None:
+    text = "## 5. X\n\nAlloy\n\n### `a`\n\nAlloy and foreach\n"
+    assert md.implementation_mentions(text) == {"5": 3}
+
+
+def test_text_before_the_first_numbered_heading_is_skipped() -> None:
+    text = "# Title\n\nAlloy\n\n## Preface\n\nAlloy\n\n## 1. A\n\nAlloy\n"
+    assert md.implementation_mentions(text) == {"1": 1}

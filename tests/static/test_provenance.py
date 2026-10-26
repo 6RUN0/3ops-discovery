@@ -11,6 +11,8 @@ reported as uncovered, it is simply never checked -- and provenance is
 what keeps a spoofed job label distinguishable from a real one.
 """
 
+import pytest
+
 from tests.static import alloy_config as ac
 from tests.static import asymmetries
 
@@ -55,3 +57,27 @@ def test_every_host_label_honours_the_hostname_parameter() -> None:
     # A bare constants.hostname ignores RU_3OPS_DISCOVERY_HOSTNAME, so the
     # host label of that path could not be set by the deployment.
     assert ac.bare_hostname_sites() == {}
+
+
+def test_bare_hostname_scan_counts_only_uses_outside_the_parameter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The gate above passes on a clean tree, so it cannot tell a working
+    # scan from one that finds nothing; a synthetic tree can.
+    parameter = (
+        'coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)'
+    )
+    monkeypatch.setattr(
+        ac,
+        "sources",
+        lambda: {"a.alloy": f"x = {parameter}\ny = constants.hostname\n"},
+    )
+    monkeypatch.setattr(
+        ac,
+        "optional_sources",
+        lambda: {
+            "b.alloy": f"x = {parameter}\n",
+            "c.alloy": "x = constants.hostname + constants.hostname\n",
+        },
+    )
+    assert ac.bare_hostname_sites() == {"a.alloy": 1, "c.alloy": 2}

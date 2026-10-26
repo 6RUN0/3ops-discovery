@@ -28,3 +28,18 @@ def test_keys_follow_the_profile_parser() -> None:
     assert keys("mixed-v1", logfmt_line) >= {"level", "status"}
     assert keys("mixed-v1", note) == set()
     assert keys("raw-v1", json_line) == set()
+
+
+def test_json_profile_reads_only_objects() -> None:
+    # A JSON array or scalar parses but has no keys; set() of a list would
+    # report its items as field names.
+    for line in ("[1, 2]", '"text"', "7", "null", "{broken"):
+        assert keys("generic-json-v1", line) == set(), line
+        assert keys("mixed-v1", line) == set(), line
+
+
+def test_mixed_profile_treats_an_indented_object_as_json() -> None:
+    # The dispatcher selector allows leading whitespace before `{`; a
+    # trailing-space check would send this line to the logfmt parser.
+    assert keys("mixed-v1", '  {"event":"tick"}') == {"event"}
+    assert keys("mixed-v1", '{"a": 1}  ') == {"a"}
