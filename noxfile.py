@@ -3,13 +3,14 @@ Nox sessions for the 3ops Discovery quality gates.
 
 ``default_venv_backend = "none"``: nox creates no environments of its
 own, every tool runs through ``uv run`` (single source of versions is
-uv.lock). Default run = lint + docs_lint + alloy_check + tests; the
-default honestly needs Docker (alloy_check) and network (lychee) and
-fails loudly without them -- the fully offline set is
-``nox -s lint tests``.
+uv.lock). Default run = lint + docs_lint + alloy_check + vmagent_check +
+tests; the default honestly needs Docker (alloy_check, vmagent_check) and
+network (lychee) and fails loudly without them -- the fully offline set
+is ``nox -s lint tests``.
 
     uv run nox                  # default gates
     uv run nox -s lint          # pre-commit hooks on all files
+    uv run nox -s vmagent_check # vmagent -dryRun, with and without env
     uv run nox -s tests         # static consistency + mini-app units
     uv run nox -s e2e           # docker compose delivery checks
     uv run nox -s e2e_victoria  # the same on VictoriaMetrics + VictoriaLogs
@@ -31,12 +32,38 @@ REPO = Path(__file__).parent
 sys.path.insert(0, str(REPO))
 
 nox.options.default_venv_backend = "none"
-nox.options.sessions = ["lint", "docs_lint", "alloy_check", "tests"]
+nox.options.sessions = [
+    "lint",
+    "docs_lint",
+    "alloy_check",
+    "vmagent_check",
+    "tests",
+]
 
 #: Exactly the tag pinned by the manifest (section 14.4): foreach is
 #: experimental and its semantics may drift between Alloy versions.
 #: tests/static/test_reference_files.py asserts this equality.
 ALLOY_IMAGE = "grafana/alloy:v1.21.2"
+
+#: The vmagent implementation of the metrics domain; the manifest section
+#: 14 registry names the same tag (tests/static/test_vmagent_config.py).
+VMAGENT_IMAGE = "victoriametrics/vmagent:v1.154.1"
+VMAGENT_DIR = REPO / "implementations" / "vmagent"
+
+#: vmagent_check runs: name -> environment. "defaults" passes nothing, so
+#: every value comes from the entrypoint's 14.1 defaults; "e2e" mirrors
+#: the e2e stack (socket-proxy over tcp://, fast refresh, empty hostname).
+VMAGENT_CHECK_ENVS: dict[str, dict[str, str]] = {
+    "defaults": {},
+    "e2e": {
+        "RU_3OPS_DISCOVERY_DOCKER_HOST": "tcp://docker-socket-proxy:2375",
+        "RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL": "5s",
+        "RU_3OPS_DISCOVERY_HOSTNAME": "",
+        "RU_3OPS_DISCOVERY_REMOTE_WRITE_URL": (
+            "http://victoriametrics:8428/api/v1/write"
+        ),
+    },
+}
 
 
 def _uv(session: nox.Session, *args: str) -> None:
@@ -224,6 +251,43 @@ def alloy_check(session: nox.Session) -> None:
         )
 
 
+def vmagent_check_args(env: dict[str, str]) -> list[str]:
+    """
+    Return the ``docker run`` arguments of one vmagent ``-dryRun`` check.
+
+    The config runs through entrypoint.sh, as a deployment does: the
+    placeholders in scrape.yml carry a value only after its defaults, and
+    vmagent keeps an unset one as literal text without complaint.
+    """
+    env_args = [
+        arg for name, value in env.items() for arg in ("-e", f"{name}={value}")
+    ]
+    return [
+        "docker",
+        "run",
+        "--rm",
+        *env_args,
+        "-v",
+        f"{VMAGENT_DIR}:/etc/vmagent:ro",
+        "--entrypoint",
+        "/bin/sh",
+        VMAGENT_IMAGE,
+        "/etc/vmagent/entrypoint.sh",
+        "-dryRun",
+    ]
+
+
+@nox.session
+def vmagent_check(session: nox.Session) -> None:
+    """Strict-parse the vmagent config via its entrypoint, per env set."""
+    if shutil.which("docker") is None:
+        session.error("docker is required for vmagent_check")
+    session.run("docker", "pull", VMAGENT_IMAGE, external=True)
+    for name, env in VMAGENT_CHECK_ENVS.items():
+        session.run(*vmagent_check_args(env), external=True)
+        session.log(f"[{name}] vmagent -dryRun OK")
+
+
 @nox.session
 def tests(session: nox.Session) -> None:
     """Run the fast docker-free suite (static consistency + app units)."""
@@ -257,6 +321,7 @@ def preflight(session: nox.Session) -> None:
         "lint",
         "docs_lint",
         "alloy_check",
+        "vmagent_check",
         "tests",
         "e2e",
         "e2e_victoria",

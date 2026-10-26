@@ -153,3 +153,14 @@ def test_checksum_file_matches_the_archive(built: Path) -> None:
     digest, name = line.split("  ")
     assert name == built.name
     assert digest == hashlib.sha256(built.read_bytes()).hexdigest()
+
+
+def test_archive_ships_the_vmagent_implementation(built: Path) -> None:
+    # Every registered implementation ships with the contract it
+    # implements; a registry row pointing at a directory the archive
+    # lacks would leave the operator with half the pair.
+    assert {
+        "implementations/vmagent/README.md",
+        "implementations/vmagent/entrypoint.sh",
+        "implementations/vmagent/scrape.yml",
+    } <= _members(built)

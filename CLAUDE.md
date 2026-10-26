@@ -9,9 +9,10 @@ bind them together.
 
 ## Commands
 
-- `uv run nox` — default gates: lint + docs_lint + alloy_check + tests.
-  Honestly requires Docker (alloy_check) and network (lychee); the
-  fully offline set is `uv run nox -s lint tests`.
+- `uv run nox` - default gates: lint + docs_lint + alloy_check +
+  vmagent_check + tests. Honestly requires Docker (alloy_check,
+  vmagent_check) and network (lychee); the fully offline set is
+  `uv run nox -s lint tests`.
 - `uv run nox -s lint` - pre-commit hooks on all files. pre-commit is
   not installed as a git hook here, so only this session runs it; its
   detect-secrets hook rewrites `.secrets.baseline` line numbers after
@@ -19,6 +20,12 @@ bind them together.
 - `uv run nox -s docs_lint` — rumdl + typos + lychee (system binaries).
 - `uv run nox -s alloy_check` — `alloy fmt -t` + `validate` for every
   config combination, inside the pinned Docker image.
+- `uv run nox -s vmagent_check` - `implementations/vmagent/` through its
+  `entrypoint.sh` with `-dryRun` (strict parse) in `noxfile.VMAGENT_IMAGE`,
+  once with no env (14.1 defaults) and once with the e2e values. vmagent
+  keeps an unset `%{NAME}` placeholder as literal text and still passes
+  `-dryRun`, so a placeholder without an entrypoint default is caught only
+  by `tests/static/test_vmagent_config.py`.
 - `uv run nox -s tests` — static manifest-vs-config gates + mini-app
   units (no Docker).
 - `uv run nox -s e2e` — docker compose delivery checks (opt-in, takes
