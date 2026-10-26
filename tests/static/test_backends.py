@@ -252,9 +252,9 @@ def test_unscoped_error_tells_how_to_fix() -> None:
 
 
 def test_control_characters_are_hex_escaped() -> None:
-    q = replace(Q, contains="a\x01b\x7f")
-    assert '"a\\x01b\\x7f"' in to_logql(q)
-    assert '*"a\\x01b\\x7f"*' in to_logsql(q)
+    q = replace(Q, contains="a\x01b\r\x7f")
+    assert '"a\\x01b\\x0d\\x7f"' in to_logql(q)
+    assert '*"a\\x01b\\x0d\\x7f"*' in to_logsql(q)
 
 
 def test_parse_stream_hex_escape_and_spaced_separator() -> None:
@@ -510,12 +510,17 @@ def test_victorialogs_streams_request_shape(
     assert call["timeout"] is not None
 
 
-@pytest.mark.parametrize("since", [None, "1m"])
+@pytest.mark.parametrize(
+    ("since", "expected", "window_ns"),
+    [(None, "30m", 1800 * 10**9), ("1m", "1m", 60 * 10**9)],
+)
 def test_entries_pass_the_window_through(
-    monkeypatch: pytest.MonkeyPatch, since: str | None
+    monkeypatch: pytest.MonkeyPatch,
+    since: str | None,
+    expected: str,
+    window_ns: int,
 ) -> None:
     window = {} if since is None else {"since": since}
-    expected = "30m" if since is None else since
     calls = _fake_http(
         monkeypatch,
         _loki_result(["9", "a"]),
@@ -525,7 +530,6 @@ def test_entries_pass_the_window_through(
     assert VictoriaLogsBackend(_BASE).entries(Q, **window) == [
         ("1792886401000000000", "m")
     ]
-    window_ns = int(to_seconds(expected) * 10**9)
     assert calls[0]["params"]["start"] == str(_NOW_NS - window_ns)
     assert calls[1]["params"]["start"] == expected
 
