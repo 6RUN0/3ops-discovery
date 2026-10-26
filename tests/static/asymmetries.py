@@ -156,3 +156,41 @@ MANIFEST_IMPLEMENTATION_MENTIONS: dict[str, str] = {
     "13.5": "neutralized by stage 3 task 8",
     "14": "registry names the agent",
 }
+
+#: Database type x profile cells (manifest 10.2 x 8.4) the series catalog
+#: does not carry: a catalog cell is snapshotted from an e2e container,
+#: and no e2e container runs these pairs. test_series_catalog.py demands
+#: that catalog cells and this table partition the full product, and that
+#: every key is a real pair, so adding a container forces its entry out.
+SERIES_CELLS_UNCATALOGUED: dict[tuple[str, str], str] = {
+    ("database", "mysql/basic-v1"): "no e2e container runs mysql",
+    ("database", "mysql/standard-v1"): "no e2e container runs mysql",
+    ("database", "mysql/extended-v1"): "no e2e container runs mysql",
+    ("database", "postgres/standard-v1"): (
+        "the e2e postgres containers declare basic-v1 and extended-v1"
+    ),
+    (
+        "database",
+        "mariadb/basic-v1",
+    ): "the e2e mariadb runs the default standard-v1",
+    (
+        "database",
+        "mariadb/extended-v1",
+    ): "the e2e mariadb runs the default standard-v1",
+    (
+        "database",
+        "redis/basic-v1",
+    ): "the e2e redis runs the default standard-v1",
+    (
+        "database",
+        "redis/extended-v1",
+    ): "the e2e redis runs the default standard-v1",
+    (
+        "database",
+        "mongodb/basic-v1",
+    ): "the e2e mongodb runs the default standard-v1",
+    (
+        "database",
+        "mongodb/extended-v1",
+    ): "the e2e mongodb runs the default standard-v1",
+}

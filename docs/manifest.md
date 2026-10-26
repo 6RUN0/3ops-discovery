@@ -227,6 +227,10 @@ Series identity per domain. Dashboards and alert rules bind to exactly these val
 | database | the database type (`database.type`) | `database.instance`, else the global `instance`, else `secret-id` | -- |
 | blackbox | the constant `blackbox` | the probe address (`blackbox.address` or the container address) | `module` -- the probe type |
 | snmp | the constant `snmp` | the device address | `device` -- the device name; `snmp_profile` -- the profile name of section [8.5](#85-snmp-profiles) |
+| host-metrics | the constant `integrations/unix` - the exporter label | the collector hostname | - |
+| container-metrics | the constant `integrations/cadvisor` - the exporter label | the collector hostname | `container` - the container name; `compose_project`, `compose_service` - from the Compose labels |
+
+In the host-metrics and container-metrics domains `job` and `instance` are a deliberate gap: `job` is the exporter constant rather than a value from labels, and `instance` is the collector hostname, the same value as `host`. These domains have one target per collector, and that target has no address.
 
 The blackbox domain is a documented exception to the global `instance` rule of section [5](#5-global-labels): for a probe the instance is the probe target itself, so the global value does not apply here and does not override the address. An `instance` declared on a container with a blackbox probe belongs to its own metrics, not to its probes.
 
@@ -1133,7 +1137,24 @@ The contract sets no delivery guarantee stronger than at-least-once: a restart o
 
 ### 14.3. Series catalog
 
-The series catalog is a normative machine-readable appendix to the manifest: the names and labels of the series of every domain, identical across all implementations of that domain. Logs have no series; their fields are set by sections 6.2 and 8.3.
+The series catalog is a normative machine-readable appendix to the manifest: the names and labels of the series of every domain, identical across all implementations of that domain. It lives in [`docs/series/`](series/): one `<domain>.yaml` file per domain of the identity table in section [6.1](#61-labels-added-by-alloy).
+
+```yaml
+domain: database
+cells:
+  postgres/basic-v1:
+    identity: [job, instance, host, collector, container, compose_project, compose_service]
+    present: [up, pg_up, pg_stat_activity_count]
+    absent: [pg_settings_max_connections]
+```
+
+A cell is a profile or a module of the domain: `scrape` in `metrics`, `<type>/<profile>` in `database`, the module name in `blackbox` and `snmp`, `node` in `host-metrics`, `cadvisor` in `container-metrics`. `present` lists the series an implementation must emit, `identity` the labels each of them must carry. `absent` lists the series the profile must switch off; the key is allowed only in the `database` domain, which is how section [8.4](#84-database-profiles) is expressed in series. An unknown key and an empty `present` are catalog load errors: a cell without required series would pass any check.
+
+The catalog is a lower bound: series and labels beyond it are allowed. It pins only the names of series and labels, never their values. It does not catch a change of meaning under the same name: units and the series type (counter or gauge) are not part of it.
+
+The catalog is snapshotted from the e2e stack of the reference implementation at the pinned version (section [14.4](#144-reference-implementation-alloy)) and reviewed by a maintainer. It is rebuilt on every change of the pinned version and on every exporter upgrade in a second implementation. A divergence between an implementation and the catalog is resolved either by editing the catalog - a contract change with a CHANGELOG entry - or by a row with a reason in [`tests/static/asymmetries.py`](../tests/static/asymmetries.py). The same file lists the type/profile pairs of the `database` domain the catalog does not carry: no e2e container runs them.
+
+Logs have no series and no catalog of their own: the fields of their records are set by sections [6.2](#62-loki-label-cardinality) and [8.3](#83-log-profiles).
 
 ### 14.4. Reference implementation: Alloy
 

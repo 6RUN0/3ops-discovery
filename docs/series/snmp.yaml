@@ -1,0 +1,21 @@
+domain: snmp
+cells:
+  if_mib:
+    identity: [job, instance, host, collector, module, device, snmp_profile]
+    present:
+      - up
+      - snmp_scrape_duration_seconds
+      - ifNumber
+      - ifOperStatus
+      - ifAdminStatus
+      - ifHighSpeed
+      - ifHCInOctets
+      - ifHCOutOctets
+      - ifInErrors
+      - ifOutErrors
+  system:
+    identity: [job, instance, host, collector, module, device, snmp_profile]
+    present:
+      - up
+      - snmp_scrape_duration_seconds
+      - sysUpTime

@@ -14,7 +14,14 @@ import pytest
 from tests.static import alloy_config as ac
 from tests.static import manifest_doc as md
 
-_DOMAINS = {"metrics", "database", "blackbox", "snmp"}
+_DOMAINS = {
+    "metrics",
+    "database",
+    "blackbox",
+    "snmp",
+    "host-metrics",
+    "container-metrics",
+}
 
 
 def test_identity_is_documented_for_every_domain_that_emits_series() -> None:

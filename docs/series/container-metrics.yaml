@@ -1,0 +1,15 @@
+domain: container-metrics
+cells:
+  cadvisor:
+    identity: [job, instance, host, collector, container, compose_project, compose_service]
+    present:
+      - container_cpu_usage_seconds_total
+      - container_memory_working_set_bytes
+      - container_memory_usage_bytes
+      - container_memory_rss
+      - container_spec_memory_limit_bytes
+      - container_network_receive_bytes_total
+      - container_network_transmit_bytes_total
+      - container_oom_events_total
+      - container_start_time_seconds
+      - container_last_seen
