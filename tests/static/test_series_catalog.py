@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
+import requests
 
 from tests.static import alloy_config as ac
 from tests.static import manifest_doc as md
 from tests.static.asymmetries import SERIES_CELLS_UNCATALOGUED
+from tools import series_catalog as sc
 from tools.series_catalog import (
     STACK_PROBES,
     CatalogError,
@@ -261,3 +264,293 @@ def test_no_phantom_gaps() -> None:
         for p in md.db_profiles()
     }
     assert set(SERIES_CELLS_UNCATALOGUED) <= real
+
+
+# --- Mutation-hardening: probes, exact messages, CLI plumbing ---
+
+
+def test_probe_helpers_build_the_expected_probe() -> None:
+    # The helpers run once at import to fill STACK_PROBES, so the table
+    # cannot show a changed helper to a mutation run; call them here. They
+    # also fix what the e2e run queries, which this pins without Docker.
+    assert sc._blackbox("icmp") == Probe(
+        "stack", 'job="blackbox",module="icmp"', True
+    )
+    assert sc._snmp("if_mib") == Probe(
+        "snmp_stack", 'job="snmp",module="if_mib"', False
+    )
+    assert sc._database("postgres", "postgres-basic") == Probe(
+        "stack", 'job="postgres",compose_service="postgres-basic"', True
+    )
+    assert STACK_PROBES["blackbox", "icmp"] == sc._blackbox("icmp")
+    assert STACK_PROBES["snmp", "if_mib"] == sc._snmp("if_mib")
+    assert STACK_PROBES["database", "postgres/basic-v1"] == sc._database(
+        "postgres", "postgres-basic"
+    )
+
+
+_OK = "    identity: [job]\n    present: [up]\n"
+
+
+@pytest.mark.parametrize(
+    ("domain", "body", "message"),
+    [
+        (
+            "metrics",
+            "1:\n" + _OK,
+            "metrics/1: a cell is a name mapped to a mapping",
+        ),
+        (
+            "metrics",
+            "scrape: [up]\n",
+            "metrics/scrape: a cell is a name mapped to a mapping",
+        ),
+        (
+            "metrics",
+            "scrape:\n    identity: [job]\n",
+            "metrics/scrape: missing keys ['present']",
+        ),
+        (
+            "metrics",
+            "scrape:\n" + _OK + "    presnt: [up]\n",
+            "metrics/scrape: unknown keys ['presnt']",
+        ),
+        (
+            "metrics",
+            "scrape:\n    identity: job\n    present: [up]\n",
+            "metrics/scrape: identity must be a list of series/label names",
+        ),
+        (
+            "metrics",
+            "scrape:\n    identity: [job]\n    present: [1]\n",
+            "metrics/scrape: present must be a list of series/label names",
+        ),
+        (
+            "metrics",
+            "scrape:\n    identity: [job]\n    present: [a b]\n",
+            "metrics/scrape: present must be a list of series/label names",
+        ),
+        (
+            "metrics",
+            "scrape:\n    identity: [job, job]\n    present: [up]\n",
+            "metrics/scrape: identity lists a name twice",
+        ),
+        (
+            "database",
+            "p/b:\n" + _OK + "    absent: [x, x]\n",
+            "database/p/b: absent lists a name twice",
+        ),
+        (
+            "metrics",
+            "scrape:\n    identity: []\n    present: [up]\n",
+            "metrics/scrape: identity and present must not be empty",
+        ),
+        (
+            "metrics",
+            "scrape:\n" + _OK + "    absent: [down]\n",
+            "metrics/scrape: absent is allowed only in the database domain",
+        ),
+        (
+            "database",
+            "p/b:\n" + _OK + "    absent: [up]\n",
+            "database/p/b: both present and absent: ['up']",
+        ),
+    ],
+)
+def test_cell_errors_name_the_cell_and_the_defect(
+    tmp_path: Path, domain: str, body: str, message: str
+) -> None:
+    indented = "".join(f"  {line}\n" for line in body.splitlines())
+    _write(tmp_path, domain, f"domain: {domain}\ncells:\n{indented}")
+    with pytest.raises(CatalogError) as caught:
+        load_catalog(tmp_path)
+    assert str(caught.value) == message
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("- a\n", "metrics.yaml: top level must be domain + cells"),
+        (
+            "domain: metrics\ncells: {a: {}}\nextra: 1\n",
+            "metrics.yaml: top level must be domain + cells",
+        ),
+        (
+            "domain: database\ncells: {a: {}}\n",
+            "metrics.yaml: domain 'database' is not the file name",
+        ),
+        (
+            "domain: metrics\ncells: {}\n",
+            "metrics.yaml: cells must be a non-empty mapping",
+        ),
+        (
+            "domain: metrics\ncells: [a]\n",
+            "metrics.yaml: cells must be a non-empty mapping",
+        ),
+    ],
+)
+def test_file_errors_name_the_file_and_the_defect(
+    tmp_path: Path, text: str, message: str
+) -> None:
+    _write(tmp_path, "metrics", text)
+    with pytest.raises(CatalogError) as caught:
+        load_catalog(tmp_path)
+    assert str(caught.value) == message
+
+
+def test_yaml_syntax_error_names_the_file(tmp_path: Path) -> None:
+    _write(tmp_path, "metrics", "domain: [\n")
+    with pytest.raises(CatalogError, match=r"^metrics\.yaml: "):
+        load_catalog(tmp_path)
+
+
+def test_duplicate_key_error_names_the_key(tmp_path: Path) -> None:
+    _write(
+        tmp_path, "metrics", "domain: metrics\ndomain: metrics\ncells: {}\n"
+    )
+    with pytest.raises(
+        CatalogError, match=r"^duplicate keys \['domain'\] at "
+    ):
+        load_catalog(tmp_path)
+
+
+def test_parity_messages_are_exact() -> None:
+    cell = _cell(present={"a", "b"}, absent={"z"}, identity={"job"})
+    where = "database/postgres/basic-v1"
+    assert parity_problems(cell, {"b": frozenset()}) == [
+        f"{where}: series a missing",
+        f"{where}: series b lacks labels ['job'] (observed [])",
+    ]
+    found = {"a": frozenset({"job"}), "b": frozenset({"job"})}
+    assert parity_problems(cell, {**found, "z": frozenset()}) == [
+        f"{where}: series z must be absent"
+    ]
+
+
+def test_series_of_a_problem_without_a_series_is_empty() -> None:
+    assert sc._series_of("not a parity problem") == ""
+    assert sc._series_of("x/y: series pg_up missing") == "pg_up"
+
+
+def test_label_names_intersect_over_every_series_not_only_the_last() -> None:
+    result = [
+        {"metric": {"__name__": "a", "job": "x", "mode": "1"}},
+        {"metric": {"__name__": "a", "job": "x"}},
+        {"metric": {"__name__": "a", "job": "x", "mode": "2"}},
+    ]
+    assert label_names_by_series(result) == {"a": frozenset({"job"})}
+
+
+class _Reply:
+    def __init__(self, payload: dict[str, Any], status: int = 200) -> None:
+        self.payload = payload
+        self.status = status
+
+    def raise_for_status(self) -> None:
+        if self.status >= 400:
+            raise requests.HTTPError(f"status {self.status}")
+
+    def json(self) -> dict[str, Any]:
+        return self.payload
+
+
+def test_query_asks_the_instant_query_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    def get(url: str, *, params: Any, timeout: Any) -> _Reply:
+        calls.append({"url": url, "params": params, "timeout": timeout})
+        return _Reply({"status": "success", "data": {"result": [{"m": 1}]}})
+
+    monkeypatch.setattr("tools.series_catalog.requests.get", get)
+    assert sc._query("http://m:9", "up") == [{"m": 1}]
+    (call,) = calls
+    assert call["url"] == "http://m:9/api/v1/query"
+    assert call["params"] == {"query": "up"}
+    assert call["timeout"] is not None
+
+
+def test_query_failures_are_loud(monkeypatch: pytest.MonkeyPatch) -> None:
+    replies = iter(
+        [_Reply({}, status=500), _Reply({"status": "error", "error": "bad"})]
+    )
+    monkeypatch.setattr(
+        "tools.series_catalog.requests.get",
+        lambda *_a, **_k: next(replies),
+    )
+    with pytest.raises(requests.HTTPError):
+        sc._query("http://m:9", "up")
+    with pytest.raises(RuntimeError, match=r"^query 'up' failed: .*'bad'"):
+        sc._query("http://m:9", "up")
+
+
+def test_snapshot_probes_every_cell_and_sorts_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asked: list[tuple[str, str]] = []
+
+    def query(url: str, expr: str) -> list[dict[str, Any]]:
+        asked.append((url, expr))
+        return [{"metric": {"__name__": "up", "job": "x", "instance": "i"}}]
+
+    monkeypatch.setattr(sc, "_query", query)
+    snapshot = sc._snapshot("http://m:9", "p1")
+    ordered = sorted(STACK_PROBES.items())
+    assert list(snapshot) == [f"{d}/{n}" for (d, n), _ in ordered]
+    assert all(s == {"up": ["instance", "job"]} for s in snapshot.values())
+    assert asked == [
+        ("http://m:9", "{" + sc._selector(p, "p1") + "}") for _, p in ordered
+    ]
+    assert 'compose_project="p1"' in asked[0][1]
+
+
+def test_main_prints_the_snapshot_as_yaml(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seen: list[tuple[str, str]] = []
+
+    def snapshot(url: str, project: str) -> dict[str, dict[str, list[str]]]:
+        seen.append((url, project))
+        return {"z/last": {"b": ["y", "x"]}, "a/first": {"c": []}}
+
+    monkeypatch.setattr(sc, "_snapshot", snapshot)
+    code = sc.main(
+        ["snapshot", "--metrics-url", "http://m:9/", "--project", "p1"]
+    )
+    assert code == 0
+    assert seen == [("http://m:9", "p1")]
+    out = capsys.readouterr().out
+    assert out == "z/last:\n  b:\n  - y\n  - x\na/first:\n  c: []\n"
+
+
+@pytest.mark.parametrize(
+    ("argv", "missing"),
+    [
+        ([], "command"),
+        (["snapshot", "--project", "p"], "--metrics-url"),
+        (["snapshot", "--metrics-url", "http://m"], "--project"),
+    ],
+)
+def test_main_requires_the_command_and_both_options(
+    argv: list[str], missing: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as caught:
+        sc.main(argv)
+    assert caught.value.code == 2
+    err = capsys.readouterr().err
+    assert "usage: python -m tools.series_catalog" in err
+    assert f"required: {missing}" in err
+
+
+def test_main_help_describes_the_snapshot_command(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as caught:
+        sc.main(["--help"])
+    assert caught.value.code == 0
+    out = capsys.readouterr().out
+    assert re.search(
+        r"\n\s+snapshot\s+print series name -> label names for every probe\n",
+        out,
+    ), out
