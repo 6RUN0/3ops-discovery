@@ -378,7 +378,7 @@ drop rules
 message normalization
 ```
 
-The list describes the scope of the notion of a log profile, not the obligations of every profile: the base profiles below implement the parser, multiline and structured metadata parts. The timestamp stage is not implemented in the reference: the record time is the docker timestamp of the line (the moment the application wrote it to stdout/stderr); a timestamp inside the line content is not parsed.
+The list describes the scope of the notion of a log profile, not the obligations of every profile: the base profiles below implement the parser, multiline and structured metadata parts. The base profiles have no timestamp stage: the record time is the docker timestamp of the line (the moment the application wrote it to stdout/stderr); a timestamp inside the line content is not parsed.
 
 The base profiles:
 
@@ -405,7 +405,7 @@ app-type-1-v1
 
 nginx-json-v1
   An example of a specialized pipeline for JSON access logs;
-  not part of the reference (same as app-type-1-v1).
+  not a base profile (same as app-type-1-v1).
 
 java-stacktrace-v1
   A multiline pipeline for Java stack traces.
@@ -454,7 +454,7 @@ The load is monotonic: basic <= standard <= extended. The order is not strict: a
 
 ### 8.5. SNMP profiles
 
-A domain-wide allowlist of versioned snmp profiles. The differentiator is the raised `timeout` (30s) for slow devices; [8.2](#82-scrape-profiles) is shared between `metrics` and `blackbox` and offers no such timeout, which is why the snmp profiles form a family of their own. The reference ships a single profile; it applies to the whole snmp scrape (the file provider yields one exporter and one scrape).
+A domain-wide allowlist of versioned snmp profiles. The differentiator is the raised `timeout` (30s) for slow devices; [8.2](#82-scrape-profiles) is shared between `metrics` and `blackbox` and offers no such timeout, which is why the snmp profiles form a family of their own. The allowlist holds a single profile; it applies to all devices of the file at once: a device entry has no profile field.
 
 SNMP profiles:
 
@@ -557,7 +557,7 @@ container-metrics
 host-logs
 ```
 
-Host domains are not driven by labels, are off by default and require deployment privileges; in the reference they are the optional files of section [14.4.3](#1443-optional-files).
+Host domains are not driven by labels, are off by default and require deployment privileges.
 
 ### 10.1. Domain: metrics
 
@@ -648,7 +648,7 @@ The standard ports per type (they apply when `database.port` is not set):
 | `ru.3ops.discovery.database.sslmode` | No | The TLS/SSL setting |
 | `ru.3ops.discovery.database.profile` | No | A collection profile from the allowlist; defaults to `standard-v1` |
 
-`database.name`, `database.user` and `database.sslmode` are inventory labels (section [13.2](#132-may-be-stored)): the reference does not read them, every connection parameter comes from `.dsn` alone, and on a mismatch between label and DSN the DSN wins. Series identity: `instance` = `database.instance`, else the global `ru.3ops.discovery.instance` (section [5](#5-global-labels)), else `secret-id` (a synthesized fallback); `job` = `database.type`.
+`database.name`, `database.user` and `database.sslmode` are inventory labels (section [13.2](#132-may-be-stored)): the implementation does not use them to connect, every connection parameter comes from `.dsn` alone, and on a mismatch between label and DSN the DSN wins. Series identity: `instance` = `database.instance`, else the global `ru.3ops.discovery.instance` (section [5](#5-global-labels)), else `secret-id` (a synthesized fallback); `job` = `database.type`.
 
 #### 10.2.2. PostgreSQL example
 
@@ -776,7 +776,7 @@ An unknown profile must never cause the loss of a container's logs.
 
 Switching collection off is the only fail-OPEN check in the contract, and deliberately so. The opt-out fires on the literal `false` alone; any other value (`False`, `0`, `no`, a typo) does NOT switch collection off, and logs keep being collected. The direction of failure was chosen in favour of the rule in section [10.3.4](#1034-unknown-profile): a typo in a label must not silently lose logs, whereas collecting more than intended is visible and reversible. Every other label is fail-closed (section [11](#11-validation-rules)).
 
-For version `0.2` a single composite profile is recommended. The additional `stream-policy`, `redaction-profile` and `drop-profile` are reserved for future extension and need not be implemented: their profile families are not defined in section [8](#8-profiles) and the reference does not read these labels.
+For version `0.2` a single composite profile is recommended. The additional `stream-policy`, `redaction-profile` and `drop-profile` are reserved for future extension and need not be implemented: their profile families are not defined in section [8](#8-profiles).
 
 #### 10.3.6. Examples
 
@@ -916,7 +916,7 @@ The device file (`snmp_targets.yaml`) is a list of entries; every value is store
 | `environment` | no | A provenance label (passed through as non-reserved) |
 | `team` | no | A provenance label (passed through as non-reserved) |
 
-The device field is called `auth` -- a reference by name to a profile of the merged `auths:` map; storing such names outside secrets is permitted by section [13.2](#132-may-be-stored). The secret (the SNMP community or the SNMPv3 credentials) lives only in `snmp_auths.yaml` (section [10.6.1](#1061-snmp-auth)), never in the device file.
+The device field is called `auth` -- a reference by name to an auth profile (section [10.6.1](#1061-snmp-auth)); storing such names outside secrets is permitted by section [13.2](#132-may-be-stored). The secret (the SNMP community or the SNMPv3 credentials) lives only in `snmp_auths.yaml` (section [10.6.1](#1061-snmp-auth)), never in the device file.
 
 The [10.7](#107-domain-ipmi) (ipmi) domain is structurally similar but stays a label-driven domain in this phase (a file provider for it is out of scope).
 
@@ -1249,12 +1249,15 @@ The contract sections state their requirements without naming an implementation.
   - `mysql`/`mariadb`: `basic-v1` - `global_status`, `global_variables`; `standard-v1` - the six default collectors, pinned explicitly in `set_collectors`; `extended-v1` - the same plus `engine_innodb_status`, `info_schema.processlist`, `auto_increment.columns`.
   - `redis`: `basic-v1` - `redis_metrics_only`; in the pinned version the flag only removes `redis_exporter_build_info` from the exporter's internal registry, which Alloy does not serve, and Alloy produces no series outside `redis_*` without it either (`include_exporter_metrics = false`), so in series `basic-v1` equals `standard-v1`; `standard-v1` - the exporter defaults; `extended-v1` - the defaults plus `export_client_list` and `incl_system_metrics`.
   - `mongodb`: `basic-v1` - diagnostic data only (`serverStatus`, `enable_diagnostic_data`); `standard-v1` and `extended-v1` - `collect_all` plus explicit `enable_*` flags equal to the ones `collect_all` turns on: without them the first scrape of each exporter is incomplete. `extended-v1` equals `standard-v1` because the mongodb exporter default is already maximal.
+- [§8.5](#85-snmp-profiles): the file provider yields one `prometheus.exporter.snmp` and one `prometheus.scrape`, so the `snmp-standard-v1` profile applies to the whole domain.
 - [§9](#9-secret-contract): a secret file is read by `local.file` at `coalesce(sys.env("RU_3OPS_DISCOVERY_SECRETS_DIR"), "/run/alloy-secrets")` + `/<secret-id>.<suffix>`; hiding comes from `is_secret = true`, and the Alloy API and component exports hand the value out as `(secret)`. The address-only redis `.dsn` is read with `is_secret = false`: the exporter's `redis_addr` argument takes a plain string rather than a secret; the password from `.redispass` goes through `redis_password`.
 - [§9](#9-secret-contract), the hiding limit: when the declared type and the file content disagree, the Alloy configuration-load error message may quote a fragment of the value read. This is Alloy behaviour, and no configuration changes it.
 - [§9](#9-secret-contract), the failure radius: in the database domain a missing secret file takes down the WHOLE `foreach` block of its database type. A container declaring a regex-valid `secret-id` with no file behind it fails the evaluation of the entire block, and legitimate databases OF THE SAME TYPE stop being collected with it; databases of other types live in their own blocks and are untouched. The failure is reversible: once the container is removed, the block recovers on its own. The reading "a `local.file` per iteration, therefore a per-iteration failure" is wrong: that is established by reproduction rather than derived from how `foreach` is built. The separation by type is a side effect of the configuration's structure, not a protection; the health of Alloy components needs monitoring. A top-level `local.file` (the snmp file provider, section [10.6](#106-domain-snmp)) has no localization at all: its path is set by the operator, and a missing file brings the graph down in a cascade, so overlay 037 is loaded only together with its files.
+- [§10](#10-domains): the reference ships the host domains as the optional files of section [14.4.3](#1443-optional-files): host-metrics - [`070_host-metrics.alloy`](../alloy-optional/070_host-metrics.alloy), container-metrics - [`075_container-metrics.alloy`](../alloy-optional/075_container-metrics.alloy), host-logs - [`080_host-logs.alloy`](../alloy-optional/080_host-logs.alloy).
 - [§10.2](#102-domain-database): each type is served by an Alloy exporter: `prometheus.exporter.postgres`, `prometheus.exporter.mysql` (also for `mariadb`), `prometheus.exporter.redis`, `prometheus.exporter.mongodb`. The port is matched by a `keepequal` rule against `__meta_docker_port_private`; the reference does not detect a mismatch between the port in the label and in the DSN.
 - [§10.3.1](#1031-default-collection-policy): the reference excludes the container before the source: `discovery.relabel` drops a target with `logs.enabled=false`, and `loki.source.docker` never opens the stream of that container. The chain: `discovery.docker` (every container) -> `discovery.relabel` (excludes `logs.enabled=false` only) -> `loki.source.docker` -> `loki.process` (the profile dispatcher) -> `loki.write`.
 - [§10.3.4](#1034-unknown-profile): the reference fulfils items 1-2 with an allowlist rule in `discovery.relabel` that replaces an unknown profile with `raw-v1`. The reference does not fulfil items 3-4: the diagnostic message and the metric are unavailable at the relabel level.
+- [§10.3.5](#1035-labels): the reference does not read the `stream-policy`, `redaction-profile` and `drop-profile` labels.
 - [§10.4](#104-domain-blackbox): the module allowlist is `http_2xx`, `tcp_connect`, `icmp`, `tls_connect`; it is set by a `discovery.relabel` keep rule and by the inline `config` of the `prometheus.exporter.blackbox` component ([`035_blackbox.alloy`](../alloy/035_blackbox.alloy)).
 - [§10.5](#105-domain-otel): the receiver is `otelcol.receiver.otlp` in the overlay [`060_otel.alloy`](../alloy-optional/060_otel.alloy); a different port is an edit of that overlay, a customization under section [14.4.1](#1441-customization). The receiver has no traces output, so a trace export is rejected. Of the OTLP resource attributes only `service.name` is promoted into indexed fields, as `service_name`.
 - [§10.6](#106-domain-snmp): the domain ships as the overlay file [`037_snmp.alloy`](../alloy-optional/037_snmp.alloy) (section [14.4.3](#1443-optional-files)) rather than as a base file: its top-level `local.file` becomes unhealthy without a file on disk and brings the graph down in a cascade, so the overlay is loaded only together with the device file and the auth profile file. `encoding.from_yaml` decodes the device file into `list(map(string))`. `prometheus.exporter.snmp` requires `name` on every entry, so the configuration substitutes `address` when `name` is absent. The reference module allowlist is `if_mib` and `system`.
