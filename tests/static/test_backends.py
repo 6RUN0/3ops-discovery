@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from dataclasses import FrozenInstanceError, replace
+from pathlib import Path
 from typing import Any
 
 import pytest
 import requests
 
 from tools.backends import (
+    BACKEND_NAMES,
     LogQuery,
     LokiBackend,
     UnscopedQueryError,
@@ -579,3 +582,31 @@ def test_http_errors_are_not_read_as_empty(
     _fake_http(monkeypatch, _FakeResponse(status=500, payload={}))
     with pytest.raises(requests.HTTPError):
         getattr(backend(_BASE), method)(Q)
+
+
+def _conftest_backend_keys() -> set[str]:
+    """Return the string keys of the `BACKENDS` literal in the e2e conftest."""
+    path = Path(__file__).resolve().parents[1] / "e2e" / "conftest.py"
+    for node in ast.parse(path.read_text()).body:
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "BACKENDS"
+            and isinstance(node.value, ast.Dict)
+        ):
+            return {
+                key.value
+                for key in node.value.keys
+                if isinstance(key, ast.Constant) and isinstance(key.value, str)
+            }
+    raise AssertionError("no `BACKENDS: ... = {...}` literal in conftest")
+
+
+def test_e2e_backends_match_backend_names() -> None:
+    """
+    Pins: a variant added to one list and not the other fails in `tests`.
+
+    The conftest check raises only when the e2e suite is collected, so
+    `nox -s tests` alone would pass a mismatch.
+    """
+    assert _conftest_backend_keys() == set(BACKEND_NAMES)
