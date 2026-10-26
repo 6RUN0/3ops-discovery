@@ -464,6 +464,8 @@ foreach "redis" {
 		// adds client-list and system memory metrics on top of the defaults.
 		// redis_metrics_only only drops redis_exporter_build_info from a
 		// registry Alloy does not serve, so basic-v1 equals standard-v1 in series.
+		// Alloy serves a same-named redis_exporter_build_info of its own
+		// (integration build info) regardless of the flag.
 		prometheus.exporter.redis "db" {
 			redis_addr     = local.file.addr.content
 			redis_password = local.file.password.content
