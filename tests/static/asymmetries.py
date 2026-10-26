@@ -142,6 +142,16 @@ MANIFEST_IMPLEMENTATION_MENTIONS: dict[str, str] = {
     "14": "registry names the agent",
 }
 
+#: Contract rules the reference does not meet: "<section>/<items>" ->
+#: reason. Each unmet rule has a 14.4.4 bullet that names this table
+#: (tests/static/test_rules_unmet.py); a rule stays a MUST in the contract.
+MANIFEST_RULES_UNMET: dict[str, str] = {
+    "10.3.4/3-4": "the reference replaces an unknown log profile with "
+    "raw-v1 in a discovery.relabel rule; relabel rules cannot write to the "
+    "collector's own log (item 3) or increment a metric (item 4), so "
+    "neither is emitted (manifest 14.4.4).",
+}
+
 #: Database type x profile cells (manifest 10.2 x 8.4) the series catalog
 #: does not carry: a catalog cell is snapshotted from an e2e container,
 #: and no e2e container runs these pairs. test_series_catalog.py demands

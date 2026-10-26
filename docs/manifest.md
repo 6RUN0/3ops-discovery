@@ -238,8 +238,8 @@ Series identity per domain. Dashboards and alert rules bind to exactly these val
 | database | the database type (`database.type`) | `database.instance`, else the global `instance`, else `secret-id` | -- |
 | blackbox | the constant `blackbox` | the probe address (`blackbox.address` or the container address) | `module` -- the probe type |
 | snmp | the constant `snmp` | the device address | `device` -- the device name; `snmp_profile` -- the profile name of section [8.5](#85-snmp-profiles) |
-| host-metrics | the constant `integrations/unix` - the exporter label | the collector hostname | - |
-| container-metrics | the constant `integrations/cadvisor` - the exporter label | the collector hostname | `container` - the container name; `compose_project`, `compose_service` - from the Compose labels |
+| host-metrics | the constant `integrations/unix` - the exporter's constant | the collector hostname | - |
+| container-metrics | the constant `integrations/cadvisor` - the exporter's constant | the collector hostname | `container` - the container name; `compose_project`, `compose_service` - from the Compose labels |
 
 In the host-metrics and container-metrics domains `job` and `instance` are a deliberate gap: `job` is the exporter constant rather than a value from labels, and `instance` is the collector hostname (the exporter default, not set by `RU_3OPS_DISCOVERY_HOSTNAME`). It equals `host` only while the parameter is unset or empty; queries that join these domains with the others join on `host`, not on `instance`. These domains have one target per collector, and that target has no address.
 
@@ -1256,7 +1256,7 @@ The contract sections state their requirements without naming an implementation.
 - [§10](#10-domains): the reference ships the host domains as the optional files of section [14.4.3](#1443-optional-files): host-metrics - [`070_host-metrics.alloy`](../alloy-optional/070_host-metrics.alloy), container-metrics - [`075_container-metrics.alloy`](../alloy-optional/075_container-metrics.alloy), host-logs - [`080_host-logs.alloy`](../alloy-optional/080_host-logs.alloy).
 - [§10.2](#102-domain-database): each type is served by an Alloy exporter: `prometheus.exporter.postgres`, `prometheus.exporter.mysql` (also for `mariadb`), `prometheus.exporter.redis`, `prometheus.exporter.mongodb`. The port is matched by a `keepequal` rule against `__meta_docker_port_private`; the reference does not detect a mismatch between the port in the label and in the DSN.
 - [§10.3.1](#1031-default-collection-policy): the reference excludes the container before the source: `discovery.relabel` drops a target with `logs.enabled=false`, and `loki.source.docker` never opens the stream of that container. The chain: `discovery.docker` (every container) -> `discovery.relabel` (excludes `logs.enabled=false` only) -> `loki.source.docker` -> `loki.process` (the profile dispatcher) -> `loki.write`.
-- [§10.3.4](#1034-unknown-profile): the reference fulfils items 1-2 with an allowlist rule in `discovery.relabel` that replaces an unknown profile with `raw-v1`. The reference does not fulfil items 3-4: the diagnostic message and the metric are unavailable at the relabel level.
+- [§10.3.4](#1034-unknown-profile): the reference fulfils items 1-2 with an allowlist rule in `discovery.relabel` that replaces an unknown profile with `raw-v1`. The reference does not fulfil items 3-4: the diagnostic message and the metric are unavailable at the relabel level. The gap is recorded in `MANIFEST_RULES_UNMET` ([`asymmetries.py`](../tests/static/asymmetries.py)); item 3 stays mandatory for an implementation.
 - [§10.3.5](#1035-labels): the reference does not read the `stream-policy`, `redaction-profile` and `drop-profile` labels.
 - [§10.4](#104-domain-blackbox): the module allowlist is `http_2xx`, `tcp_connect`, `icmp`, `tls_connect`; it is set by a `discovery.relabel` keep rule and by the inline `config` of the `prometheus.exporter.blackbox` component ([`035_blackbox.alloy`](../alloy/035_blackbox.alloy)).
 - [§10.5](#105-domain-otel): the receiver is `otelcol.receiver.otlp` in the overlay [`060_otel.alloy`](../alloy-optional/060_otel.alloy); a different port is an edit of that overlay, a customization under section [14.4.1](#1441-customization). The receiver has no traces output, so a trace export is rejected. Of the OTLP resource attributes only `service.name` is promoted into indexed fields, as `service_name`.
@@ -1275,7 +1275,7 @@ The contract sections state their requirements without naming an implementation.
 YAML anchors may be used to reduce duplication:
 
 ```yaml
-x-3ops-discovery-common: &alloy-discovery-common
+x-3ops-discovery-common: &3ops-discovery-common
   ru.3ops.discovery.enabled: "true"
   ru.3ops.discovery.version: "0.2"
   ru.3ops.discovery.environment: "production"
@@ -1284,7 +1284,7 @@ services:
   rabbitmq:
     image: rabbitmq:4-management
     labels:
-      <<: *alloy-discovery-common
+      <<: *3ops-discovery-common
       ru.3ops.discovery.instance: "rabbitmq-main"
       ru.3ops.discovery.team: "platform"
 
@@ -1297,7 +1297,7 @@ services:
   postgres:
     image: postgres:18
     labels:
-      <<: *alloy-discovery-common
+      <<: *3ops-discovery-common
       ru.3ops.discovery.instance: "orders-postgres"
       ru.3ops.discovery.team: "orders"
 

@@ -231,8 +231,8 @@ Label `instance` относится к метрикам; для логов ег�
 | database | тип СУБД (`database.type`) | `database.instance`, иначе глобальный `instance`, иначе `secret-id` | — |
 | blackbox | константа `blackbox` | адрес пробы (`blackbox.address` или адрес контейнера) | `module` — тип пробы |
 | snmp | константа `snmp` | адрес устройства | `device` — имя устройства; `snmp_profile` — имя профиля раздела [8.5](#85-snmp-профили) |
-| host-metrics | константа `integrations/unix` - метка экспортёра | hostname коллектора | - |
-| container-metrics | константа `integrations/cadvisor` - метка экспортёра | hostname коллектора | `container` - имя контейнера; `compose_project`, `compose_service` - из меток Compose |
+| host-metrics | константа `integrations/unix` - константа экспортёра | hostname коллектора | - |
+| container-metrics | константа `integrations/cadvisor` - константа экспортёра | hostname коллектора | `container` - имя контейнера; `compose_project`, `compose_service` - из меток Compose |
 
 В доменах host-metrics и container-metrics `job` и `instance` - осознанный пробел: `job` - константа экспортёра, а не значение из меток, `instance` - hostname коллектора (умолчание экспортёра, параметром `RU_3OPS_DISCOVERY_HOSTNAME` не задаётся). Совпадает с `host`, только пока параметр не задан или пуст; запросы, которые связывают эти домены с остальными, связывают их по `host`, а не по `instance`. Цель у этих доменов одна на коллектор, адреса цели у неё нет.
 
@@ -1249,7 +1249,7 @@ Alloy сливает все `*.alloy`-файлы каталога в один г
 - [§10](#10-домены): хост-домены эталон поставляет опциональными файлами раздела [14.4.3](#1443-опциональные-файлы): host-metrics - [`070_host-metrics.alloy`](../alloy-optional/070_host-metrics.alloy), container-metrics - [`075_container-metrics.alloy`](../alloy-optional/075_container-metrics.alloy), host-logs - [`080_host-logs.alloy`](../alloy-optional/080_host-logs.alloy).
 - [§10.2](#102-domain-database): каждый тип обслуживает экспортёр Alloy: `prometheus.exporter.postgres`, `prometheus.exporter.mysql` (он же для `mariadb`), `prometheus.exporter.redis`, `prometheus.exporter.mongodb`. Порт сверяется правилом `keepequal` с `__meta_docker_port_private`; расхождение порта в label и в DSN эталон не обнаруживает.
 - [§10.3.1](#1031-политика-сбора-по-умолчанию): эталон исключает контейнер до источника: `discovery.relabel` отбрасывает цель с `logs.enabled=false`, и `loki.source.docker` поток этого контейнера не открывает. Цепочка: `discovery.docker` (все контейнеры) -> `discovery.relabel` (исключает только `logs.enabled=false`) -> `loki.source.docker` -> `loki.process` (диспетчер профилей) -> `loki.write`.
-- [§10.3.4](#1034-неизвестный-профиль): пункты 1-2 эталон выполняет allowlist-правилом в `discovery.relabel`, которое заменяет неизвестный профиль на `raw-v1`. Пункты 3-4 эталон не выполняет: на уровне relabel диагностическое сообщение и метрика недоступны.
+- [§10.3.4](#1034-неизвестный-профиль): пункты 1-2 эталон выполняет allowlist-правилом в `discovery.relabel`, которое заменяет неизвестный профиль на `raw-v1`. Пункты 3-4 эталон не выполняет: на уровне relabel диагностическое сообщение и метрика недоступны. Расхождение записано в `MANIFEST_RULES_UNMET` ([`asymmetries.py`](../tests/static/asymmetries.py)); пункт 3 остаётся обязательным для реализации.
 - [§10.3.5](#1035-labels): labels `stream-policy`, `redaction-profile` и `drop-profile` эталон не читает.
 - [§10.4](#104-domain-blackbox): allowlist модулей - `http_2xx`, `tcp_connect`, `icmp`, `tls_connect`; его задают keep-правило `discovery.relabel` и inline `config` компонента `prometheus.exporter.blackbox` ([`035_blackbox.alloy`](../alloy/035_blackbox.alloy)).
 - [§10.5](#105-domain-otel): приёмник - `otelcol.receiver.otlp` в overlay [`060_otel.alloy`](../alloy-optional/060_otel.alloy); другой порт - правка этого overlay, кастомизация раздела [14.4.1](#1441-кастомизация). Выхода traces у приёмника нет, поэтому trace-экспорт отклоняется. Из resource-атрибутов OTLP в индексируемые поля продвигается только `service.name` -> `service_name`.
@@ -1268,7 +1268,7 @@ Alloy сливает все `*.alloy`-файлы каталога в один г
 Для уменьшения дублирования можно использовать YAML anchors:
 
 ```yaml
-x-3ops-discovery-common: &alloy-discovery-common
+x-3ops-discovery-common: &3ops-discovery-common
   ru.3ops.discovery.enabled: "true"
   ru.3ops.discovery.version: "0.2"
   ru.3ops.discovery.environment: "production"
@@ -1277,7 +1277,7 @@ services:
   rabbitmq:
     image: rabbitmq:4-management
     labels:
-      <<: *alloy-discovery-common
+      <<: *3ops-discovery-common
       ru.3ops.discovery.instance: "rabbitmq-main"
       ru.3ops.discovery.team: "platform"
 
@@ -1290,7 +1290,7 @@ services:
   postgres:
     image: postgres:18
     labels:
-      <<: *alloy-discovery-common
+      <<: *3ops-discovery-common
       ru.3ops.discovery.instance: "orders-postgres"
       ru.3ops.discovery.team: "orders"
 
