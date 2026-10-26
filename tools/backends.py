@@ -301,11 +301,27 @@ def _reject_line_filters(query: LogQuery) -> None:
         )
 
 
+class _EntriesFromRecords:
+    """Mixin giving a backend `entries` in terms of its own `records`."""
+
+    def records(
+        self, query: LogQuery, *, since: str = "30m"
+    ) -> list[LogRecord]:
+        """Supplied by the backend."""
+        raise NotImplementedError
+
+    def entries(
+        self, query: LogQuery, *, since: str = "30m"
+    ) -> list[tuple[str, str]]:
+        """`(ts, line)` of every record, ascending by `ts`."""
+        return [(r.ts, r.line) for r in self.records(query, since=since)]
+
+
 _LOKI_PAGE = 5000
 _LOKI_CATEGORIZE = {"X-Loki-Response-Encoding-Flags": "categorize-labels"}
 
 
-class LokiBackend:
+class LokiBackend(_EntriesFromRecords):
     """`LogsBackend` over the Loki HTTP API."""
 
     def __init__(self, url: str) -> None:
@@ -345,12 +361,6 @@ class LokiBackend:
             if len(batch) < _LOKI_PAGE:
                 return sorted(records, key=lambda r: int(r.ts))
             start_ns = max(int(r.ts) for r in batch) + 1
-
-    def entries(
-        self, query: LogQuery, *, since: str = "30m"
-    ) -> list[tuple[str, str]]:
-        """`(ts, line)` of every record, ascending by `ts`."""
-        return [(r.ts, r.line) for r in self.records(query, since=since)]
 
     def streams(
         self, query: LogQuery, *, since: str = "30m"
@@ -466,7 +476,7 @@ def victorialogs_rows_to_records(
     return sorted(records, key=lambda r: int(r.ts))
 
 
-class VictoriaLogsBackend:
+class VictoriaLogsBackend(_EntriesFromRecords):
     """`LogsBackend` over the VictoriaLogs HTTP API."""
 
     def __init__(self, url: str) -> None:
@@ -490,12 +500,6 @@ class VictoriaLogsBackend:
         )
         resp.raise_for_status()
         return victorialogs_rows_to_records(parse_json_lines(resp.text))
-
-    def entries(
-        self, query: LogQuery, *, since: str = "30m"
-    ) -> list[tuple[str, str]]:
-        """`(ts, line)` of every record, ascending by `ts`."""
-        return [(r.ts, r.line) for r in self.records(query, since=since)]
 
     def streams(
         self, query: LogQuery, *, since: str = "30m"

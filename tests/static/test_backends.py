@@ -521,6 +521,14 @@ def test_entries_pass_the_window_through(
     assert calls[1]["params"]["start"] == expected
 
 
+def test_entries_is_defined_once_for_both_backends() -> None:
+    # Two copies of the one-liner can drift apart; the shared base keeps
+    # `entries` a function of `records` alone.
+    assert "entries" not in vars(LokiBackend)
+    assert "entries" not in vars(VictoriaLogsBackend)
+    assert LokiBackend.entries is VictoriaLogsBackend.entries
+
+
 def test_default_window_is_thirty_minutes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
