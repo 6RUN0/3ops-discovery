@@ -57,8 +57,8 @@ def test_env_defaults_anchor() -> None:
 
 def test_base_files_anchor() -> None:
     files = md.base_files()
-    assert "010_discovery.alloy" in files
-    assert len(files) == 7
+    assert "010_discovery-scrape.alloy" in files
+    assert len(files) == 9
 
 
 def test_alloy_image_tag_anchor() -> None:

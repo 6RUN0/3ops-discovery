@@ -49,7 +49,7 @@
 - Требование версии в имени распространено на все профили, не только на log-профили.
 - Secret contract обобщён на домены `snmp` и `ipmi` (доменные суффиксы файлов секретов).
 - Задокументировано исключение домена `logs` из требования `ru.3ops.discovery.enabled`.
-- Референсная конфигурация Alloy вынесена в каталог `alloy/` (файлы с числовыми префиксами; единая точка интеграции с backend — [`090_outputs.alloy`](implementations/alloy/base/090_outputs.alloy)).
+- Референсная конфигурация Alloy вынесена в каталог `alloy/` (файлы с числовыми префиксами; единая точка интеграции с backend — [`090_output-metrics.alloy`](implementations/alloy/base/090_output-metrics.alloy) и [`091_output-logs.alloy`](implementations/alloy/base/091_output-logs.alloy)).
 - Определён контракт переменных окружения `RU_3OPS_DISCOVERY_*` для deployment-специфичных параметров референсной конфигурации.
 - Поля, извлечённые из содержимого логов, отправляются только в structured metadata, не в stream labels.
 - Пространство `secret-id` задокументировано как единый trust domain хоста; привязка секрета к identity контейнера объявлена out of scope.

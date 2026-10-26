@@ -4,7 +4,7 @@ from tests.static import alloy_config as ac
 
 
 def test_sources_lists_all_base_files() -> None:
-    assert len(ac.sources()) == 7
+    assert len(ac.sources()) == 9
     assert "020_metrics.alloy" in ac.sources()
 
 

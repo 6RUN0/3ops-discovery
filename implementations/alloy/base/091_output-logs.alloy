@@ -1,0 +1,21 @@
+// Logs backend shared by all pipelines. Together with 090 this is the
+// integration point with storage: swap or extend it without touching the
+// discovery and pipeline files.
+//
+// loki.write speaks the Loki push API. For OTLP backends convert the
+// stream with otelcol.receiver.loki and export via otelcol.exporter.otlp,
+// replacing the receiver referenced in forward_to lists.
+//
+// Environment overrides (RU_3OPS_DISCOVERY_ = 3ops Discovery):
+//   RU_3OPS_DISCOVERY_LOKI_PUSH_URL  logs endpoint (Loki push API)
+//
+// Do not embed credentials in this URL (https://user:pass@host): the
+// value is a plain string and can surface in the Alloy UI and logs. Use
+// a basic_auth or authorization block inside endpoint, with the secret
+// read via local.file (is_secret = true).
+
+loki.write "default" {
+	endpoint {
+		url = coalesce(sys.env("RU_3OPS_DISCOVERY_LOKI_PUSH_URL"), "http://loki:3100/loki/api/v1/push")
+	}
+}

@@ -17,14 +17,14 @@ def test_materialize_is_idempotent_on_a_reused_dest(tmp_path: Path) -> None:
     mz.materialize(dest, optional=["060_otel.alloy"])
     names = {p.name for p in dest.glob("*.alloy")}
     assert "060_otel.alloy" in names
-    assert "090_outputs.alloy" in names  # a base file came along too
+    assert "090_output-metrics.alloy" in names  # a base file came along too
 
 
 def test_materialize_rejects_an_optional_shadowing_a_base_file(
     tmp_path: Path,
 ) -> None:
     with pytest.raises(FileExistsError, match="collides with a base file"):
-        mz.materialize(tmp_path / "cfg", optional=["090_outputs.alloy"])
+        mz.materialize(tmp_path / "cfg", optional=["090_output-metrics.alloy"])
 
 
 def test_materialize_removes_stale_files_from_a_reused_dest(

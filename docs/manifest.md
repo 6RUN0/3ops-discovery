@@ -1187,13 +1187,15 @@ The reference offers no configuration free of experimental features: `foreach` l
 
 | File | Content |
 |---|---|
-| [`010_discovery.alloy`](../implementations/alloy/base/010_discovery.alloy) | `discovery.docker`: opt-in discovery for metrics/database and discovery of every container for logs |
+| [`010_discovery-scrape.alloy`](../implementations/alloy/base/010_discovery-scrape.alloy) | `discovery.docker` for metrics/database: opt-in discovery of only the containers labelled `ru.3ops.discovery.enabled=true` |
+| [`011_discovery-logs.alloy`](../implementations/alloy/base/011_discovery-logs.alloy) | `discovery.docker` for logs: discovery of every container |
 | [`020_metrics.alloy`](../implementations/alloy/base/020_metrics.alloy) | The metrics domain: a shared relabel (validation plus provenance) and a `discovery.relabel`/`prometheus.scrape` pair per profile of section [8.2](#82-scrape-profiles) |
 | [`030_database.alloy`](../implementations/alloy/base/030_database.alloy) | The database domain: a `foreach` pipeline per database type, the DSN from a secret file, the collection volume from `database.profile` (section [8.4](#84-database-profiles)) |
 | [`035_blackbox.alloy`](../implementations/alloy/base/035_blackbox.alloy) | The blackbox domain: a shared `discovery.relabel` plus `prometheus.exporter.blackbox` (modules `http_2xx`/`tcp_connect`/`icmp`/`tls_connect`) and a filter-plus-scrape pair per profile of section [8.2](#82-scrape-profiles) |
 | [`040_logs.alloy`](../implementations/alloy/base/040_logs.alloy) | The logs domain: relabel rules and `loki.source.docker` |
 | [`050_log-profiles.alloy`](../implementations/alloy/base/050_log-profiles.alloy) | The profile dispatcher: `loki.process` with the base log profiles |
-| [`090_outputs.alloy`](../implementations/alloy/base/090_outputs.alloy) | The outputs: `prometheus.remote_write` and `loki.write` |
+| [`090_output-metrics.alloy`](../implementations/alloy/base/090_output-metrics.alloy) | The metrics output: `prometheus.remote_write` |
+| [`091_output-logs.alloy`](../implementations/alloy/base/091_output-logs.alloy) | The logs output: `loki.write` |
 
 The file order, the layout of the profile pairs, the per-port target fan-out, state storage and store integration are described in [`implementations/alloy/README.md`](../implementations/alloy/README.md).
 
@@ -1215,11 +1217,11 @@ The public API of the base configuration: the stable exports an overlay file may
 
 | Export | Component |
 |---|---|
-| `prometheus.remote_write.default.receiver` | [`090_outputs.alloy`](../implementations/alloy/base/090_outputs.alloy) |
-| `loki.write.default.receiver` | [`090_outputs.alloy`](../implementations/alloy/base/090_outputs.alloy) |
+| `prometheus.remote_write.default.receiver` | [`090_output-metrics.alloy`](../implementations/alloy/base/090_output-metrics.alloy) |
+| `loki.write.default.receiver` | [`091_output-logs.alloy`](../implementations/alloy/base/091_output-logs.alloy) |
 | `loki.process.docker_profiles.receiver` | [`050_log-profiles.alloy`](../implementations/alloy/base/050_log-profiles.alloy) |
-| `discovery.docker.containers.targets` | [`010_discovery.alloy`](../implementations/alloy/base/010_discovery.alloy) |
-| `discovery.docker.docker_logs.targets` | [`010_discovery.alloy`](../implementations/alloy/base/010_discovery.alloy) |
+| `discovery.docker.containers.targets` | [`010_discovery-scrape.alloy`](../implementations/alloy/base/010_discovery-scrape.alloy) |
+| `discovery.docker.docker_logs.targets` | [`011_discovery-logs.alloy`](../implementations/alloy/base/011_discovery-logs.alloy) |
 
 #### 14.4.3. Optional files
 

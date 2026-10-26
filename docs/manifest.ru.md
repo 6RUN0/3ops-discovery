@@ -1180,13 +1180,15 @@ docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.21.2 \
 
 | Файл | Содержимое |
 |---|---|
-| [`010_discovery.alloy`](../implementations/alloy/base/010_discovery.alloy) | `discovery.docker`: opt-in discovery для metrics/database и discovery всех контейнеров для логов |
+| [`010_discovery-scrape.alloy`](../implementations/alloy/base/010_discovery-scrape.alloy) | `discovery.docker` для metrics/database: opt-in discovery только контейнеров с меткой `ru.3ops.discovery.enabled=true` |
+| [`011_discovery-logs.alloy`](../implementations/alloy/base/011_discovery-logs.alloy) | `discovery.docker` для логов: discovery всех контейнеров |
 | [`020_metrics.alloy`](../implementations/alloy/base/020_metrics.alloy) | Домен metrics: общий relabel (валидация + провенанс) и пара `discovery.relabel`/`prometheus.scrape` на каждый профиль раздела [8.2](#82-scrape-профили) |
 | [`030_database.alloy`](../implementations/alloy/base/030_database.alloy) | Домен database: `foreach`-pipeline на тип СУБД, DSN из файла секрета, объём сбора по `database.profile` (раздел [8.4](#84-database-профили)) |
 | [`035_blackbox.alloy`](../implementations/alloy/base/035_blackbox.alloy) | Домен blackbox: общий `discovery.relabel` + `prometheus.exporter.blackbox` (модули `http_2xx`/`tcp_connect`/`icmp`/`tls_connect`) и пара фильтр+scrape на каждый профиль раздела [8.2](#82-scrape-профили) |
 | [`040_logs.alloy`](../implementations/alloy/base/040_logs.alloy) | Домен logs: relabel-правила и `loki.source.docker` |
 | [`050_log-profiles.alloy`](../implementations/alloy/base/050_log-profiles.alloy) | Profile dispatcher: `loki.process` с базовыми log-профилями |
-| [`090_outputs.alloy`](../implementations/alloy/base/090_outputs.alloy) | Выходы: `prometheus.remote_write` и `loki.write` |
+| [`090_output-metrics.alloy`](../implementations/alloy/base/090_output-metrics.alloy) | Выход метрик: `prometheus.remote_write` |
+| [`091_output-logs.alloy`](../implementations/alloy/base/091_output-logs.alloy) | Выход логов: `loki.write` |
 
 Порядок файлов, устройство профильных пар, fan-out targets по портам, хранение состояния и подключение хранилищ описаны в [`implementations/alloy/README.md`](../implementations/alloy/README.md).
 
@@ -1208,11 +1210,11 @@ Alloy сливает все `*.alloy`-файлы каталога в один г
 
 | Экспорт | Компонент |
 |---|---|
-| `prometheus.remote_write.default.receiver` | [`090_outputs.alloy`](../implementations/alloy/base/090_outputs.alloy) |
-| `loki.write.default.receiver` | [`090_outputs.alloy`](../implementations/alloy/base/090_outputs.alloy) |
+| `prometheus.remote_write.default.receiver` | [`090_output-metrics.alloy`](../implementations/alloy/base/090_output-metrics.alloy) |
+| `loki.write.default.receiver` | [`091_output-logs.alloy`](../implementations/alloy/base/091_output-logs.alloy) |
 | `loki.process.docker_profiles.receiver` | [`050_log-profiles.alloy`](../implementations/alloy/base/050_log-profiles.alloy) |
-| `discovery.docker.containers.targets` | [`010_discovery.alloy`](../implementations/alloy/base/010_discovery.alloy) |
-| `discovery.docker.docker_logs.targets` | [`010_discovery.alloy`](../implementations/alloy/base/010_discovery.alloy) |
+| `discovery.docker.containers.targets` | [`010_discovery-scrape.alloy`](../implementations/alloy/base/010_discovery-scrape.alloy) |
+| `discovery.docker.docker_logs.targets` | [`011_discovery-logs.alloy`](../implementations/alloy/base/011_discovery-logs.alloy) |
 
 #### 14.4.3. Опциональные файлы
 

@@ -20,10 +20,3 @@ discovery.docker "containers" {
 		values = ["ru.3ops.discovery.enabled=true"]
 	}
 }
-
-// Log discovery covers all containers: logs are collected by default,
-// ru.3ops.discovery.logs.enabled=false is the explicit opt-out.
-discovery.docker "docker_logs" {
-	host             = coalesce(sys.env("RU_3OPS_DISCOVERY_DOCKER_HOST"), "unix:///var/run/docker.sock")
-	refresh_interval = coalesce(sys.env("RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL"), "30s")
-}

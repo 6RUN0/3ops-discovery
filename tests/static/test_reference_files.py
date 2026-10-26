@@ -15,13 +15,7 @@ from tests.static import alloy_config as ac
 from tests.static import manifest_doc as md
 
 _REPO = Path(__file__).resolve().parents[2]
-_COMPOSE = (
-    Path(__file__).resolve().parents[2]
-    / "tests"
-    / "e2e"
-    / "stack"
-    / "docker-compose.yml"
-)
+_COMPOSE = _REPO / "tests" / "e2e" / "stack" / "docker-compose.yml"
 
 
 def test_file_table_matches_directory_both_ways() -> None:
@@ -87,3 +81,27 @@ def test_reference_lives_under_implementations() -> None:
             else []
         )
         assert not left, f"{old}/ still holds {left}"
+
+
+def test_split_keeps_every_component_once() -> None:
+    blocks = ac.component_blocks()
+    assert len(blocks) == len(set(blocks))
+    for block in [
+        ("discovery.docker", "containers"),
+        ("discovery.docker", "docker_logs"),
+        ("prometheus.remote_write", "default"),
+        ("loki.write", "default"),
+    ]:
+        assert blocks.count(block) == 1
+
+
+def test_shared_files_are_split_by_domain() -> None:
+    files = ac.files_by_component()
+    expected = {
+        ("discovery.docker", "containers"): "010_discovery-scrape.alloy",
+        ("discovery.docker", "docker_logs"): "011_discovery-logs.alloy",
+        ("prometheus.remote_write", "default"): "090_output-metrics.alloy",
+        ("loki.write", "default"): "091_output-logs.alloy",
+    }
+    for block, name in expected.items():
+        assert files[block] == name

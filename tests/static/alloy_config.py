@@ -49,6 +49,25 @@ def _component_names(text: str) -> set[str]:
     return {f"{typ}.{label}" for typ, label in _COMPONENT_DECL.findall(text)}
 
 
+def component_blocks() -> list[tuple[str, str]]:
+    """Every (component type, label) declared in base/ and optional/."""
+    return [
+        pair
+        for text in (*sources().values(), *optional_sources().values())
+        for pair in _COMPONENT_DECL.findall(text)
+    ]
+
+
+def files_by_component() -> dict[tuple[str, str], str]:
+    """Map (component type, label) to the file that declares it."""
+    return {
+        pair: name
+        for group in (sources(), optional_sources())
+        for name, text in group.items()
+        for pair in _COMPONENT_DECL.findall(text)
+    }
+
+
 def base_component_names() -> set[str]:
     names: set[str] = set()
     for text in sources().values():

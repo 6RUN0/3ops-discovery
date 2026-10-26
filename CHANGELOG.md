@@ -50,7 +50,7 @@ The contract is no longer tied to one agent: sections 1-13 state requirements an
 - The version-in-the-name requirement was extended to all profiles, not just log profiles.
 - The secret contract was generalized to the `snmp` and `ipmi` domains (per-domain secret file suffixes).
 - Documented the exemption of the `logs` domain from the `ru.3ops.discovery.enabled` requirement.
-- The reference Alloy configuration moved into the `alloy/` directory (files with numeric prefixes; the single integration point with the backend is [`090_outputs.alloy`](implementations/alloy/base/090_outputs.alloy)).
+- The reference Alloy configuration moved into the `alloy/` directory (files with numeric prefixes; the single integration point with the backend is [`090_output-metrics.alloy`](implementations/alloy/base/090_output-metrics.alloy) and [`091_output-logs.alloy`](implementations/alloy/base/091_output-logs.alloy)).
 - Defined the `RU_3OPS_DISCOVERY_*` environment variable contract for deployment-specific parameters of the reference configuration.
 - Fields extracted from log content go to structured metadata only, never to stream labels.
 - The `secret-id` space is documented as a single trust domain of the host; binding a secret to a container identity is declared out of scope.

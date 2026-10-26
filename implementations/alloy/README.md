@@ -62,8 +62,9 @@ be attached to a single network visible to Alloy.
 
 ## Outputs and stores
 
-[`090_outputs.alloy`](base/090_outputs.alloy) is the single integration point
-with the stores; replacing a store does not touch the discovery and
+[`090_output-metrics.alloy`](base/090_output-metrics.alloy) and
+[`091_output-logs.alloy`](base/091_output-logs.alloy) are the integration
+points with the stores (metrics and logs respectively); replacing a store does not touch the discovery and
 pipeline files. Alloy is not limited to the Prometheus plus Loki pair:
 
 - `prometheus.remote_write` works with any remote_write-compatible
@@ -78,7 +79,7 @@ Swapping a single URL is enough only for unauthenticated endpoints.
 Mimir and Grafana Cloud require authentication and/or the
 `X-Scope-OrgID` header: beyond the variables of manifest section 14.1,
 add `basic_auth`/`authorization`/`headers` blocks inside `endpoint` in
-`090_outputs.alloy`, with the secret read from `local.file`
+`090_output-metrics.alloy` or `091_output-logs.alloy`, with the secret read from `local.file`
 (`is_secret = true`). Credentials never go into the URL (manifest
 section [14.2](../../docs/manifest.md#142-output-protocols-and-stores)):
 the variable value is an ordinary string and may show up in the Alloy UI
