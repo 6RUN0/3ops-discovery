@@ -67,6 +67,7 @@ docker run -d --name vmagent \
   -e RU_3OPS_DISCOVERY_DOCKER_HOST=tcp://docker-socket-proxy:2375 \
   -e RU_3OPS_DISCOVERY_REMOTE_WRITE_URL=http://victoriametrics:8428/api/v1/write \
   -e RU_3OPS_DISCOVERY_HOSTNAME="$(hostname)" \
+  -v vmagent-data:/vmagent-remotewrite-data \
   --entrypoint /bin/sh \
   victoriametrics/vmagent:v1.154.1 /etc/vmagent/entrypoint.sh
 ```
