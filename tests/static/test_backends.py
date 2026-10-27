@@ -674,7 +674,9 @@ def test_e2e_backends_match_backend_names() -> None:
 
 _E2E_DIR = Path(__file__).resolve().parents[1] / "e2e"
 #: e2e test file -> the domain whose series it checks. Only a file that
-#: compares the `collector` label with a literal needs a row.
+#: compares the `collector` label with a literal needs a row. The gate
+#: judges a whole file by its row, so it assumes each mapped file checks
+#: one domain only.
 _E2E_FILE_DOMAINS = {
     "test_blackbox_delivery.py": "blackbox",
     "test_container_metrics_delivery.py": "container-metrics",
@@ -683,29 +685,56 @@ _E2E_FILE_DOMAINS = {
     "test_metrics_delivery.py": "metrics",
     "test_snmp_delivery.py": "snmp",
 }
+#: A PromQL or LogQL matcher on the collector label inside a query string.
+_COLLECTOR_MATCHER = re.compile(r'\bcollector\s*=~?\s*"([^"]*)"')
 
 
-def _is_collector_label(node: ast.expr) -> bool:
+def _is_collector_label(node: ast.AST) -> bool:
+    """Return whether `node` reads the label: `x["collector"]`, `.get(...)`."""
+    if isinstance(node, ast.Subscript):
+        return (
+            isinstance(node.slice, ast.Constant)
+            and node.slice.value == "collector"
+        )
     return (
-        isinstance(node, ast.Subscript)
-        and isinstance(node.slice, ast.Constant)
-        and node.slice.value == "collector"
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "get"
+        and bool(node.args)
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == "collector"
     )
+
+
+def _string_literals(operand: ast.expr) -> list[str]:
+    """Return a string operand, or the strings of a set/list/tuple operand."""
+    elements = (
+        operand.elts
+        if isinstance(operand, ast.Set | ast.List | ast.Tuple)
+        else [operand]
+    )
+    return [
+        e.value
+        for e in elements
+        if isinstance(e, ast.Constant) and isinstance(e.value, str)
+    ]
 
 
 def _collector_literals(source: str) -> list[str]:
     """Return the string literals a `collector` label is compared with."""
     found: list[str] = []
     for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            found.extend(_COLLECTOR_MATCHER.findall(node.value))
         if not isinstance(node, ast.Compare):
             continue
         operands = [node.left, *node.comparators]
-        if any(_is_collector_label(op) for op in operands):
-            found.extend(
-                op.value
-                for op in operands
-                if isinstance(op, ast.Constant) and isinstance(op.value, str)
-            )
+        reads_label = any(
+            _is_collector_label(sub) for op in operands for sub in ast.walk(op)
+        )
+        if reads_label:
+            for op in operands:
+                found.extend(_string_literals(op))
     return found
 
 
@@ -715,6 +744,30 @@ def test_collector_literal_finder_sees_both_operand_orders() -> None:
         'assert "alloy" != s["metric"]["collector"]\n'
         'assert labels["job"] == "alloy"\n'
         'assert labels["collector"] == stack.collector("metrics")\n'
+    )
+    assert _collector_literals(source) == ["alloy", "alloy"]
+
+
+def test_collector_literal_finder_sees_a_set_or_list_operand() -> None:
+    source = (
+        'assert {s["metric"]["collector"] for s in series} == {"alloy"}\n'
+        'assert [s["collector"] for s in rows] == ["alloy"]\n'
+        "assert {s['metric']['collector'] for s in series} == "
+        '{stack.collector("metrics")}\n'
+    )
+    assert _collector_literals(source) == ["alloy", "alloy"]
+
+
+def test_collector_literal_finder_sees_get() -> None:
+    source = 'assert labels.get("collector") == "alloy"\n'
+    assert _collector_literals(source) == ["alloy"]
+
+
+def test_collector_literal_finder_sees_a_query_matcher() -> None:
+    source = (
+        'stack.prom_query(f\'up{{collector="alloy",job="{job}"}}\')\n'
+        "stack.prom_query('up{collector=~\"alloy\"}')\n"
+        "stack.prom_query('up{job=\"alloy\"}')\n"
     )
     assert _collector_literals(source) == ["alloy", "alloy"]
 

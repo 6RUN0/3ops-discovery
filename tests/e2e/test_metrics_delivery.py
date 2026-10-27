@@ -93,12 +93,16 @@ def test_provenance_labels_on_native_series(stack: Stack) -> None:
         timeout=METRICS_BUDGET,
         desc="app-metrics series",
     )
-    labels = series[0]["metric"]
-    assert labels["environment"] == "e2e"
-    assert labels["team"] == "apps"
-    assert labels["collector"] == stack.collector("metrics")
-    assert "app-metrics" in labels["container"]
-    assert labels["host"] == E2E_HOSTNAME
+    # Every series, not the first: a second collector scraping the same
+    # target would add a duplicate that may sort after the right one.
+    assert {s["metric"]["collector"] for s in series} == {
+        stack.collector("metrics")
+    }
+    for labels in (s["metric"] for s in series):
+        assert labels["environment"] == "e2e"
+        assert labels["team"] == "apps"
+        assert "app-metrics" in labels["container"]
+        assert labels["host"] == E2E_HOSTNAME
 
 
 @pytest.mark.alloy_internals

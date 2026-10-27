@@ -149,7 +149,9 @@ bind them together.
   an `"alloy"` literal in a vmagent domain).
 - `@pytest.mark.alloy_internals` marks e2e checks that read Alloy internals
   (UI API, component graph) rather than the contract's output; they run on
-  both storage variants, since Alloy is the collector in both. Loki drops
+  both storage variants, since Alloy is the collector in both, and are
+  deselected in `e2e_vmagent` and `e2e_vmagent_victoria`, where the Alloy
+  metrics pipeline they inspect is absent. Loki drops
   entries with identical timestamp and line in one stream at ingest, so a
   duplicate tailer is visible in storage only on VictoriaLogs; on Loki the
   `alloy_internals` twin is the pinned check.
