@@ -1,4 +1,4 @@
-"""Series parity: the reference delivers every cell of the series catalog."""
+"""Series parity: every collector delivers its cells of the series catalog."""
 
 import dataclasses
 
@@ -27,13 +27,15 @@ def _observed(stack: Stack, expr: str) -> dict[str, frozenset[str]]:
 
 
 @pytest.mark.parametrize("cell_key", sorted(_CATALOG), ids="/".join)
-def test_reference_delivers_the_catalogue(
+def test_collector_delivers_the_catalogue(
     cell_key: tuple[str, str], request: pytest.FixtureRequest
 ) -> None:
     cell = _CATALOG[cell_key]
     probe = STACK_PROBES[cell_key]
     stack: Stack = request.getfixturevalue(probe.fixture)
     expr = cell_expr(cell, probe, stack.project)
+    # Gap rows are those of the collector serving the cell's domain, not
+    # the reference's: under e2e_vmagent the metrics cell is vmagent's.
     # Absent series are judged only after the poll: accepting them early
     # could not tell "not emitted" from "not yet scraped".
     present_only = dataclasses.replace(cell, absent=frozenset())
@@ -43,7 +45,10 @@ def test_reference_delivers_the_catalogue(
     def all_present() -> bool:
         observed = _observed(stack, expr)
         last_problems[:] = unexcused_problems(
-            present_only, observed, SERIES_PARITY_GAPS, "alloy"
+            present_only,
+            observed,
+            SERIES_PARITY_GAPS,
+            stack.collector(cell.domain),
         )
         if not last_problems:
             satisfying[:] = [observed]
@@ -61,6 +66,6 @@ def test_reference_delivers_the_catalogue(
     # can be missing from consecutive instant queries, so a fresh read could
     # report a present series missing.
     problems = unexcused_problems(
-        cell, satisfying[0], SERIES_PARITY_GAPS, "alloy"
+        cell, satisfying[0], SERIES_PARITY_GAPS, stack.collector(cell.domain)
     )
     assert problems == []

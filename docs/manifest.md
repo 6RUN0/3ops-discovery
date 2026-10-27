@@ -1113,7 +1113,7 @@ For each of its domains an implementation must:
 - meet the security requirements of section [13](#13-security-requirements);
 - understand the environment parameters of section [14.1](#141-environment-parameters) that belong to its domains and outputs.
 
-The divergences of the reference from the contract that the gates allow are listed with their reasons in one place: [`tests/static/asymmetries.py`](../tests/static/asymmetries.py).
+The divergences of implementations from the contract that the gates allow are listed with their reasons in one place: [`tests/static/asymmetries.py`](../tests/static/asymmetries.py). A row about an implementation other than the reference names that implementation and a domain from its row in the table above.
 
 ### 14.1. Environment parameters
 

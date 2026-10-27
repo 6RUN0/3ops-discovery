@@ -196,10 +196,38 @@ SERIES_CELLS_UNCATALOGUED: dict[tuple[str, str], str] = {
 
 #: Catalog series an implementation is allowed not to deliver, or to deliver
 #: without the cataloged identity labels, as (implementation, domain, cell,
-#: series) -> reason. test_series_parity.py subtracts the "alloy" rows from
-#: the problems it finds. Empty: the reference delivers every cell on both
-#: storage backends.
+#: series) -> reason. test_series_parity.py subtracts the rows of the
+#: collector that serves the cell's domain (`Stack.collector`) from the
+#: problems it finds; test_implementation_gaps.py keeps every row inside its
+#: implementation's manifest 14 registry row. Empty: the reference and
+#: vmagent deliver every cell on both storage backends.
 SERIES_PARITY_GAPS: dict[tuple[str, str, str, str], str] = {}
+
+_VMAGENT_NETWORK_FILTER = (
+    "vmagent v1.154.1 sends the docker_sd `filters` to GET /networks as "
+    "well as to GET /containers/json, so the contract label filter matches "
+    "no network and the network metadata is empty; __meta_docker_network_ip "
+    "comes from the container object and stays. Seen on a live probe: "
+    "discoveredLabels carried only __meta_docker_network_ip, and the proxy "
+    "log showed GET /networks?filters=...ru.3ops.discovery.enabled... . "
+    "Targets are unaffected: the rules read only the IP."
+)
+
+#: Docker discovery meta labels an implementation never produces:
+#: (implementation, domain, label) -> reason; `<name>` stands for any
+#: suffix. test_implementation_gaps.py demands that the implementation's
+#: config reads none of them and that the domain is in its registry row.
+DISCOVERY_META_LABELS_ABSENT: dict[tuple[str, str, str], str] = {
+    ("vmagent", "metrics", label): _VMAGENT_NETWORK_FILTER
+    for label in (
+        "__meta_docker_network_id",
+        "__meta_docker_network_name",
+        "__meta_docker_network_scope",
+        "__meta_docker_network_internal",
+        "__meta_docker_network_ingress",
+        "__meta_docker_network_label_<name>",
+    )
+}
 
 #: Non-indexed log fields a store adds on its own, per e2e backend:
 #: backend -> field -> reason and source. Anything Alloy adds beyond the

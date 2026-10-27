@@ -85,7 +85,8 @@ as `normal-v1`. The mechanics differ where vmagent differs from Alloy:
   `GET /networks` as well, so the label filter leaves no network
   metadata: `__meta_docker_network_name` and its siblings are absent,
   while `__meta_docker_network_ip` comes from the container itself. The
-  rules use only the IP.
+  rules use only the IP; `asymmetries.DISCOVERY_META_LABELS_ABSENT` lists
+  the absent labels, and a static gate fails if `scrape.yml` reads one.
 - Multi-network containers. As in the reference, `match_first_network`
   keeps the first network by name; an unreachable choice shows up as
   `up == 0`.

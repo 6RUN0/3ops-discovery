@@ -19,6 +19,7 @@ the quality gates instead and is not shipped here.
 | `implementations/alloy/base/` | The reference configuration. Every file together forms one component graph. |
 | `implementations/alloy/optional/` | Opt-in overlay files. The base is valid and complete without them. |
 | `implementations/alloy/README.md` | How the reference configuration is built and how to compose it by domain. |
+| `implementations/vmagent/` | A second implementation of the metrics domain on VictoriaMetrics vmagent, with its own README. |
 | `CHANGELOG.md`, `CHANGELOG.ru.md` | What changed between contract versions. |
 | `LICENSE` | MIT. |
 
@@ -44,6 +45,34 @@ docker run --rm -v "$PWD/implementations/alloy/base:/etc/alloy:ro" grafana/alloy
 
 The image tag is pinned by the manifest (section 14.4). Use that tag: the
 configuration is validated against it and nothing else.
+
+## Running the metrics domain on vmagent
+
+The metrics domain can run on vmagent instead of Alloy (manifest section
+14). One collector serves a domain on a host, never two, so vmagent
+then serves both metrics and ipmi: an ipmi exporter is scraped as an
+ordinary metrics target (section 10.7). The Alloy directory is the union
+of the files of the domains Alloy still serves (the `Domains` column of
+manifest sections 14.4 and 14.4.3). Do not delete every file listed for
+metrics: `010_discovery-scrape.alloy` and `090_output-metrics.alloy` are
+shared with other domains, and without them Alloy rejects the whole
+directory. For the default set this leaves out only `020_metrics.alloy`.
+Start vmagent through its entrypoint, which applies the section 14.1
+defaults:
+
+```sh
+docker run -d --name vmagent \
+  -v "$PWD/implementations/vmagent:/etc/vmagent:ro" \
+  -e RU_3OPS_DISCOVERY_DOCKER_HOST=tcp://docker-socket-proxy:2375 \
+  -e RU_3OPS_DISCOVERY_REMOTE_WRITE_URL=http://victoriametrics:8428/api/v1/write \
+  --entrypoint /bin/sh \
+  victoriametrics/vmagent:v1.154.1 /etc/vmagent/entrypoint.sh
+```
+
+The image tag is pinned by the manifest registry (section 14). Appending
+`-dryRun` checks the configuration and exits. The Docker API access, the
+variables and the differences from Alloy are in
+`implementations/vmagent/README.md`.
 
 ## Adding an overlay
 

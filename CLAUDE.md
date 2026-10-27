@@ -84,7 +84,12 @@ bind them together.
   changes, since embedded exporters move with it. Gates:
   `tests/static/test_series_catalog.py` (schema; an unknown key or empty
   `present` is a `CatalogError`), `tests/e2e/test_series_parity.py` (the
-  reference serves every cell) and `tests/e2e/test_log_fields_parity.py`
+  collector of each cell's domain serves it: `Stack.collector(domain)`
+  picks the `SERIES_PARITY_GAPS` rows, so under `e2e_vmagent` the
+  `metrics/scrape` cell is vmagent's; an implementation literal there
+  fails `tests/static/test_implementation_gaps.py`, which also keeps every
+  implementation-keyed asymmetries row inside its manifest 14 registry
+  row) and `tests/e2e/test_log_fields_parity.py`
   (non-indexed fields per log profile equal the 8.3 table; fields a
   store adds itself are listed per store in
   `asymmetries.STORE_DERIVED_LOG_FIELDS`).
