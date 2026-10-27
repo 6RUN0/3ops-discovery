@@ -53,8 +53,9 @@ VMAGENT_IMAGE = "victoriametrics/vmagent:v1.154.1"
 VMAGENT_DIR = REPO / "implementations" / "vmagent"
 
 #: vmagent_check runs: name -> environment. "defaults" passes nothing, so
-#: every value comes from the entrypoint's 14.1 defaults; "e2e" mirrors
-#: the e2e stack (socket-proxy over tcp://, fast refresh, empty hostname).
+#: every value comes from the entrypoint's 14.1 defaults; "e2e" covers the
+#: hard cases of the e2e stacks: the empty hostname fallback and the
+#: tcp:// rewrite of the socket-proxy address.
 VMAGENT_CHECK_ENVS: dict[str, dict[str, str]] = {
     "defaults": {},
     "e2e": {
