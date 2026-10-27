@@ -5,6 +5,8 @@ A `LogQuery` describes what to find; `to_logql` (Loki) and `to_logsql`
 (VictoriaLogs) translate it, so a check is written once and runs against
 either store. `LokiBackend` and `VictoriaLogsBackend` run a query over
 HTTP and return backend-neutral `LogRecord`s; everything else is pure.
+`selected_backend` and `selected_metrics_implementation` read the two e2e
+env axes: the storage variant and the metrics-domain implementation.
 """
 
 from __future__ import annotations
@@ -26,6 +28,14 @@ _SCOPE_LABEL = "compose_project"
 #: Storage variants the e2e suite can run against; the first is the default.
 BACKEND_NAMES: tuple[str, ...] = ("prometheus-loki", "victoria")
 _BACKEND_ENV = "RU_3OPS_DISCOVERY_E2E_BACKEND"
+#: Implementations of the metrics domain the e2e suite can run; the first,
+#: the reference, is the default.
+METRICS_IMPLEMENTATIONS: tuple[str, ...] = ("alloy", "vmagent")
+_METRICS_IMPL_ENV = "RU_3OPS_DISCOVERY_E2E_METRICS_IMPL"
+#: Alloy domains a non-reference metrics implementation takes over: ipmi
+#: is an external exporter scraped by the metrics domain (manifest 10.7)
+#: and loads the same Alloy files, so dropping metrics alone keeps them.
+METRICS_IMPL_DOMAINS: tuple[str, ...] = ("metrics", "ipmi")
 _SIMPLE_ESCAPES = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t"}
 _DURATION_UNITS = {"s": 1.0, "m": 60.0, "h": 3600.0}
 _UNESCAPES = {
@@ -58,6 +68,23 @@ def selected_backend(env: Mapping[str, str]) -> str:
         raise ValueError(
             f"{_BACKEND_ENV}={name!r} is not one of: "
             + ", ".join(BACKEND_NAMES)
+        )
+    return name
+
+
+def selected_metrics_implementation(env: Mapping[str, str]) -> str:
+    """
+    Return the metrics-domain implementation named by the e2e env axis.
+
+    `RU_3OPS_DISCOVERY_E2E_METRICS_IMPL` unset means the Alloy reference;
+    an unknown name raises ValueError, so a typo fails the run instead of
+    silently testing the reference.
+    """
+    name = env.get(_METRICS_IMPL_ENV, METRICS_IMPLEMENTATIONS[0])
+    if name not in METRICS_IMPLEMENTATIONS:
+        raise ValueError(
+            f"{_METRICS_IMPL_ENV}={name!r} is not one of: "
+            + ", ".join(METRICS_IMPLEMENTATIONS)
         )
     return name
 

@@ -1,0 +1,41 @@
+---
+services:
+  vmagent:
+    image: victoriametrics/vmagent:v1.154.1
+    entrypoint: ["/bin/sh", "/etc/vmagent/entrypoint.sh"]
+    command:
+      - -httpListenAddr=:8429
+      - -remoteWrite.tmpDataPath=/var/lib/vmagent/remotewrite-data
+    environment:
+      RU_3OPS_DISCOVERY_DOCKER_HOST: tcp://docker-socket-proxy:2375
+      RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL: 5s
+      RU_3OPS_DISCOVERY_HOSTNAME: ${RU_3OPS_DISCOVERY_HOSTNAME:-}
+      RU_3OPS_DISCOVERY_REMOTE_WRITE_URL: ${RU_3OPS_DISCOVERY_E2E_METRICS_WRITE_URL:?set by the pytest fixture}
+    volumes:
+      - ../../../implementations/vmagent:/etc/vmagent:ro
+    tmpfs:
+      - /var/lib/vmagent
+    networks:
+      - telemetry
+      - docker-socket
+    expose:
+      - "8429"
+    ports:
+      - "127.0.0.1:0:8429"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8429/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    depends_on:
+      docker-socket-proxy:
+        condition: service_started
+    labels:
+      ru.3ops.discovery.enabled: "true"
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+      ru.3ops.discovery.metrics.enabled: "true"
+      ru.3ops.discovery.metrics.type: "prometheus"
+      ru.3ops.discovery.metrics.port: "8429"
+      ru.3ops.discovery.metrics.job: "vmagent"

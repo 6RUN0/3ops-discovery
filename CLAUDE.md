@@ -9,9 +9,10 @@ bind them together.
 
 ## Commands
 
-- `uv run nox` — default gates: lint + docs_lint + alloy_check + tests.
-  Honestly requires Docker (alloy_check) and network (lychee); the
-  fully offline set is `uv run nox -s lint tests`.
+- `uv run nox` - default gates: lint + docs_lint + alloy_check +
+  vmagent_check + tests. Honestly requires Docker (alloy_check,
+  vmagent_check) and network (lychee); the fully offline set is
+  `uv run nox -s lint tests`.
 - `uv run nox -s lint` - pre-commit hooks on all files. pre-commit is
   not installed as a git hook here, so only this session runs it; its
   detect-secrets hook rewrites `.secrets.baseline` line numbers after
@@ -19,6 +20,12 @@ bind them together.
 - `uv run nox -s docs_lint` — rumdl + typos + lychee (system binaries).
 - `uv run nox -s alloy_check` — `alloy fmt -t` + `validate` for every
   config combination, inside the pinned Docker image.
+- `uv run nox -s vmagent_check` - `implementations/vmagent/` through its
+  `entrypoint.sh` with `-dryRun` (strict parse) in `noxfile.VMAGENT_IMAGE`,
+  once with no env (14.1 defaults) and once with the e2e values. vmagent
+  keeps an unset `%{NAME}` placeholder as literal text and still passes
+  `-dryRun`, so a placeholder without an entrypoint default is caught only
+  by `tests/static/test_vmagent_config.py`.
 - `uv run nox -s tests` — static manifest-vs-config gates + mini-app
   units (no Docker).
 - `uv run nox -s e2e` — docker compose delivery checks (opt-in, takes
@@ -31,6 +38,10 @@ bind them together.
 - `uv run nox -s e2e_victoria` - the same e2e suite with VictoriaMetrics +
   VictoriaLogs as the storage (`tests/e2e/stack/docker-compose.victoria.yml`
   overlay); takes `-- -k ...` like `e2e`.
+- `uv run nox -s e2e_vmagent` / `uv run nox -s e2e_vmagent_victoria` -
+  the contract subset (`-m "not alloy_internals"`) with vmagent as the
+  metrics-domain collector, on Prometheus + Loki / on the Victoria stores.
+  Run e2e sessions one at a time: they share one Docker daemon.
 - `uv run nox -s preflight` — everything.
 - `uv run nox -s release` — build `dist/<name>-<version>.tar.gz` +
   `SHA256SUMS` (contract + reference config + overlays + deployment
@@ -73,7 +84,12 @@ bind them together.
   changes, since embedded exporters move with it. Gates:
   `tests/static/test_series_catalog.py` (schema; an unknown key or empty
   `present` is a `CatalogError`), `tests/e2e/test_series_parity.py` (the
-  reference serves every cell) and `tests/e2e/test_log_fields_parity.py`
+  collector of each cell's domain serves it: `Stack.collector(domain)`
+  picks the `SERIES_PARITY_GAPS` rows, so under `e2e_vmagent` the
+  `metrics/scrape` cell is vmagent's; an implementation literal there
+  fails `tests/static/test_implementation_gaps.py`, which also keeps every
+  implementation-keyed asymmetries row inside its manifest 14 registry
+  row) and `tests/e2e/test_log_fields_parity.py`
   (non-indexed fields per log profile equal the 8.3 table; fields a
   store adds itself are listed per store in
   `asymmetries.STORE_DERIVED_LOG_FIELDS`).
@@ -125,9 +141,22 @@ bind them together.
   logs through `tools.backends.LogQuery`, so one test runs on either store.
   In the victoria variant Prometheus and Loki still run (the base compose
   makes `alloy` depend on them) but receive nothing.
+- e2e metrics implementation: `RU_3OPS_DISCOVERY_E2E_METRICS_IMPL`
+  (`alloy`, the default, or `vmagent`; anything else is a usage error,
+  `tools.backends.selected_metrics_implementation`). With `vmagent` the
+  fixtures materialize Alloy without `tools.backends.METRICS_IMPL_DOMAINS`
+  (`metrics` and `ipmi`, which load the same Alloy files) and add
+  `tests/e2e/stack/docker-compose.vmagent.yml`, which mounts
+  `implementations/vmagent/` and writes to the store named by
+  `BackendSpec.metrics_write_url`. Metrics-domain checks compare
+  `collector` with `Stack.collector("metrics")`, never a literal
+  (`tests/static/test_backends.py` maps e2e files to domains and fails on
+  an `"alloy"` literal in a vmagent domain).
 - `@pytest.mark.alloy_internals` marks e2e checks that read Alloy internals
   (UI API, component graph) rather than the contract's output; they run on
-  both storage variants, since Alloy is the collector in both. Loki drops
+  both storage variants, since Alloy is the collector in both, and are
+  deselected in `e2e_vmagent` and `e2e_vmagent_victoria`, where the Alloy
+  metrics pipeline they inspect is absent. Loki drops
   entries with identical timestamp and line in one stream at ingest, so a
   duplicate tailer is visible in storage only on VictoriaLogs; on Loki the
   `alloy_internals` twin is the pinned check.

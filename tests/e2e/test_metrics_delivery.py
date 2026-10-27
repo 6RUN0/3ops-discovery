@@ -63,13 +63,17 @@ def test_postgres_exporter_authenticated(stack: Stack) -> None:
 
 
 def test_self_metrics_via_contract(stack: Stack) -> None:
-    # Dogfooding: alloy/prometheus/loki carry the full mandatory
-    # metrics.* label set and are scraped by Alloy itself.
-    for family, job in (
+    # Dogfooding: the collectors and the stores carry the full mandatory
+    # metrics.* label set and are scraped by the metrics-domain collector,
+    # which on vmagent reports itself through vm_app_version.
+    expected = [
         ("alloy_build_info", "alloy"),
         ("prometheus_build_info", "prometheus"),
         ("loki_build_info", "loki"),
-    ):
+    ]
+    if stack.collector("metrics") == "vmagent":
+        expected.append(("vm_app_version", "vmagent"))
+    for family, job in expected:
 
         def _present(
             family: str = family, job: str = job
@@ -89,12 +93,16 @@ def test_provenance_labels_on_native_series(stack: Stack) -> None:
         timeout=METRICS_BUDGET,
         desc="app-metrics series",
     )
-    labels = series[0]["metric"]
-    assert labels["environment"] == "e2e"
-    assert labels["team"] == "apps"
-    assert labels["collector"] == "alloy"
-    assert "app-metrics" in labels["container"]
-    assert labels["host"] == E2E_HOSTNAME
+    # Every series, not the first: a second collector scraping the same
+    # target would add a duplicate that may sort after the right one.
+    assert {s["metric"]["collector"] for s in series} == {
+        stack.collector("metrics")
+    }
+    for labels in (s["metric"] for s in series):
+        assert labels["environment"] == "e2e"
+        assert labels["team"] == "apps"
+        assert "app-metrics" in labels["container"]
+        assert labels["host"] == E2E_HOSTNAME
 
 
 @pytest.mark.alloy_internals

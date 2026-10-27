@@ -70,6 +70,9 @@ def test_scanner_knows_relabel_and_river_vocabulary() -> None:
         "River",
         "`stability.level`",
         "run alloy here",
+        "vmagent",
+        "`keep_if_equal`",
+        "`docker_sd_configs`",
     ):
         text = f"## 5. X\n\n{token}\n"
         assert md.implementation_mentions(text) == {"5": 1}, token

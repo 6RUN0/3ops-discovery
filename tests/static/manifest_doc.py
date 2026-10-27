@@ -467,13 +467,22 @@ def implementations() -> dict[str, set[str]]:
     return registry
 
 
+def implementation_agent(name: str) -> str:
+    """Section 14 registry: the Agent cell of implementation ``name``."""
+    for row in table("14"):
+        if _plain(row["Реализация"]) == name:
+            return row["Агент"]
+    raise AnchorError(f"implementation {name} not in the section 14 registry")
+
+
 #: Reference-implementation section: the only place the manifest may name
 #: Alloy components. It and its subsections are skipped by the neutrality
 #: scan.
 REFERENCE_SECTION = "14.4"
 
-#: Tokens that tie the text to Grafana Alloy. A path default such as
-#: /etc/alloy/... is a contract value, not a mention, hence the lookbehind.
+#: Tokens that tie the text to an implementation (Grafana Alloy, vmagent).
+#: A path default such as /etc/alloy/... is a contract value, not a
+#: mention, hence the lookbehind.
 IMPLEMENTATION_TOKENS = re.compile(
     r"Alloy|(?<![/\w])alloy(?:-optional)?/|\.alloy\b"
     r"|(?<![\w.])discovery\.[a-z]+|loki\.(?:source|process|write|relabel)"
@@ -482,6 +491,7 @@ IMPLEMENTATION_TOKENS = re.compile(
     r"|(?<![/\w.-])alloy(?![/\w-])"
     r"|foreach|__meta_docker|constants\.|coalesce\(|sys\.env|local\.file"
     r"|is_secret|keepequal|stage\.\w+"
+    r"|\bvmagent\b|keep_if_equal|docker_sd_configs"
 )
 
 

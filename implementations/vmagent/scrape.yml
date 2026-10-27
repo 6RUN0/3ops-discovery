@@ -1,0 +1,90 @@
+scrape_configs:
+  - job_name: metrics
+    follow_redirects: false
+    docker_sd_configs:
+      - host: "%{RU_3OPS_DISCOVERY_DOCKER_HOST}"
+        match_first_network: true
+        filters:
+          - name: label
+            values: ["ru.3ops.discovery.enabled=true"]
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_enabled]
+        regex: "true"
+        action: keep
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_type]
+        regex: prometheus
+        action: keep
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_path]
+        regex: "(/.*)?"
+        action: keep
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_scheme]
+        regex: "(https?)?"
+        action: keep
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_port]
+        regex: "(.+)"
+        action: keep
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_port]
+        target_label: __tmp_metrics_port
+      - source_labels: [__meta_docker_port_private, __tmp_metrics_port]
+        action: keep_if_equal
+      - source_labels: [__meta_docker_network_ip, __meta_docker_port_private]
+        separator: ":"
+        target_label: __address__
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_path]
+        regex: "(.+)"
+        replacement: "$1"
+        target_label: __metrics_path__
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_scheme]
+        regex: "(.+)"
+        replacement: "$1"
+        target_label: __scheme__
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_job]
+        regex: "(.+)"
+        action: keep
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_job]
+        target_label: job
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_instance]
+        target_label: instance
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_environment]
+        target_label: environment
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_team]
+        target_label: team
+      - source_labels: [__meta_docker_container_name]
+        regex: "/(.*)"
+        replacement: "$1"
+        target_label: container
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
+        target_label: compose_project
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: compose_service
+      - target_label: collector
+        replacement: vmagent
+      - target_label: host
+        replacement: "%{RU_3OPS_DISCOVERY_HOSTNAME}"
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_profile]
+        regex: "(fast-v1|normal-v1|slow-v1)?"
+        action: keep
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_profile]
+        regex: "(normal-v1)?"
+        target_label: __scrape_interval__
+        replacement: 30s
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_profile]
+        regex: "(normal-v1)?"
+        target_label: __scrape_timeout__
+        replacement: 10s
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_profile]
+        regex: "(fast-v1)"
+        target_label: __scrape_interval__
+        replacement: 15s
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_profile]
+        regex: "(fast-v1)"
+        target_label: __scrape_timeout__
+        replacement: 10s
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_profile]
+        regex: "(slow-v1)"
+        target_label: __scrape_interval__
+        replacement: 60s
+      - source_labels: [__meta_docker_container_label_ru_3ops_discovery_metrics_profile]
+        regex: "(slow-v1)"
+        target_label: __scrape_timeout__
+        replacement: 15s

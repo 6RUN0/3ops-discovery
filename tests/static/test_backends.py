@@ -11,8 +11,11 @@ from typing import Any
 import pytest
 import requests
 
+from tests.static import manifest_doc as md
 from tools.backends import (
     BACKEND_NAMES,
+    METRICS_IMPL_DOMAINS,
+    METRICS_IMPLEMENTATIONS,
     LogQuery,
     LokiBackend,
     UnscopedQueryError,
@@ -23,6 +26,7 @@ from tools.backends import (
     parse_json_lines,
     parse_stream,
     selected_backend,
+    selected_metrics_implementation,
     to_logql,
     to_logsql,
     to_seconds,
@@ -258,6 +262,23 @@ def test_default_backend() -> None:
 def test_unknown_backend_is_loud() -> None:
     with pytest.raises(ValueError, match="prometheus-loki, victoria"):
         selected_backend({"RU_3OPS_DISCOVERY_E2E_BACKEND": "victoria-metrics"})
+
+
+def test_default_metrics_implementation() -> None:
+    assert METRICS_IMPLEMENTATIONS == ("alloy", "vmagent")
+    assert selected_metrics_implementation({}) == "alloy"
+
+
+def test_vmagent_metrics_implementation_is_accepted() -> None:
+    env = {"RU_3OPS_DISCOVERY_E2E_METRICS_IMPL": "vmagent"}
+    assert selected_metrics_implementation(env) == "vmagent"
+
+
+def test_unknown_metrics_implementation_is_loud() -> None:
+    with pytest.raises(ValueError, match="alloy, vmagent"):
+        selected_metrics_implementation(
+            {"RU_3OPS_DISCOVERY_E2E_METRICS_IMPL": "vmagnet"}
+        )
 
 
 def test_unscoped_error_tells_how_to_fix() -> None:
@@ -649,3 +670,124 @@ def test_e2e_backends_match_backend_names() -> None:
     `nox -s tests` alone would pass a mismatch.
     """
     assert _conftest_backend_keys() == set(BACKEND_NAMES)
+
+
+_E2E_DIR = Path(__file__).resolve().parents[1] / "e2e"
+#: e2e test file -> the domain whose series it checks. Only a file that
+#: compares the `collector` label with a literal needs a row. The gate
+#: judges a whole file by its row, so it assumes each mapped file checks
+#: one domain only.
+_E2E_FILE_DOMAINS = {
+    "test_blackbox_delivery.py": "blackbox",
+    "test_container_metrics_delivery.py": "container-metrics",
+    "test_database_delivery.py": "database",
+    "test_host_delivery.py": "host-metrics",
+    "test_metrics_delivery.py": "metrics",
+    "test_snmp_delivery.py": "snmp",
+}
+#: A PromQL or LogQL matcher on the collector label inside a query string.
+_COLLECTOR_MATCHER = re.compile(r'\bcollector\s*=~?\s*"([^"]*)"')
+
+
+def _is_collector_label(node: ast.AST) -> bool:
+    """Return whether `node` reads the label: `x["collector"]`, `.get(...)`."""
+    if isinstance(node, ast.Subscript):
+        return (
+            isinstance(node.slice, ast.Constant)
+            and node.slice.value == "collector"
+        )
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "get"
+        and bool(node.args)
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == "collector"
+    )
+
+
+def _string_literals(operand: ast.expr) -> list[str]:
+    """Return a string operand, or the strings of a set/list/tuple operand."""
+    elements = (
+        operand.elts
+        if isinstance(operand, ast.Set | ast.List | ast.Tuple)
+        else [operand]
+    )
+    return [
+        e.value
+        for e in elements
+        if isinstance(e, ast.Constant) and isinstance(e.value, str)
+    ]
+
+
+def _collector_literals(source: str) -> list[str]:
+    """Return the string literals a `collector` label is compared with."""
+    found: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            found.extend(_COLLECTOR_MATCHER.findall(node.value))
+        if not isinstance(node, ast.Compare):
+            continue
+        operands = [node.left, *node.comparators]
+        reads_label = any(
+            _is_collector_label(sub) for op in operands for sub in ast.walk(op)
+        )
+        if reads_label:
+            for op in operands:
+                found.extend(_string_literals(op))
+    return found
+
+
+def test_collector_literal_finder_sees_both_operand_orders() -> None:
+    source = (
+        'assert labels["collector"] == "alloy"\n'
+        'assert "alloy" != s["metric"]["collector"]\n'
+        'assert labels["job"] == "alloy"\n'
+        'assert labels["collector"] == stack.collector("metrics")\n'
+    )
+    assert _collector_literals(source) == ["alloy", "alloy"]
+
+
+def test_collector_literal_finder_sees_a_set_or_list_operand() -> None:
+    source = (
+        'assert {s["metric"]["collector"] for s in series} == {"alloy"}\n'
+        'assert [s["collector"] for s in rows] == ["alloy"]\n'
+        "assert {s['metric']['collector'] for s in series} == "
+        '{stack.collector("metrics")}\n'
+    )
+    assert _collector_literals(source) == ["alloy", "alloy"]
+
+
+def test_collector_literal_finder_sees_get() -> None:
+    source = 'assert labels.get("collector") == "alloy"\n'
+    assert _collector_literals(source) == ["alloy"]
+
+
+def test_collector_literal_finder_sees_a_query_matcher() -> None:
+    source = (
+        'stack.prom_query(f\'up{{collector="alloy",job="{job}"}}\')\n'
+        "stack.prom_query('up{collector=~\"alloy\"}')\n"
+        "stack.prom_query('up{job=\"alloy\"}')\n"
+    )
+    assert _collector_literals(source) == ["alloy", "alloy"]
+
+
+def test_metrics_impl_domains_equal_the_vmagent_registry_row() -> None:
+    assert md.implementations()["vmagent"] == set(METRICS_IMPL_DOMAINS)
+
+
+def test_e2e_collector_literal_only_where_vmagent_does_not_run() -> None:
+    """
+    Pins: a metrics-domain check expects `stack.collector(...)`, not "alloy".
+
+    e2e_vmagent runs the metrics domain on vmagent, so a literal there
+    would fail that session only; every other domain stays on Alloy.
+    """
+    offenders = {}
+    for path in sorted(_E2E_DIR.glob("test_*.py")):
+        if "alloy" not in _collector_literals(path.read_text("utf-8")):
+            continue
+        domain = _E2E_FILE_DOMAINS.get(path.name, "<unmapped>")
+        if domain == "<unmapped>" or domain in METRICS_IMPL_DOMAINS:
+            offenders[path.name] = domain
+    assert offenders == {}

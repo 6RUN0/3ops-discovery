@@ -36,20 +36,46 @@ def test_host_comes_from_the_parameter(stack: Stack) -> None:
     assert {s["host"] for s in streams} == {E2E_HOSTNAME}
 
 
-def test_host_falls_back_to_the_collector_hostname(snmp_stack: Stack) -> None:
-    # The stack leaves the parameter empty: coalesce skips the empty
-    # string and lands on the collector hostname.
-    container = snmp_stack.compose_container("alloy")
-    expected = subprocess.run(
-        ["docker", "inspect", "-f", "{{.Config.Hostname}}", container],
+def _container_hostname(stack: Stack, service: str) -> str:
+    hostname = subprocess.run(
+        [
+            "docker",
+            "inspect",
+            "-f",
+            "{{.Config.Hostname}}",
+            stack.compose_container(service),
+        ],
         capture_output=True,
         text=True,
         check=True,
     ).stdout.strip()
-    assert expected
+    assert hostname
+    return hostname
+
+
+def test_host_falls_back_to_the_collector_hostname(snmp_stack: Stack) -> None:
+    # The stack leaves the parameter empty: coalesce skips the empty
+    # string and lands on the collector hostname.
+    expected = _container_hostname(snmp_stack, "alloy")
     series = wait_until(
         lambda: snmp_stack.prom_query('sysUpTime{job="snmp"}'),
         timeout=METRICS_BUDGET,
         desc="sysUpTime{job=snmp} delivered",
     )
     assert series[0]["metric"]["host"] == expected
+
+
+def test_metrics_host_falls_back_to_its_collector_hostname(
+    snmp_stack: Stack,
+) -> None:
+    # Same empty parameter, metrics domain: the fallback is the hostname of
+    # whichever collector runs that domain, vmagent included.
+    expected = _container_hostname(snmp_stack, snmp_stack.collector("metrics"))
+    series = wait_until(
+        lambda: snmp_stack.prom_query(
+            f'up{{job="app-metrics",compose_project="{snmp_stack.project}"}}'
+        ),
+        timeout=METRICS_BUDGET,
+        desc="app-metrics series on the snmp stack",
+    )
+    assert {s["metric"]["host"] for s in series} == {expected}

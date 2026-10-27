@@ -18,7 +18,6 @@
 # (loopback plus an ephemeral port), and manifest 13.3 states the
 # consequence for real deployments -- untrusted workloads belong to a
 # separate collector, not to a separate network of the same one.
-# The docker-socket network is internal: only Alloy reaches the proxy.
 
 networks:
   telemetry:

@@ -1102,6 +1102,7 @@ An implementation is an agent with its own configuration that fulfils the contra
 | Implementation | Domains | Agent | Directory |
 |---|---|---|---|
 | `alloy` | `metrics`, `database`, `logs`, `blackbox`, `otel`, `snmp`, `ipmi`, `host-metrics`, `container-metrics`, `host-logs` | Grafana Alloy, version pinned in section [14.4](#144-reference-implementation-alloy) | [`implementations/alloy/base/`](../implementations/alloy/base/), [`implementations/alloy/optional/`](../implementations/alloy/optional/) |
+| `vmagent` | `metrics`, `ipmi` | VictoriaMetrics vmagent v1.154.1 | [`implementations/vmagent/`](../implementations/vmagent/) |
 
 The domains of one host may be split between implementations, but each domain on a host is served by exactly one collector. Two collectors of one domain (two different implementations or two instances of one) produce duplicate series and lines that the storage cannot tell from real data, so such a deployment is an error. The symptom of the error is series or log streams that differ only in `collector` or `host`, or two running collectors of one domain on a host; the second symptom is needed when the labels of the duplicates match entirely.
 
@@ -1112,7 +1113,7 @@ For each of its domains an implementation must:
 - meet the security requirements of section [13](#13-security-requirements);
 - understand the environment parameters of section [14.1](#141-environment-parameters) that belong to its domains and outputs.
 
-The divergences of the reference from the contract that the gates allow are listed with their reasons in one place: [`tests/static/asymmetries.py`](../tests/static/asymmetries.py).
+The divergences of implementations from the contract that the gates allow are listed with their reasons in one place: [`tests/static/asymmetries.py`](../tests/static/asymmetries.py). A row about an implementation other than the reference names that implementation and a domain from its row in the table above.
 
 ### 14.1. Environment parameters
 
