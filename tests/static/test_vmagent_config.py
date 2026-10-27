@@ -100,8 +100,8 @@ def test_e2e_overlay_vmagent_image_matches_pin() -> None:
     assert images == {nx.VMAGENT_IMAGE}
 
 
-def test_registry_lists_vmagent_for_metrics_only() -> None:
-    assert md.implementations()["vmagent"] == {"metrics"}
+def test_registry_lists_vmagent_for_metrics_and_ipmi() -> None:
+    assert md.implementations()["vmagent"] == {"metrics", "ipmi"}
 
 
 def test_unknown_implementation_agent_is_an_anchor_error() -> None:

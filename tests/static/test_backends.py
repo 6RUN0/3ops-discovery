@@ -772,8 +772,8 @@ def test_collector_literal_finder_sees_a_query_matcher() -> None:
     assert _collector_literals(source) == ["alloy", "alloy"]
 
 
-def test_metrics_impl_domains_cover_the_vmagent_registry_row() -> None:
-    assert md.implementations()["vmagent"] <= set(METRICS_IMPL_DOMAINS)
+def test_metrics_impl_domains_equal_the_vmagent_registry_row() -> None:
+    assert md.implementations()["vmagent"] == set(METRICS_IMPL_DOMAINS)
 
 
 def test_e2e_collector_literal_only_where_vmagent_does_not_run() -> None:
