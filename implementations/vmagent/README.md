@@ -2,10 +2,11 @@
 
 A second implementation of the `metrics` domain of the 3ops Discovery
 contract, on VictoriaMetrics vmagent. The manifest section
-[14](../../docs/manifest.md#14-implementations) registers it and pins its
-image tag; this file explains how the configuration is built and adds no
-requirement. Other domains stay with the
-[Alloy reference](../alloy/README.md): one collector per domain on a
+[14](../../docs/manifest.md#14-implementations) registers it for `metrics`
+and `ipmi` (an ipmi exporter is scraped as an ordinary metrics target,
+manifest 10.7) and pins its image tag; this file explains how the
+configuration is built and adds no requirement. Other domains stay with
+the [Alloy reference](../alloy/README.md): one collector per domain on a
 host, never two.
 
 ## Files
@@ -25,14 +26,35 @@ docker run -d --name vmagent \
   -v "$PWD/implementations/vmagent:/etc/vmagent:ro" \
   -e RU_3OPS_DISCOVERY_DOCKER_HOST=tcp://docker-socket-proxy:2375 \
   -e RU_3OPS_DISCOVERY_REMOTE_WRITE_URL=http://victoriametrics:8428/api/v1/write \
+  -e RU_3OPS_DISCOVERY_HOSTNAME="$(hostname)" \
+  -v vmagent-data:/vmagent-remotewrite-data \
   --entrypoint /bin/sh \
   victoriametrics/vmagent:v1.154.1 /etc/vmagent/entrypoint.sh
 ```
 
-Arguments after `entrypoint.sh` go to vmagent unchanged, so
-`/etc/vmagent/entrypoint.sh -dryRun` checks the configuration and exits;
-`uv run nox -s vmagent_check` does that twice, once with no environment
-and once with the e2e values.
+Set `RU_3OPS_DISCOVERY_HOSTNAME` to the same value on every collector of
+the host (here the host's own name): left unset, each collector reports
+its own container hostname, and the domains of one machine no longer join
+on `host`.
+
+Put the unsent-data buffer (`-remoteWrite.tmpDataPath`, default
+`vmagent-remotewrite-data` under the image's working directory `/`) on a
+volume, as above: without one it lives in the container's writable layer,
+so recreating the container loses unsent samples, and a `--read-only`
+container fails at start with `cannot create directory: mkdir
+vmagent-remotewrite-data: read-only file system`.
+
+Arguments after `entrypoint.sh` go to vmagent unchanged, so appending
+`-dryRun` checks the configuration and exits:
+
+```sh
+docker run --rm -v "$PWD/implementations/vmagent:/etc/vmagent:ro" \
+  --entrypoint /bin/sh \
+  victoriametrics/vmagent:v1.154.1 /etc/vmagent/entrypoint.sh -dryRun
+```
+
+In the repository, `uv run nox -s vmagent_check` is the gate that runs
+this check twice, once with no environment and once with the e2e values.
 
 | Variable | Default | How vmagent receives it |
 |---|---|---|

@@ -1,12 +1,13 @@
 # 3ops Discovery
 
 A declarative contract for automatic discovery and configuration of
-telemetry targets in Grafana Alloy, driven by Docker labels. An
-application declares how it wants to be collected through
-`ru.3ops.discovery.*` labels on its own container, and Alloy picks them
-up with no edit to the collector configuration.
+telemetry targets, driven by Docker labels. An application declares how
+it wants to be collected through `ru.3ops.discovery.*` labels on its own
+container, and a collector picks them up with no edit to the collector
+configuration.
 
-This archive ships the contract and its reference implementation. It
+This archive ships the contract, its reference implementation on Grafana
+Alloy and the vmagent implementation of the metrics domain. It
 becomes `README.md` in the archive root; the repository README covers
 the quality gates instead and is not shipped here.
 
@@ -65,9 +66,15 @@ docker run -d --name vmagent \
   -v "$PWD/implementations/vmagent:/etc/vmagent:ro" \
   -e RU_3OPS_DISCOVERY_DOCKER_HOST=tcp://docker-socket-proxy:2375 \
   -e RU_3OPS_DISCOVERY_REMOTE_WRITE_URL=http://victoriametrics:8428/api/v1/write \
+  -e RU_3OPS_DISCOVERY_HOSTNAME="$(hostname)" \
   --entrypoint /bin/sh \
   victoriametrics/vmagent:v1.154.1 /etc/vmagent/entrypoint.sh
 ```
+
+Set `RU_3OPS_DISCOVERY_HOSTNAME` to the same value on every collector of
+the host, Alloy included (here the host's own name): left unset, each
+collector reports its own container hostname, and the domains of one
+machine no longer join on `host`.
 
 The image tag is pinned by the manifest registry (section 14). Appending
 `-dryRun` checks the configuration and exits. The Docker API access, the
@@ -105,6 +112,7 @@ manifest. The ones most deployments set:
 RU_3OPS_DISCOVERY_REMOTE_WRITE_URL=http://prometheus:9090/api/v1/write
 RU_3OPS_DISCOVERY_LOKI_PUSH_URL=http://loki:3100/loki/api/v1/push
 RU_3OPS_DISCOVERY_DOCKER_HOST=unix:///var/run/docker.sock
+RU_3OPS_DISCOVERY_HOSTNAME="$(hostname)"
 RU_3OPS_DISCOVERY_SECRETS_DIR=/run/alloy-secrets
 ```
 
