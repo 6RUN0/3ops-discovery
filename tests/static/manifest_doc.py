@@ -480,7 +480,8 @@ def implementation_agent(name: str) -> str:
 #: scan.
 REFERENCE_SECTION = "14.4"
 
-#: Tokens that tie the text to an implementation (Grafana Alloy, vmagent).
+#: Tokens that tie the text to an implementation (Grafana Alloy, vmagent,
+#: Vector). Vector is matched by its vocabulary, not the bare word.
 #: A path default such as /etc/alloy/... is a contract value, not a
 #: mention, hence the lookbehind.
 IMPLEMENTATION_TOKENS = re.compile(
@@ -492,6 +493,8 @@ IMPLEMENTATION_TOKENS = re.compile(
     r"|foreach|__meta_docker|constants\.|coalesce\(|sys\.env|local\.file"
     r"|is_secret|keepequal|stage\.\w+"
     r"|\bvmagent\b|keep_if_equal|docker_sd_configs"
+    r"|docker_logs|\bVRL\b|get_env_var|starts_when|merge_strategies"
+    r"|dangerously-allow-env-var-interpolation|timberio/"
 )
 
 

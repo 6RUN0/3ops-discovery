@@ -1103,6 +1103,7 @@ An implementation is an agent with its own configuration that fulfils the contra
 |---|---|---|---|
 | `alloy` | `metrics`, `database`, `logs`, `blackbox`, `otel`, `snmp`, `ipmi`, `host-metrics`, `container-metrics`, `host-logs` | Grafana Alloy, version pinned in section [14.4](#144-reference-implementation-alloy) | [`implementations/alloy/base/`](../implementations/alloy/base/), [`implementations/alloy/optional/`](../implementations/alloy/optional/) |
 | `vmagent` | `metrics`, `ipmi` | VictoriaMetrics vmagent v1.154.1 | [`implementations/vmagent/`](../implementations/vmagent/) |
+| `vector` | `logs` | Vector 0.60.0 | [`implementations/vector/`](../implementations/vector/) |
 
 The domains of one host may be split between implementations, but each domain on a host is served by exactly one collector. Two collectors of one domain (two different implementations or two instances of one) produce duplicate series and lines that the storage cannot tell from real data, so such a deployment is an error. The symptom of the error is series or log streams that differ only in `collector` or `host`, or two running collectors of one domain on a host; the second symptom is needed when the labels of the duplicates match entirely.
 

@@ -1,0 +1,107 @@
+sources:
+  docker:
+    type: docker_logs
+    docker_host: "${RU_3OPS_DISCOVERY_DOCKER_HOST}"
+
+transforms:
+  optout:
+    type: filter
+    inputs: [docker]
+    condition: '.label."ru.3ops.discovery.logs.enabled" != "false"'
+
+  labels:
+    type: remap
+    inputs: [optout]
+    source: |
+      profiles = ["raw-v1", "generic-json-v1", "generic-logfmt-v1", "mixed-v1", "python-stacktrace-v1", "java-stacktrace-v1"]
+      container_labels = object(.label) ?? {}
+      indexed = {"source": "docker", "collector": "vector"}
+      indexed.host = get_env_var!("RU_3OPS_DISCOVERY_HOSTNAME")
+      container = string(.container_name) ?? ""
+      if container != "" { indexed.container = container }
+      value = string(container_labels."com.docker.compose.project") ?? ""
+      if value != "" { indexed.compose_project = value }
+      value = string(container_labels."com.docker.compose.service") ?? ""
+      if value != "" { indexed.compose_service = value }
+      value = string(container_labels."ru.3ops.discovery.environment") ?? ""
+      if value != "" { indexed.environment = value }
+      value = string(container_labels."ru.3ops.discovery.team") ?? ""
+      if value != "" { indexed.team = value }
+      value = string(container_labels."ru.3ops.discovery.logs.service") ?? ""
+      if value != "" { indexed.service_name = value }
+      profile = string(container_labels."ru.3ops.discovery.logs.profile") ?? "raw-v1"
+      if !includes(profiles, profile) {
+        log("unknown log profile, falling back to raw-v1: container=" + container + " profile=" + profile, level: "warn", rate_limit_secs: 60)
+        profile = "raw-v1"
+      }
+      indexed.log_profile = profile
+      .stream_labels = indexed
+      .structured_metadata = {}
+
+  profiles:
+    type: route
+    inputs: [labels]
+    route:
+      generic-json-v1: '.stream_labels.log_profile == "generic-json-v1"'
+      generic-logfmt-v1: '.stream_labels.log_profile == "generic-logfmt-v1"'
+      mixed-v1-json: '.stream_labels.log_profile == "mixed-v1" && match(string(.message) ?? "", r''^\s*\{'')'
+      mixed-v1-logfmt: '.stream_labels.log_profile == "mixed-v1" && !match(string(.message) ?? "", r''^\s*\{'') && match(string(.message) ?? "", r''(^|\s)(level|msg|status)='')'
+      python-stacktrace-v1: '.stream_labels.log_profile == "python-stacktrace-v1"'
+      java-stacktrace-v1: '.stream_labels.log_profile == "java-stacktrace-v1"'
+
+  parse_json:
+    type: remap
+    inputs: [profiles.generic-json-v1, profiles.mixed-v1-json]
+    source: |
+      fields = ["level", "status", "trace_id", "request_id"]
+      parsed = object(parse_json(string(.message) ?? "") ?? {}) ?? {}
+      found = filter(parsed) -> |key, value| { includes(fields, key) && value != null }
+      .structured_metadata = map_values(found) -> |value| { to_string(value) ?? encode_json(value) }
+
+  parse_logfmt:
+    type: remap
+    inputs: [profiles.generic-logfmt-v1, profiles.mixed-v1-logfmt]
+    source: |
+      fields = ["level", "status", "trace_id", "request_id"]
+      valid = parse_regex(string(.message) ?? "", r'^(?P<prefix>[\x00-\x20]*(?:[^\x00-\x20"=]+(?:=(?:"(?:[^"\\\x00-\x1f]|\\["\\/bfnrt]|\\u[0-9a-fA-F]{4})*"[\x00-\x20]*|[^\x00-\x20"=]*(?:[\x00-\x20]+|$$))|(?:[\x00-\x20]+|$$)))*)') ?? {}
+      pairs = parse_regex_all(string(valid.prefix) ?? "", r'(?P<key>[^\x00-\x20"=]+)(?:=(?:"(?P<quoted>(?:[^"\\\x00-\x1f]|\\["\\/bfnrt]|\\u[0-9a-fA-F]{4})*)"|(?P<bare>[^\x00-\x20"=]*)))?') ?? []
+      found = {}
+      for_each(pairs) -> |_index, pair| {
+        key = string(pair.key) ?? ""
+        if includes(fields, key) {
+          value = string(pair.bare) ?? ""
+          quoted = string(pair.quoted) ?? ""
+          if pair.quoted != null { value = string(parse_json("\"" + quoted + "\"") ?? quoted) ?? quoted }
+          found = set!(found, [key], value)
+        }
+      }
+      .structured_metadata = found
+
+  multiline:
+    type: reduce
+    inputs: [profiles.python-stacktrace-v1, profiles.java-stacktrace-v1]
+    group_by: [container_id]
+    starts_when:
+      type: vrl
+      source: 'match(string(.message) ?? "", r''^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}'')'
+    max_events: 128
+    expire_after_ms: 10000
+    merge_strategies:
+      message: concat_newline
+
+sinks:
+  logs:
+    type: loki
+    inputs: [parse_json, parse_logfmt, multiline, profiles._unmatched]
+    endpoint: "${DISCOVERY_LOKI_ENDPOINT}"
+    path: "${DISCOVERY_LOKI_PATH}"
+    healthcheck:
+      enabled: false
+    encoding:
+      codec: text
+    labels:
+      "*": "{{ stream_labels }}"
+    structured_metadata:
+      "*": "{{ structured_metadata }}"
+    batch:
+      timeout_secs: 1

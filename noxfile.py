@@ -4,13 +4,14 @@ Nox sessions for the 3ops Discovery quality gates.
 ``default_venv_backend = "none"``: nox creates no environments of its
 own, every tool runs through ``uv run`` (single source of versions is
 uv.lock). Default run = lint + docs_lint + alloy_check + vmagent_check +
-tests; the default honestly needs Docker (alloy_check, vmagent_check) and
-network (lychee) and fails loudly without them -- the fully offline set
-is ``nox -s lint tests``.
+vector_check + tests; the default honestly needs Docker (alloy_check,
+vmagent_check, vector_check) and network (lychee) and fails loudly
+without them -- the fully offline set is ``nox -s lint tests``.
 
     uv run nox                  # default gates
     uv run nox -s lint          # pre-commit hooks on all files
     uv run nox -s vmagent_check # vmagent -dryRun, with and without env
+    uv run nox -s vector_check  # vector validate, with and without env
     uv run nox -s tests         # static consistency + mini-app units
     uv run nox -s e2e           # docker compose delivery checks
     uv run nox -s e2e_victoria  # the same on VictoriaMetrics + VictoriaLogs
@@ -39,6 +40,7 @@ nox.options.sessions = [
     "docs_lint",
     "alloy_check",
     "vmagent_check",
+    "vector_check",
     "tests",
 ]
 
@@ -64,6 +66,27 @@ VMAGENT_CHECK_ENVS: dict[str, dict[str, str]] = {
         "RU_3OPS_DISCOVERY_HOSTNAME": "",
         "RU_3OPS_DISCOVERY_REMOTE_WRITE_URL": (
             "http://victoriametrics:8428/api/v1/write"
+        ),
+    },
+}
+
+#: The Vector implementation of the logs domain; the manifest section 14
+#: registry names the same version (tests/static/test_vector_config.py).
+#: The alpine variant, because entrypoint.sh needs /bin/sh.
+VECTOR_IMAGE = "timberio/vector:0.60.0-alpine"
+VECTOR_DIR = REPO / "implementations" / "vector"
+
+#: vector_check runs: name -> environment. "defaults" passes nothing, so
+#: every value comes from the entrypoint's 14.1 defaults; "e2e" covers the
+#: hard cases of the e2e stacks: the empty hostname fallback, the tcp://
+#: socket-proxy address and a push URL with a longer path to split.
+VECTOR_CHECK_ENVS: dict[str, dict[str, str]] = {
+    "defaults": {},
+    "e2e": {
+        "RU_3OPS_DISCOVERY_DOCKER_HOST": "tcp://docker-socket-proxy:2375",
+        "RU_3OPS_DISCOVERY_HOSTNAME": "",
+        "RU_3OPS_DISCOVERY_LOKI_PUSH_URL": (
+            "http://victorialogs:9428/insert/loki/api/v1/push"
         ),
     },
 }
@@ -291,6 +314,45 @@ def vmagent_check(session: nox.Session) -> None:
         session.log(f"[{name}] vmagent -dryRun OK")
 
 
+def vector_check_args(env: dict[str, str]) -> list[str]:
+    """
+    Return the ``docker run`` arguments of one ``vector validate`` check.
+
+    The config runs through entrypoint.sh, as a deployment does: the
+    ${NAME} interpolations in vector.yaml expand only with the flag the
+    entrypoint passes, and only after its defaults.
+    """
+    env_args = [
+        arg for name, value in env.items() for arg in ("-e", f"{name}={value}")
+    ]
+    return [
+        "docker",
+        "run",
+        "--rm",
+        *env_args,
+        "-v",
+        f"{VECTOR_DIR}:/etc/vector:ro",
+        "--entrypoint",
+        "/bin/sh",
+        VECTOR_IMAGE,
+        "/etc/vector/entrypoint.sh",
+        "validate",
+        "--no-environment",
+        "--deny-warnings",
+    ]
+
+
+@nox.session
+def vector_check(session: nox.Session) -> None:
+    """Validate the Vector config via its entrypoint, per env set."""
+    if shutil.which("docker") is None:
+        session.error("docker is required for vector_check")
+    session.run("docker", "pull", VECTOR_IMAGE, external=True)
+    for name, env in VECTOR_CHECK_ENVS.items():
+        session.run(*vector_check_args(env), external=True)
+        session.log(f"[{name}] vector validate OK")
+
+
 @nox.session
 def tests(session: nox.Session) -> None:
     """Run the fast docker-free suite (static consistency + app units)."""
@@ -357,6 +419,7 @@ def preflight(session: nox.Session) -> None:
         "docs_lint",
         "alloy_check",
         "vmagent_check",
+        "vector_check",
         "tests",
         "e2e",
         "e2e_victoria",

@@ -10,9 +10,9 @@ bind them together.
 ## Commands
 
 - `uv run nox` - default gates: lint + docs_lint + alloy_check +
-  vmagent_check + tests. Honestly requires Docker (alloy_check,
-  vmagent_check) and network (lychee); the fully offline set is
-  `uv run nox -s lint tests`.
+  vmagent_check + vector_check + tests. Honestly requires Docker
+  (alloy_check, vmagent_check, vector_check) and network (lychee); the
+  fully offline set is `uv run nox -s lint tests`.
 - `uv run nox -s lint` - pre-commit hooks on all files. pre-commit is
   not installed as a git hook here, so only this session runs it; its
   detect-secrets hook rewrites `.secrets.baseline` line numbers after
@@ -26,6 +26,14 @@ bind them together.
   keeps an unset `%{NAME}` placeholder as literal text and still passes
   `-dryRun`, so a placeholder without an entrypoint default is caught only
   by `tests/static/test_vmagent_config.py`.
+- `uv run nox -s vector_check` - `implementations/vector/` through its
+  `entrypoint.sh` with `vector validate --no-environment --deny-warnings`
+  in `noxfile.VECTOR_IMAGE`, once with no env and once with the e2e
+  values; it compiles the VRL and fails on an unset `${NAME}`. Without
+  `--dangerously-allow-env-var-interpolation` Vector keeps `${NAME}` as
+  literal text and validate still passes, and a bare `$` before a
+  non-word character passes too, so both are caught only by
+  `tests/static/test_vector_config.py`.
 - `uv run nox -s tests` — static manifest-vs-config gates + mini-app
   units (no Docker).
 - `uv run nox -s e2e` — docker compose delivery checks (opt-in, takes
