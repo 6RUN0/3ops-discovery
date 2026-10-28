@@ -7,9 +7,10 @@ container, and a collector picks them up with no edit to the collector
 configuration.
 
 This archive ships the contract, its reference implementation on Grafana
-Alloy and the vmagent implementation of the metrics domain. It
-becomes `README.md` in the archive root; the repository README covers
-the quality gates instead and is not shipped here.
+Alloy, the vmagent implementation of the metrics domain and the Vector
+implementation of the logs domain. It becomes `README.md` in the archive
+root; the repository README covers the quality gates instead and is not
+shipped here.
 
 ## Contents
 
@@ -21,6 +22,7 @@ the quality gates instead and is not shipped here.
 | `implementations/alloy/optional/` | Opt-in overlay files. The base is valid and complete without them. |
 | `implementations/alloy/README.md` | How the reference configuration is built and how to compose it by domain. |
 | `implementations/vmagent/` | A second implementation of the metrics domain on VictoriaMetrics vmagent, with its own README. |
+| `implementations/vector/` | A second implementation of the logs domain on Vector, with its own README. |
 | `CHANGELOG.md`, `CHANGELOG.ru.md` | What changed between contract versions. |
 | `LICENSE` | MIT. |
 
@@ -81,6 +83,46 @@ The image tag is pinned by the manifest registry (section 14). Appending
 `-dryRun` checks the configuration and exits. The Docker API access, the
 variables and the differences from Alloy are in
 `implementations/vmagent/README.md`.
+
+## Running the logs domain on Vector
+
+The logs domain can run on Vector instead of Alloy (manifest section 14).
+One collector serves a domain on a host, never two, so the Alloy
+directory is the union of the files of the remaining domains (manifest
+sections 14.4 and 14.4.3 list files by domain). That leaves out
+`011_discovery-logs.alloy`, `040_logs.alloy` and `050_log-profiles.alloy`,
+and `091_output-logs.alloy` too unless Alloy serves the otel or host-logs
+domain, so for the default set all four leave. Start Vector through its
+entrypoint, which applies the section 14.1 defaults and splits the push
+URL; give the container a `--hostname` that is not a prefix of its ID, or
+Vector does not collect its own logs:
+
+```sh
+docker run -d --name vector \
+  --hostname vector-collector \
+  -v "$PWD/implementations/vector:/etc/vector:ro" \
+  -v vector-data:/var/lib/vector \
+  -e RU_3OPS_DISCOVERY_DOCKER_HOST=tcp://docker-socket-proxy:2375 \
+  -e RU_3OPS_DISCOVERY_LOKI_PUSH_URL=http://loki:3100/loki/api/v1/push \
+  -e RU_3OPS_DISCOVERY_HOSTNAME="$(hostname)" \
+  --entrypoint /bin/sh \
+  timberio/vector:0.60.0-alpine /etc/vector/entrypoint.sh
+```
+
+Set `RU_3OPS_DISCOVERY_HOSTNAME` to the same value on every collector of
+the host, Alloy and vmagent included (here the host's own name): left
+unset, Vector reports its container hostname, `vector-collector` here,
+and the domains of one machine no longer join on `host`.
+
+The `vector-data` volume holds `data_dir` (`/var/lib/vector`). The
+configuration stores no log read positions there, and Vector 0.60.0
+starts with nothing writable on that path, so the volume is optional.
+The image tag is pinned by the manifest registry (section 14).
+Replacing `/etc/vector/entrypoint.sh` with
+`/etc/vector/entrypoint.sh validate --no-environment` checks the
+configuration and exits. Lines written while Vector is down are lost,
+and the variables and other differences from Alloy are in
+`implementations/vector/README.md`.
 
 ## Adding an overlay
 

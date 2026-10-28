@@ -36,6 +36,7 @@ map-, и в list-форме.
 | `implementations/alloy/base/*.alloy` | Референсная конфигурация Alloy: discovery, metrics, database, logs, log-profiles, outputs. |
 | [`implementations/alloy/README.md`](implementations/alloy/README.md) | Устройство эталонной конфигурации: порядок файлов, параметры окружения, пары профильных компонентов, хранилища и состояние коллектора. |
 | [`implementations/vmagent/`](implementations/vmagent/README.md) | Вторая реализация домена `metrics` на VictoriaMetrics vmagent (раздел 14 манифеста): один `scrape.yml` и entrypoint, который подставляет умолчания 14.1. |
+| [`implementations/vector/`](implementations/vector/README.md) | Вторая реализация домена `logs` на Vector (раздел 14 манифеста): один `vector.yaml` и entrypoint, который подставляет умолчания 14.1 и разбирает адрес push. |
 | `tests/static/` | Статические гейты: сверяют нормативные факты манифеста с фактической конфигурацией в обе стороны. |
 | `tests/e2e/` | End-to-end стек (`docker compose`): метрики и логи реально доходят до настроенного хранилища (по умолчанию Prometheus + Loki); alloy/prometheus/loki мониторят сами себя через контракт (dogfooding). |
 | [`tools/materialize.py`](tools/materialize.py) | Сборка каталога конфигурации (объединение файлов выбранных доменов, `DOMAIN_FILES` и `COMBOS`) для `alloy_check`, e2e и demo. |
@@ -48,7 +49,7 @@ map-, и в list-форме.
 
 - [uv](https://docs.astral.sh/uv/) — единственный менеджер окружения.
 - Python 3.13+.
-- Docker - для гейтов `alloy_check`, `vmagent_check` и `e2e*`.
+- Docker - для гейтов `alloy_check`, `vmagent_check`, `vector_check` и `e2e*`.
 - Системные бинарники для `docs_lint`: `rumdl`, `typos`, `lychee`.
 
 ## Гейты качества
@@ -57,17 +58,20 @@ map-, и в list-форме.
 
 | Команда | Что делает | Нужен Docker / сеть |
 |---|---|:---:|
-| `uv run nox` | Гейты по умолчанию: `lint` + `docs_lint` + `alloy_check` + `vmagent_check` + `tests`. | да |
+| `uv run nox` | Гейты по умолчанию: `lint` + `docs_lint` + `alloy_check` + `vmagent_check` + `vector_check` + `tests`. | да |
 | `uv run nox -s lint tests` | Полностью офлайн: pre-commit + статические гейты. | нет |
 | `uv run nox -s lint` | pre-commit на всех файлах. | нет |
 | `uv run nox -s docs_lint` | `rumdl` + `typos` + `lychee`. | сеть |
 | `uv run nox -s alloy_check` | `alloy fmt -t` + `validate` для каждой комбинации каталогов внутри запиненного образа. | Docker |
 | `uv run nox -s vmagent_check` | `implementations/vmagent/` через его entrypoint с `-dryRun` внутри закреплённого образа: один раз без переменных окружения, второй раз со значениями e2e. | Docker |
+| `uv run nox -s vector_check` | `implementations/vector/` через его entrypoint с `vector validate --no-environment --deny-warnings` внутри закреплённого образа: один раз без переменных окружения, второй раз со значениями e2e. | Docker |
 | `uv run nox -s tests` | Статические гейты манифест↔конфиг + юниты мини-приложения. | нет |
 | `uv run nox -s e2e` | Проверки доставки на живом compose-стеке (минуты). | Docker |
 | `uv run nox -s e2e_victoria` | Те же проверки доставки с VictoriaMetrics + VictoriaLogs в роли хранилища (минуты). | Docker |
 | `uv run nox -s e2e_vmagent` | Контрактное подмножество (`-m "not alloy_internals"`) с vmagent в роли коллектора `metrics`, на Prometheus + Loki (минуты). | Docker |
 | `uv run nox -s e2e_vmagent_victoria` | То же подмножество с vmagent на VictoriaMetrics + VictoriaLogs (минуты). | Docker |
+| `uv run nox -s e2e_vector` | Контрактное подмножество с Vector в роли коллектора `logs`, на Prometheus + Loki (минуты). | Docker |
+| `uv run nox -s e2e_vector_victoria` | То же подмножество с Vector на VictoriaMetrics + VictoriaLogs (минуты). | Docker |
 | `uv run nox -s preflight` | Всё сразу. | да |
 
 Образ Alloy запинен **манифестом** (раздел [14.4](docs/manifest.ru.md#144-эталонная-реализация-alloy)); `noxfile.ALLOY_IMAGE`
@@ -77,7 +81,7 @@ map-, и в list-форме.
 
 `uv run nox -s release` собирает `dist/3ops-discovery-<версия>.tar.gz` и
 `SHA256SUMS`: контракт, референсная конфигурация, overlay-файлы,
-реализация на vmagent и deployment-README. Версия берётся из шапки
+реализации на vmagent и Vector и deployment-README. Версия берётся из шапки
 манифеста - единственного места, где она записана (в `pyproject.toml`
 намеренно `0.0.0`). Содержимое перечисляет `git ls-files`, поэтому
 неотслеживаемый мусор в архив не попадает, а сборка воспроизводима:

@@ -164,3 +164,13 @@ def test_archive_ships_the_vmagent_implementation(built: Path) -> None:
         "implementations/vmagent/entrypoint.sh",
         "implementations/vmagent/scrape.yml",
     } <= _members(built)
+
+
+def test_archive_ships_the_vector_implementation(built: Path) -> None:
+    """Pins the archive to ship what the vector registry row points at."""
+    # Same reason as vmagent: the logs-domain registry row points here.
+    assert {
+        "implementations/vector/README.md",
+        "implementations/vector/entrypoint.sh",
+        "implementations/vector/vector.yaml",
+    } <= _members(built)

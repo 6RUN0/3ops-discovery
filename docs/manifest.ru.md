@@ -1096,6 +1096,7 @@ Labels декларируются самим контейнером, поэто�
 |---|---|---|---|
 | `alloy` | `metrics`, `database`, `logs`, `blackbox`, `otel`, `snmp`, `ipmi`, `host-metrics`, `container-metrics`, `host-logs` | Grafana Alloy, версия закреплена в разделе [14.4](#144-эталонная-реализация-alloy) | [`implementations/alloy/base/`](../implementations/alloy/base/), [`implementations/alloy/optional/`](../implementations/alloy/optional/) |
 | `vmagent` | `metrics`, `ipmi` | VictoriaMetrics vmagent v1.154.1 | [`implementations/vmagent/`](../implementations/vmagent/) |
+| `vector` | `logs` | Vector 0.60.0 | [`implementations/vector/`](../implementations/vector/) |
 
 Домены одного хоста можно распределить между реализациями, но каждый домен на хосте обслуживает ровно один коллектор. Два коллектора одного домена (две разные реализации или два экземпляра одной) дают дубли рядов и строк, которые хранилище не отличит от настоящих данных, поэтому такое развёртывание - ошибка. Признак ошибки - ряды или потоки логов, различающиеся только значением `collector` или `host`, либо два запущенных коллектора одного домена на хосте; второй признак нужен, когда метки дублей совпадают целиком.
 

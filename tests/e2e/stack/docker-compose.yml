@@ -454,6 +454,19 @@ services:
       ru.3ops.discovery.logs.profile: "generic-json-v1"
       ru.3ops.discovery.logs.service: "app-logs-json"
 
+  app-logs-spoof:
+    build: ./app
+    environment:
+      APP_LOG_FORMAT: spoof
+    networks:
+      - telemetry
+    labels:
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "apps"
+      ru.3ops.discovery.logs.profile: "generic-json-v1"
+      ru.3ops.discovery.logs.service: "app-logs-spoof"
+
   app-logs-logfmt:
     build: ./app
     environment:

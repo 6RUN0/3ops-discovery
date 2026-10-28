@@ -2,7 +2,7 @@
 3ops Discovery e2e mini-app.
 
 One image, behaviour via env (manifest 10.3):
-    APP_LOG_FORMAT      json | logfmt | raw | mixed | fuzz |
+    APP_LOG_FORMAT      json | logfmt | raw | mixed | fuzz | spoof |
                         python-traceback | java-traceback  (default json)
     APP_METRICS_PORT    serve prometheus_client /metrics on this port
     APP_TLS_PORT        additionally serve /metrics over TLS on this
@@ -64,6 +64,20 @@ def json_line(seq: int) -> str:
             "seq": seq,
             "trace_id": f"trace-{seq}",
             "request_id": f"req-{seq}",
+        }
+    )
+
+
+def spoof_line(seq: int) -> str:
+    """JSON line whose keys are stream label names (manifest 6.2)."""
+    return json.dumps(
+        {
+            "event": "spoof",
+            "container": "spoofed-container",
+            "host": "spoofed-host",
+            "collector": "spoofed-collector",
+            "level": "warn",
+            "seq": seq,
         }
     )
 
@@ -155,6 +169,7 @@ def emit(fmt: str, seq: int) -> None:
         "logfmt": logfmt_line,
         "raw": raw_line,
         "mixed": mixed_line,
+        "spoof": spoof_line,
     }
     print(renderers[fmt](seq), flush=True)
 

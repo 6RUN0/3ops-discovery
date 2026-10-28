@@ -73,6 +73,13 @@ def test_scanner_knows_relabel_and_river_vocabulary() -> None:
         "vmagent",
         "`keep_if_equal`",
         "`docker_sd_configs`",
+        "`docker_logs`",
+        "VRL",
+        "`get_env_var`",
+        "`starts_when`",
+        "`merge_strategies`",
+        "`--dangerously-allow-env-var-interpolation`",
+        "`timberio/vector:0.60.0-alpine`",
     ):
         text = f"## 5. X\n\n{token}\n"
         assert md.implementation_mentions(text) == {"5": 1}, token

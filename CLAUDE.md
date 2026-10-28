@@ -10,9 +10,9 @@ bind them together.
 ## Commands
 
 - `uv run nox` - default gates: lint + docs_lint + alloy_check +
-  vmagent_check + tests. Honestly requires Docker (alloy_check,
-  vmagent_check) and network (lychee); the fully offline set is
-  `uv run nox -s lint tests`.
+  vmagent_check + vector_check + tests. Honestly requires Docker
+  (alloy_check, vmagent_check, vector_check) and network (lychee); the
+  fully offline set is `uv run nox -s lint tests`.
 - `uv run nox -s lint` - pre-commit hooks on all files. pre-commit is
   not installed as a git hook here, so only this session runs it; its
   detect-secrets hook rewrites `.secrets.baseline` line numbers after
@@ -26,6 +26,14 @@ bind them together.
   keeps an unset `%{NAME}` placeholder as literal text and still passes
   `-dryRun`, so a placeholder without an entrypoint default is caught only
   by `tests/static/test_vmagent_config.py`.
+- `uv run nox -s vector_check` - `implementations/vector/` through its
+  `entrypoint.sh` with `vector validate --no-environment --deny-warnings`
+  in `noxfile.VECTOR_IMAGE`, once with no env and once with the e2e
+  values; it compiles the VRL and fails on an unset `${NAME}`. Without
+  `--dangerously-allow-env-var-interpolation` Vector keeps `${NAME}` as
+  literal text and validate still passes, and a bare `$` before a
+  non-word character passes too, so both are caught only by
+  `tests/static/test_vector_config.py`.
 - `uv run nox -s tests` — static manifest-vs-config gates + mini-app
   units (no Docker).
 - `uv run nox -s e2e` — docker compose delivery checks (opt-in, takes
@@ -41,6 +49,8 @@ bind them together.
 - `uv run nox -s e2e_vmagent` / `uv run nox -s e2e_vmagent_victoria` -
   the contract subset (`-m "not alloy_internals"`) with vmagent as the
   metrics-domain collector, on Prometheus + Loki / on the Victoria stores.
+- `uv run nox -s e2e_vector` / `uv run nox -s e2e_vector_victoria` - the
+  same contract subset with Vector as the logs-domain collector.
   Run e2e sessions one at a time: they share one Docker daemon.
 - `uv run nox -s preflight` — everything.
 - `uv run nox -s release` — build `dist/<name>-<version>.tar.gz` +
@@ -151,12 +161,28 @@ bind them together.
   `BackendSpec.metrics_write_url`. Metrics-domain checks compare
   `collector` with `Stack.collector("metrics")`, never a literal
   (`tests/static/test_backends.py` maps e2e files to domains and fails on
-  an `"alloy"` literal in a vmagent domain).
+  an `"alloy"` literal in a domain another implementation runs).
+- e2e logs implementation: `RU_3OPS_DISCOVERY_E2E_LOGS_IMPL` (`alloy`, the
+  default, or `vector`; `tools.backends.selected_logs_implementation`),
+  independent of the metrics axis: the fixtures materialize Alloy from the
+  domains no selected implementation takes over
+  (`_StackSpec.alloy_domains`) and add one overlay per non-reference
+  implementation. `tests/e2e/stack/docker-compose.vector.yml` pushes to
+  `BackendSpec.logs_push_url`. `docker_logs` reads every container only
+  from Vector's start on, so the overlay holds `alloy` and `app-burst`
+  until Vector's healthcheck finds an established connection to the
+  Docker API in `/proc/net/tcp` (`:0947 01` is port 2375, state
+  ESTABLISHED; Vector has no HTTP endpoint to probe). A check reading
+  lines a service writes at startup needs that service in the overlay's
+  `depends_on` list too.
+  The overlay's `tmpfs` path must equal `data_dir` of `vector.yaml`
+  (`tests/static/test_vector_config.py`). Vector's divergences from the
+  reference are rows of `asymmetries.LOGS_IMPLEMENTATION_GAPS`.
 - `@pytest.mark.alloy_internals` marks e2e checks that read Alloy internals
   (UI API, component graph) rather than the contract's output; they run on
   both storage variants, since Alloy is the collector in both, and are
-  deselected in `e2e_vmagent` and `e2e_vmagent_victoria`, where the Alloy
-  metrics pipeline they inspect is absent. Loki drops
+  deselected in the `e2e_vmagent*` and `e2e_vector*` sessions, where the
+  Alloy pipeline they inspect is absent. Loki drops
   entries with identical timestamp and line in one stream at ingest, so a
   duplicate tailer is visible in storage only on VictoriaLogs; on Loki the
   `alloy_internals` twin is the pinned check.

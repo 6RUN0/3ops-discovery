@@ -244,3 +244,64 @@ STORE_DERIVED_LOG_FIELDS: dict[str, dict[str, str]] = {
     },
     "victoria": {},
 }
+
+#: Behaviour a second implementation of the logs domain does not match,
+#: as (implementation, domain, topic) -> reason with its live source.
+#: test_implementation_gaps.py keeps every row inside its implementation's
+#: manifest 14 registry row. The table is the registry of those
+#: divergences; the mechanisms are described in the implementation's README
+#: ("Differences from the reference").
+LOGS_IMPLEMENTATION_GAPS: dict[tuple[str, str, str], str] = {
+    ("vector", "logs", "10.3.4 item 4 error metric"): (
+        "The config increments no metric and has no metrics output. The "
+        "unknown-profile fallback to raw-v1 and the WARN of item 3 are "
+        "met. Mechanism: "
+        'implementations/vector/README.md, "Unknown profile".'
+    ),
+    ("vector", "logs", "10.3.4 item 3 warning rate limit"): (
+        "The WARN naming the container and the profile is rate-limited per "
+        "call site (rate_limit_secs: 60), not per container: a second "
+        "container with an unknown profile within the window is collected "
+        "as raw-v1 but not named. Seen on a live run: two misconfigured "
+        "containers produced one WARN and one `is being suppressed` line."
+    ),
+    ("vector", "logs", "own container excluded by hostname"): (
+        "docker_logs skips the container whose ID starts with Vector's own "
+        "hostname (at least 6 characters), and Docker's default hostname is "
+        "the short ID, so Vector does not collect its own logs unless the "
+        "container sets `hostname:`. The e2e overlay sets it. Source: "
+        "src/sources/docker_logs/mod.rs v0.60.0 `exclude_self`; spike R5 "
+        "log line `Excluded self container`."
+    ),
+    ("vector", "logs", "lines lost while Vector is down"): (
+        "docker_logs keeps no read positions: it reads every container, "
+        "including one that started earlier, only from Vector's own start "
+        "(since = now - 1s). Lines written while Vector is stopped, and "
+        "lines a container wrote before Vector started, never reach the "
+        "store; the reference resumes from its positions file. Under "
+        "Vector the secret-redaction e2e check therefore sees only lines "
+        "written after Vector's start: reduced coverage, not a gap in the "
+        "check. Source: src/sources/docker_logs/mod.rs v0.60.0 "
+        "`log_since`. Mechanism: implementations/vector/README.md, "
+        '"Lines written while Vector is down are lost".'
+    ),
+    ("vector", "logs", "docker refresh interval not read"): (
+        "RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL has no effect: "
+        "docker_logs follows the Docker event stream and picks up a "
+        "container when it starts, with no list to refresh."
+    ),
+    ("vector", "logs", "logfmt line over 64 KiB"): (
+        "A logfmt line longer than 64 KiB gives no structured metadata in "
+        "the reference (its line scanner stops at that size) and is parsed "
+        "whole by Vector. Seen live: `level=info k=y...(70022 chars) "
+        "status=9` gave {} on Alloy v1.21.2 and level and status on Vector "
+        "0.60.0. Mechanism: implementations/vector/README.md, "
+        '"logfmt parsing".'
+    ),
+    ("vector", "logs", "logfmt lone surrogate escape"): (
+        'A quoted value `"\\ud800"` gives U+FFFD in the reference and the '
+        "raw text `\\ud800` in Vector, whose JSON unescaping refuses a "
+        'lone surrogate. Seen live on `level="\\ud800" status=3`. '
+        'Mechanism: implementations/vector/README.md, "logfmt parsing".'
+    ),
+}

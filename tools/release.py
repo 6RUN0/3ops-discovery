@@ -35,6 +35,7 @@ CONTENTS: tuple[str, ...] = (
     "docs/series",
     "implementations/alloy",
     "implementations/vmagent",
+    "implementations/vector",
 )
 
 #: Deployment instructions, renamed into the archive root: the
@@ -177,8 +178,8 @@ def _reset(info: tarfile.TarInfo) -> tarfile.TarInfo:
     info.mtime = _EPOCH
     info.uid = info.gid = 0
     info.uname = info.gname = ""
-    # Nothing shipped needs the executable bit (the vmagent entrypoint
-    # runs through /bin/sh), so umask must not leak in either.
+    # Nothing shipped needs the executable bit (the vmagent and Vector
+    # entrypoints run through /bin/sh), so umask must not leak in either.
     info.mode = 0o755 if info.isdir() else 0o644
     return info
 

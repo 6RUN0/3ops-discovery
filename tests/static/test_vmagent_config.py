@@ -397,23 +397,30 @@ class _FakeSession:
 
 
 @pytest.mark.parametrize(
-    ("session_name", "backend", "impl", "conformance"),
+    ("session_name", "backend", "metrics_impl", "logs_impl", "conformance"),
     [
-        ("e2e", "prometheus-loki", "alloy", False),
-        ("e2e_victoria", "victoria", "alloy", False),
-        ("e2e_vmagent", "prometheus-loki", "vmagent", True),
-        ("e2e_vmagent_victoria", "victoria", "vmagent", True),
+        ("e2e", "prometheus-loki", "alloy", "alloy", False),
+        ("e2e_victoria", "victoria", "alloy", "alloy", False),
+        ("e2e_vmagent", "prometheus-loki", "vmagent", "alloy", True),
+        ("e2e_vmagent_victoria", "victoria", "vmagent", "alloy", True),
+        ("e2e_vector", "prometheus-loki", "alloy", "vector", True),
+        ("e2e_vector_victoria", "victoria", "alloy", "vector", True),
     ],
 )
-def test_e2e_sessions_set_both_axes_explicitly(
-    session_name: str, backend: str, impl: str, conformance: bool
+def test_e2e_sessions_set_every_axis_explicitly(
+    session_name: str,
+    backend: str,
+    metrics_impl: str,
+    logs_impl: str,
+    conformance: bool,
 ) -> None:
-    """Only vmagent sessions drop Alloy-internals checks; posargs pass."""
+    """Only non-reference sessions drop Alloy-internals checks."""
     session = _FakeSession(["-k", "x"])
     getattr(nx, session_name)(session)
     assert session.env == {
         "RU_3OPS_DISCOVERY_E2E_BACKEND": backend,
-        "RU_3OPS_DISCOVERY_E2E_METRICS_IMPL": impl,
+        "RU_3OPS_DISCOVERY_E2E_METRICS_IMPL": metrics_impl,
+        "RU_3OPS_DISCOVERY_E2E_LOGS_IMPL": logs_impl,
     }
     argv = list(session.runs[0])
     assert argv[:4] == ["uv", "run", "pytest", "tests/e2e"]

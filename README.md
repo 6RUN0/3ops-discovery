@@ -39,6 +39,7 @@ the gates that bind the two together and keep them from drifting apart.
 | `implementations/alloy/base/*.alloy` | The reference Alloy configuration: discovery, metrics, database, logs, log profiles, outputs. |
 | [`implementations/alloy/README.md`](implementations/alloy/README.md) | How the reference configuration is built: file order, environment parameters, profile component pairs, stores and collector state. |
 | [`implementations/vmagent/`](implementations/vmagent/README.md) | A second implementation of the `metrics` domain on VictoriaMetrics vmagent (manifest section 14): one `scrape.yml` and the entrypoint that applies the 14.1 defaults. |
+| [`implementations/vector/`](implementations/vector/README.md) | A second implementation of the `logs` domain on Vector (manifest section 14): one `vector.yaml` and the entrypoint that applies the 14.1 defaults and splits the push URL. |
 | `tests/static/` | Static gates: they check the normative facts of the manifest against the actual configuration in both directions. |
 | `tests/e2e/` | End-to-end stack (`docker compose`): metrics and logs really do reach the configured storage (Prometheus + Loki by default); alloy/prometheus/loki monitor themselves through the contract (dogfooding). |
 | [`tools/materialize.py`](tools/materialize.py) | Assembles the configuration directory (the union of the chosen domains' files, `DOMAIN_FILES` and `COMBOS`) for `alloy_check`, e2e and the demo. |
@@ -51,7 +52,7 @@ English.
 
 - [uv](https://docs.astral.sh/uv/) -- the only environment manager.
 - Python 3.13+.
-- Docker -- for the `alloy_check`, `vmagent_check` and `e2e*` gates.
+- Docker -- for the `alloy_check`, `vmagent_check`, `vector_check` and `e2e*` gates.
 - System binaries for `docs_lint`: `rumdl`, `typos`, `lychee`.
 
 ## Quality gates
@@ -60,17 +61,20 @@ Everything runs through `uv run nox`.
 
 | Command | What it does | Docker / network |
 |---|---|:---:|
-| `uv run nox` | Default gates: `lint` + `docs_lint` + `alloy_check` + `vmagent_check` + `tests`. | yes |
+| `uv run nox` | Default gates: `lint` + `docs_lint` + `alloy_check` + `vmagent_check` + `vector_check` + `tests`. | yes |
 | `uv run nox -s lint tests` | Fully offline: pre-commit plus the static gates. | no |
 | `uv run nox -s lint` | pre-commit over all files. | no |
 | `uv run nox -s docs_lint` | `rumdl` + `typos` + `lychee`. | network |
 | `uv run nox -s alloy_check` | `alloy fmt -t` + `validate` for every directory combination inside the pinned image. | Docker |
 | `uv run nox -s vmagent_check` | `implementations/vmagent/` through its entrypoint with `-dryRun` inside the pinned image, once with no environment and once with the e2e values. | Docker |
+| `uv run nox -s vector_check` | `implementations/vector/` through its entrypoint with `vector validate --no-environment --deny-warnings` inside the pinned image, once with no environment and once with the e2e values. | Docker |
 | `uv run nox -s tests` | Static manifest-vs-config gates plus mini-app units. | no |
 | `uv run nox -s e2e` | Delivery checks against a live compose stack (minutes). | Docker |
 | `uv run nox -s e2e_victoria` | The same delivery checks with VictoriaMetrics + VictoriaLogs as the storage (minutes). | Docker |
 | `uv run nox -s e2e_vmagent` | The contract subset (`-m "not alloy_internals"`) with vmagent as the `metrics` collector, on Prometheus + Loki (minutes). | Docker |
 | `uv run nox -s e2e_vmagent_victoria` | The same vmagent subset on VictoriaMetrics + VictoriaLogs (minutes). | Docker |
+| `uv run nox -s e2e_vector` | The contract subset with Vector as the `logs` collector, on Prometheus + Loki (minutes). | Docker |
+| `uv run nox -s e2e_vector_victoria` | The same Vector subset on VictoriaMetrics + VictoriaLogs (minutes). | Docker |
 | `uv run nox -s preflight` | Everything at once. | yes |
 
 The Alloy image is pinned **by the manifest** (section [14.4](docs/manifest.md#144-reference-implementation-alloy));
@@ -80,7 +84,7 @@ The Alloy image is pinned **by the manifest** (section [14.4](docs/manifest.md#1
 
 `uv run nox -s release` builds `dist/3ops-discovery-<version>.tar.gz`
 and `SHA256SUMS`: the contract, the reference configuration, the overlay
-files, the vmagent implementation and a deployment README. The version
+files, the vmagent and Vector implementations and a deployment README. The version
 comes from the manifest header, the only place it is written down
 (`pyproject.toml` says `0.0.0` on purpose). The contents are enumerated
 by `git ls-files`, so untracked scratch never reaches the archive, and

@@ -33,8 +33,9 @@ def test_no_generated_credential_reaches_loki(stack: Stack) -> None:
     }
     assert passwords, "no generated credentials in the stack environment"
 
-    # Wait for the collector's own stream first: asserting absence over an
-    # empty result set proves nothing, so the delivery path has to be
+    # Wait for Alloy's own stream first, whichever collector ships it:
+    # Alloy reads the credentials, and asserting absence over an empty
+    # result set proves nothing, so the delivery path has to be
     # demonstrably live before the search means anything.
     query = LogQuery(
         stream={"compose_project": stack.project},

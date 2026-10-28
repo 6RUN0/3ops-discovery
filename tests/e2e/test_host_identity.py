@@ -79,3 +79,25 @@ def test_metrics_host_falls_back_to_its_collector_hostname(
         desc="app-metrics series on the snmp stack",
     )
     assert {s["metric"]["host"] for s in series} == {expected}
+
+
+def test_logs_host_falls_back_to_its_collector_hostname(
+    snmp_stack: Stack,
+) -> None:
+    """Pins 14.1: an empty hostname falls back to the logs collector's own."""
+    # Same empty parameter, logs domain: the fallback is the hostname of
+    # whichever collector runs that domain, Vector included.
+    expected = _container_hostname(snmp_stack, snmp_stack.collector("logs"))
+    streams = wait_until(
+        lambda: snmp_stack.log_streams(
+            LogQuery(
+                stream={
+                    "compose_service": "app-logs-raw",
+                    "compose_project": snmp_stack.project,
+                }
+            )
+        ),
+        timeout=LOGS_BUDGET,
+        desc="app-logs-raw stream on the snmp stack",
+    )
+    assert {s["host"] for s in streams} == {expected}
