@@ -8,7 +8,8 @@ from typing import Any
 import pytest
 import requests
 
-from tests.e2e.conftest import LOGS_BUDGET, Stack, wait_until
+from tests.e2e.conftest import E2E_HOSTNAME, LOGS_BUDGET, Stack, wait_until
+from tests.static import asymmetries
 from tests.static import manifest_doc as md
 from tools.backends import LogQuery, LogRecord
 
@@ -387,3 +388,37 @@ def test_all_stream_labels_within_manifest_allowlist(
         assert not extra, (
             f"stream {labels} carries labels outside manifest 6.2: {extra}"
         )
+
+
+def test_line_keys_never_become_stream_labels(stack: Stack) -> None:
+    """
+    Pins manifest 6.2: stream labels come from Docker metadata only.
+
+    app-logs-spoof writes, under generic-json-v1, a JSON line whose keys
+    `container`, `host` and `collector` name stream labels and whose
+    `level` is a profile field. The stream must carry the Docker and
+    collector values, and `level` must stay a non-indexed field.
+    """
+    query = LogQuery(
+        stream={
+            "compose_service": "app-logs-spoof",
+            "compose_project": stack.project,
+        },
+        contains="spoofed-host",
+    )
+    records = wait_until(
+        lambda: stack.log_records(query) or None,
+        timeout=LOGS_BUDGET,
+        desc="spoof lines delivered",
+    )
+    derived = set(asymmetries.STORE_DERIVED_LOG_FIELDS.get(stack.backend, {}))
+    for record in records:
+        assert json.loads(record.line)["host"] == "spoofed-host", record
+        assert record.stream["container"] == stack.compose_container(
+            "app-logs-spoof"
+        ), record
+        assert record.stream["host"] == E2E_HOSTNAME, record
+        assert record.stream["collector"] == stack.collector("logs"), record
+        assert "level" not in record.stream, record
+        assert set(record.fields) - derived == {"level"}, record
+        assert record.fields["level"] == "warn", record

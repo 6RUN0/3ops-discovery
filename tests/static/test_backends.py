@@ -14,8 +14,11 @@ import requests
 from tests.static import manifest_doc as md
 from tools.backends import (
     BACKEND_NAMES,
+    LOGS_IMPL_DOMAINS,
+    LOGS_IMPLEMENTATIONS,
     METRICS_IMPL_DOMAINS,
     METRICS_IMPLEMENTATIONS,
+    REFERENCE_IMPLEMENTATION,
     LogQuery,
     LokiBackend,
     UnscopedQueryError,
@@ -26,6 +29,7 @@ from tools.backends import (
     parse_json_lines,
     parse_stream,
     selected_backend,
+    selected_logs_implementation,
     selected_metrics_implementation,
     to_logql,
     to_logsql,
@@ -279,6 +283,32 @@ def test_unknown_metrics_implementation_is_loud() -> None:
         selected_metrics_implementation(
             {"RU_3OPS_DISCOVERY_E2E_METRICS_IMPL": "vmagnet"}
         )
+
+
+def test_default_logs_implementation() -> None:
+    assert LOGS_IMPLEMENTATIONS == ("alloy", "vector")
+    assert selected_logs_implementation({}) == "alloy"
+
+
+def test_vector_logs_implementation_is_accepted() -> None:
+    env = {"RU_3OPS_DISCOVERY_E2E_LOGS_IMPL": "vector"}
+    assert selected_logs_implementation(env) == "vector"
+
+
+def test_unknown_logs_implementation_is_loud() -> None:
+    with pytest.raises(ValueError, match="alloy, vector"):
+        selected_logs_implementation(
+            {"RU_3OPS_DISCOVERY_E2E_LOGS_IMPL": "vectro"}
+        )
+
+
+def test_axes_are_read_independently() -> None:
+    env = {
+        "RU_3OPS_DISCOVERY_E2E_METRICS_IMPL": "vmagent",
+        "RU_3OPS_DISCOVERY_E2E_LOGS_IMPL": "vector",
+    }
+    assert selected_metrics_implementation(env) == "vmagent"
+    assert selected_logs_implementation(env) == "vector"
 
 
 def test_unscoped_error_tells_how_to_fix() -> None:
@@ -673,18 +703,26 @@ def test_e2e_backends_match_backend_names() -> None:
 
 
 _E2E_DIR = Path(__file__).resolve().parents[1] / "e2e"
-#: e2e test file -> the domain whose series it checks. Only a file that
-#: compares the `collector` label with a literal needs a row. The gate
-#: judges a whole file by its row, so it assumes each mapped file checks
-#: one domain only.
-_E2E_FILE_DOMAINS = {
-    "test_blackbox_delivery.py": "blackbox",
-    "test_container_metrics_delivery.py": "container-metrics",
-    "test_database_delivery.py": "database",
-    "test_host_delivery.py": "host-metrics",
-    "test_metrics_delivery.py": "metrics",
-    "test_snmp_delivery.py": "snmp",
+#: e2e test file -> the domains whose series or streams it checks. Only a
+#: file that compares the `collector` label with a literal needs a row; a
+#: file checking several domains lists them all, and the gate judges the
+#: whole file by the union.
+_E2E_FILE_DOMAINS: dict[str, frozenset[str]] = {
+    "test_blackbox_delivery.py": frozenset({"blackbox"}),
+    "test_container_metrics_delivery.py": frozenset({"container-metrics"}),
+    "test_database_delivery.py": frozenset({"database"}),
+    "test_fuzz_burst_delivery.py": frozenset({"logs", "metrics"}),
+    "test_host_delivery.py": frozenset({"host-metrics"}),
+    "test_log_fields_parity.py": frozenset({"logs"}),
+    "test_logs_delivery.py": frozenset({"logs"}),
+    "test_metrics_delivery.py": frozenset({"metrics"}),
+    "test_secret_redaction.py": frozenset({"logs"}),
+    "test_snmp_delivery.py": frozenset({"snmp"}),
 }
+#: Domains a non-reference implementation of the e2e axes can run.
+_NON_REFERENCE_DOMAINS = frozenset(METRICS_IMPL_DOMAINS) | frozenset(
+    LOGS_IMPL_DOMAINS
+)
 #: A PromQL or LogQL matcher on the collector label inside a query string.
 _COLLECTOR_MATCHER = re.compile(r'\bcollector\s*=~?\s*"([^"]*)"')
 
@@ -776,18 +814,61 @@ def test_metrics_impl_domains_equal_the_vmagent_registry_row() -> None:
     assert md.implementations()["vmagent"] == set(METRICS_IMPL_DOMAINS)
 
 
-def test_e2e_collector_literal_only_where_vmagent_does_not_run() -> None:
-    """
-    Pins: a metrics-domain check expects `stack.collector(...)`, not "alloy".
+def test_logs_impl_domains_equal_the_vector_registry_row() -> None:
+    assert md.implementations()["vector"] == set(LOGS_IMPL_DOMAINS)
 
-    e2e_vmagent runs the metrics domain on vmagent, so a literal there
+
+def test_every_non_reference_implementation_has_an_e2e_axis() -> None:
+    """
+    Pins: the literal gate below covers every registered implementation.
+
+    A new manifest 14 row without an e2e axis would leave its domains
+    outside `_NON_REFERENCE_DOMAINS`, so an `"alloy"` literal there would
+    pass `tests` and fail only the e2e session of that implementation.
+    """
+    registry = md.implementations()
+    assert REFERENCE_IMPLEMENTATION == "alloy"
+    axes = {
+        impl: set(domains)
+        for impls, domains in (
+            (METRICS_IMPLEMENTATIONS, METRICS_IMPL_DOMAINS),
+            (LOGS_IMPLEMENTATIONS, LOGS_IMPL_DOMAINS),
+        )
+        for impl in impls
+        if impl != REFERENCE_IMPLEMENTATION
+    }
+    assert axes == {
+        impl: domains
+        for impl, domains in registry.items()
+        if impl != REFERENCE_IMPLEMENTATION
+    }
+
+
+def test_e2e_collector_literal_only_where_no_other_implementation_runs() -> (
+    None
+):
+    """
+    Pins: a metrics- or logs-domain check expects `stack.collector(...)`.
+
+    e2e_vmagent runs the metrics domain on vmagent and e2e_vector the logs
+    domain on Vector, so an `"alloy"` literal in a file of those domains
     would fail that session only; every other domain stays on Alloy.
     """
     offenders = {}
     for path in sorted(_E2E_DIR.glob("test_*.py")):
         if "alloy" not in _collector_literals(path.read_text("utf-8")):
             continue
-        domain = _E2E_FILE_DOMAINS.get(path.name, "<unmapped>")
-        if domain == "<unmapped>" or domain in METRICS_IMPL_DOMAINS:
-            offenders[path.name] = domain
+        domains = _E2E_FILE_DOMAINS.get(path.name)
+        if domains is None or domains & _NON_REFERENCE_DOMAINS:
+            offenders[path.name] = sorted(domains or {"<unmapped>"})
     assert offenders == {}
+
+
+def test_e2e_file_domains_are_known() -> None:
+    known = set(md.implementations()["alloy"])
+    unknown = {
+        name: sorted(domains - known)
+        for name, domains in _E2E_FILE_DOMAINS.items()
+        if domains - known
+    }
+    assert unknown == {}

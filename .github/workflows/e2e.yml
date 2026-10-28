@@ -21,7 +21,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        session: [e2e, e2e_victoria, e2e_vmagent, e2e_vmagent_victoria]
+        session:
+          - e2e
+          - e2e_victoria
+          - e2e_vmagent
+          - e2e_vmagent_victoria
+          - e2e_vector
+          - e2e_vector_victoria
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:

@@ -5,8 +5,9 @@ A `LogQuery` describes what to find; `to_logql` (Loki) and `to_logsql`
 (VictoriaLogs) translate it, so a check is written once and runs against
 either store. `LokiBackend` and `VictoriaLogsBackend` run a query over
 HTTP and return backend-neutral `LogRecord`s; everything else is pure.
-`selected_backend` and `selected_metrics_implementation` read the two e2e
-env axes: the storage variant and the metrics-domain implementation.
+`selected_backend`, `selected_metrics_implementation` and
+`selected_logs_implementation` read the three e2e env axes: the storage
+variant, the metrics-domain implementation and the logs-domain one.
 """
 
 from __future__ import annotations
@@ -36,6 +37,14 @@ _METRICS_IMPL_ENV = "RU_3OPS_DISCOVERY_E2E_METRICS_IMPL"
 #: is an external exporter scraped by the metrics domain (manifest 10.7)
 #: and loads the same Alloy files, so dropping metrics alone keeps them.
 METRICS_IMPL_DOMAINS: tuple[str, ...] = ("metrics", "ipmi")
+#: Implementations of the logs domain the e2e suite can run; the first,
+#: the reference, is the default.
+LOGS_IMPLEMENTATIONS: tuple[str, ...] = ("alloy", "vector")
+_LOGS_IMPL_ENV = "RU_3OPS_DISCOVERY_E2E_LOGS_IMPL"
+#: Alloy domains a non-reference logs implementation takes over.
+LOGS_IMPL_DOMAINS: tuple[str, ...] = ("logs",)
+#: The implementation every domain runs on unless an axis picks another.
+REFERENCE_IMPLEMENTATION = "alloy"
 _SIMPLE_ESCAPES = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t"}
 _DURATION_UNITS = {"s": 1.0, "m": 60.0, "h": 3600.0}
 _UNESCAPES = {
@@ -56,6 +65,18 @@ _FIRST_PRINTABLE = 0x20
 _DEL = 0x7F
 
 
+def _selected(
+    env: Mapping[str, str], variable: str, names: tuple[str, ...]
+) -> str:
+    """Return `env[variable]`, the first name when unset; refuse others."""
+    name = env.get(variable, names[0])
+    if name not in names:
+        raise ValueError(
+            f"{variable}={name!r} is not one of: " + ", ".join(names)
+        )
+    return name
+
+
 def selected_backend(env: Mapping[str, str]) -> str:
     """
     Return the e2e storage variant named by `RU_3OPS_DISCOVERY_E2E_BACKEND`.
@@ -63,13 +84,7 @@ def selected_backend(env: Mapping[str, str]) -> str:
     Unset means `prometheus-loki`; an unknown name raises ValueError, so a
     typo fails the run instead of silently testing the default store.
     """
-    name = env.get(_BACKEND_ENV, BACKEND_NAMES[0])
-    if name not in BACKEND_NAMES:
-        raise ValueError(
-            f"{_BACKEND_ENV}={name!r} is not one of: "
-            + ", ".join(BACKEND_NAMES)
-        )
-    return name
+    return _selected(env, _BACKEND_ENV, BACKEND_NAMES)
 
 
 def selected_metrics_implementation(env: Mapping[str, str]) -> str:
@@ -80,13 +95,18 @@ def selected_metrics_implementation(env: Mapping[str, str]) -> str:
     an unknown name raises ValueError, so a typo fails the run instead of
     silently testing the reference.
     """
-    name = env.get(_METRICS_IMPL_ENV, METRICS_IMPLEMENTATIONS[0])
-    if name not in METRICS_IMPLEMENTATIONS:
-        raise ValueError(
-            f"{_METRICS_IMPL_ENV}={name!r} is not one of: "
-            + ", ".join(METRICS_IMPLEMENTATIONS)
-        )
-    return name
+    return _selected(env, _METRICS_IMPL_ENV, METRICS_IMPLEMENTATIONS)
+
+
+def selected_logs_implementation(env: Mapping[str, str]) -> str:
+    """
+    Return the logs-domain implementation named by the e2e env axis.
+
+    `RU_3OPS_DISCOVERY_E2E_LOGS_IMPL` unset means the Alloy reference; an
+    unknown name raises ValueError, so a typo fails the run instead of
+    silently testing the reference.
+    """
+    return _selected(env, _LOGS_IMPL_ENV, LOGS_IMPLEMENTATIONS)
 
 
 @dataclass(frozen=True)

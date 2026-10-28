@@ -5,6 +5,8 @@ import re
 import ssl
 from pathlib import Path
 
+import pytest
+
 import app
 
 _TS = re.compile(r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}")
@@ -20,6 +22,24 @@ def test_json_line_is_valid_json_with_metadata_fields() -> None:
     assert parsed["seq"] == 7
     assert parsed["trace_id"]
     assert parsed["request_id"]
+
+
+def test_spoof_line_carries_stream_label_names_as_keys() -> None:
+    parsed = json.loads(app.spoof_line(3))
+    # Every value differs from what Docker metadata or the collector
+    # sets, so a stream label taken from the line is visible.
+    assert parsed["container"] == "spoofed-container"
+    assert parsed["host"] == "spoofed-host"
+    assert parsed["collector"] == "spoofed-collector"
+    assert parsed["level"] == "warn"
+    assert parsed["seq"] == 3
+
+
+def test_spoof_format_emits_spoof_lines(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    app.emit("spoof", 5)
+    assert capsys.readouterr().out == app.spoof_line(5) + "\n"
 
 
 def test_logfmt_line_has_expected_keys() -> None:

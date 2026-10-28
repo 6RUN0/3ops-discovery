@@ -27,13 +27,16 @@ import requests
 
 from tools.backends import (
     BACKEND_NAMES,
+    LOGS_IMPL_DOMAINS,
     METRICS_IMPL_DOMAINS,
+    REFERENCE_IMPLEMENTATION,
     LogQuery,
     LogRecord,
     LogsBackend,
     LokiBackend,
     VictoriaLogsBackend,
     selected_backend,
+    selected_logs_implementation,
     selected_metrics_implementation,
 )
 from tools.materialize import COMBOS, materialize
@@ -67,6 +70,18 @@ JOURNAL_HOST_COMPOSE = STACK_DIR / "docker-compose.journal-host.yml"
 VMAGENT_COMPOSE = STACK_DIR / "docker-compose.vmagent.yml"
 #: vmagent HTTP port: /health, /metrics and /api/v1/targets.
 VMAGENT_PORT = 8429
+#: Overlay adding Vector as the logs-domain collector; loaded only when
+#: RU_3OPS_DISCOVERY_E2E_LOGS_IMPL=vector. docker_logs reads every
+#: container from Vector's own start on, so the overlay holds back the
+#: services whose startup lines a check needs (alloy, app-burst) until
+#: Vector's healthcheck sees a connection to the Docker API (port 2375,
+#: 0947 in /proc/net/tcp); Vector serves no HTTP endpoint to probe.
+VECTOR_COMPOSE = STACK_DIR / "docker-compose.vector.yml"
+#: Compose overlay of each non-reference implementation an axis can pick.
+IMPLEMENTATION_COMPOSE: dict[str, Path] = {
+    "vmagent": VMAGENT_COMPOSE,
+    "vector": VECTOR_COMPOSE,
+}
 
 
 @dataclass(frozen=True)
@@ -79,6 +94,8 @@ class BackendSpec:
         serve the Prometheus query API and the log query API.
     metrics_write_url: remote-write URL of the metrics store inside the
         compose network, handed to a collector that has no store default.
+    logs_push_url: Loki push URL of the log store inside the compose
+        network, handed to a logs collector the base compose does not wire.
     *_ready_path: HTTP path answering 2xx once the store accepts queries.
     logs_factory: builds the `LogsBackend` from the logs base URL.
     """
@@ -88,6 +105,7 @@ class BackendSpec:
     metrics_port: int
     metrics_ready_path: str
     metrics_write_url: str
+    logs_push_url: str
     logs_service: str
     logs_port: int
     logs_ready_path: str
@@ -101,6 +119,7 @@ BACKENDS: dict[str, BackendSpec] = {
         metrics_port=9090,
         metrics_ready_path="/-/ready",
         metrics_write_url="http://prometheus:9090/api/v1/write",
+        logs_push_url="http://loki:3100/loki/api/v1/push",
         logs_service="loki",
         logs_port=3100,
         logs_ready_path="/ready",
@@ -112,6 +131,7 @@ BACKENDS: dict[str, BackendSpec] = {
         metrics_port=8428,
         metrics_ready_path="/health",
         metrics_write_url="http://victoriametrics:8428/api/v1/write",
+        logs_push_url="http://victorialogs:9428/insert/loki/api/v1/push",
         logs_service="victorialogs",
         logs_port=9428,
         logs_ready_path="/health",
@@ -126,15 +146,17 @@ if set(BACKENDS) != set(BACKEND_NAMES):
 
 _BACKEND_KEY = pytest.StashKey[str]()
 _METRICS_IMPL_KEY = pytest.StashKey[str]()
+_LOGS_IMPL_KEY = pytest.StashKey[str]()
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Resolve both e2e axes once, before collection touches docker."""
+    """Resolve every e2e axis once, before collection touches docker."""
     try:
         config.stash[_BACKEND_KEY] = selected_backend(os.environ)
         config.stash[_METRICS_IMPL_KEY] = selected_metrics_implementation(
             os.environ
         )
+        config.stash[_LOGS_IMPL_KEY] = selected_logs_implementation(os.environ)
     except ValueError as exc:
         raise pytest.UsageError(str(exc)) from exc
 
@@ -186,10 +208,10 @@ class Stack:
     Handles to the running e2e stack.
 
     Both session-scoped stacks share one Docker daemon, and log discovery
-    is unfiltered by contract (logs are collected by default). So Alloy of
-    stack A really does read the containers of stack B into its own log
-    store, and both stacks are built from the SAME compose file -- the
-    container names are identical. Isolation therefore rests on the
+    is unfiltered by contract (logs are collected by default). So the logs
+    collector of stack A really does read the containers of stack B into
+    its own log store, and both stacks are built from the SAME compose
+    file -- the container names are identical. Isolation therefore rests on the
     promoted compose_project label, which `logs` enforces at the door
     (`tools.backends.check_scope`) rather than at each call site.
     """
@@ -202,13 +224,16 @@ class Stack:
     backend: str
     alloy_url: str
     metrics_impl: str
+    logs_impl: str
     vmagent_url: str | None
 
     def collector(self, domain: str) -> str:
-        """Return the `collector` label value expected on `domain` series."""
+        """Return the `collector` label value expected on `domain` data."""
         if domain in METRICS_IMPL_DOMAINS:
             return self.metrics_impl
-        return "alloy"
+        if domain in LOGS_IMPL_DOMAINS:
+            return self.logs_impl
+        return REFERENCE_IMPLEMENTATION
 
     def prom_query(self, expr: str) -> list[dict[str, Any]]:
         """Instant PromQL query; returns data.result (possibly empty)."""
@@ -546,6 +571,31 @@ class _StackSpec:
     extra_env: dict[str, str]
     backend: str
     metrics_impl: str
+    logs_impl: str
+
+    def replaced_domains(self) -> dict[str, tuple[str, ...]]:
+        """Return each selected non-reference implementation's domains."""
+        axes = (
+            (self.metrics_impl, METRICS_IMPL_DOMAINS),
+            (self.logs_impl, LOGS_IMPL_DOMAINS),
+        )
+        return {
+            impl: domains
+            for impl, domains in axes
+            if impl != REFERENCE_IMPLEMENTATION
+        }
+
+    def alloy_domains(self) -> tuple[str, ...]:
+        """
+        Return the domains Alloy keeps beside the other implementations.
+
+        A replaced domain left in Alloy would collect the same targets a
+        second time under collector="alloy".
+        """
+        replaced = {
+            d for domains in self.replaced_domains().values() for d in domains
+        }
+        return tuple(d for d in self.domains if d not in replaced)
 
 
 def _bring_up(
@@ -563,22 +613,17 @@ def _bring_up(
     boot included) -> yield -> diagnostics-on-failure -> down -v.
     """
     backend = BACKENDS[spec.backend]
-    on_vmagent = spec.metrics_impl == "vmagent"
-    # vmagent replaces the Alloy metrics domain, so Alloy must not scrape
-    # the same targets a second time under collector="alloy".
-    alloy_domains = tuple(
-        d
-        for d in spec.domains
-        if not (on_vmagent and d in METRICS_IMPL_DOMAINS)
-    )
+    replacing = spec.replaced_domains()
+    on_vmagent = "vmagent" in replacing
     config_dir = materialize(
-        tmp_path_factory.mktemp("alloy-config"), alloy_domains
+        tmp_path_factory.mktemp("alloy-config"), spec.alloy_domains()
     )
     env = {
         **os.environ,
         "RU_3OPS_DISCOVERY_E2E_CONFIG_DIR": str(config_dir),
         "RU_3OPS_DISCOVERY_E2E_SECRETS_DIR": str(spec.secrets_dir),
         "RU_3OPS_DISCOVERY_E2E_METRICS_WRITE_URL": backend.metrics_write_url,
+        "RU_3OPS_DISCOVERY_E2E_LOGS_PUSH_URL": backend.logs_push_url,
         **spec.extra_env,
     }
     compose_files = [
@@ -587,7 +632,11 @@ def _bring_up(
         "-f",
         str(JOURNAL_HOST_COMPOSE),
         *backend.compose_files,
-        *(("-f", str(VMAGENT_COMPOSE)) if on_vmagent else ()),
+        *(
+            arg
+            for impl in replacing
+            for arg in ("-f", str(IMPLEMENTATION_COMPOSE[impl]))
+        ),
     ]
     compose_cmd = ("docker", "compose", "-p", spec.project, *compose_files)
     # Pre-clean leftovers of a crashed previous run.
@@ -634,6 +683,7 @@ def _bring_up(
             backend=spec.backend,
             alloy_url=_compose_port(compose_cmd, env, "alloy", 12345),
             metrics_impl=spec.metrics_impl,
+            logs_impl=spec.logs_impl,
             vmagent_url=(
                 _compose_port(compose_cmd, env, "vmagent", VMAGENT_PORT)
                 if on_vmagent
@@ -693,6 +743,7 @@ def stack(
         },
         backend=request.config.stash[_BACKEND_KEY],
         metrics_impl=request.config.stash[_METRICS_IMPL_KEY],
+        logs_impl=request.config.stash[_LOGS_IMPL_KEY],
     )
     yield from _bring_up(
         spec, request=request, tmp_path_factory=tmp_path_factory
@@ -766,6 +817,7 @@ def snmp_stack(
         },
         backend=request.config.stash[_BACKEND_KEY],
         metrics_impl=request.config.stash[_METRICS_IMPL_KEY],
+        logs_impl=request.config.stash[_LOGS_IMPL_KEY],
     )
     yield from _bring_up(
         spec, request=request, tmp_path_factory=tmp_path_factory

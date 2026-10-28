@@ -1,0 +1,39 @@
+---
+services:
+  vector:
+    image: timberio/vector:0.60.0-alpine
+    hostname: vector-collector
+    entrypoint: ["/bin/sh", "/etc/vector/entrypoint.sh"]
+    environment:
+      RU_3OPS_DISCOVERY_DOCKER_HOST: tcp://docker-socket-proxy:2375
+      RU_3OPS_DISCOVERY_HOSTNAME: ${RU_3OPS_DISCOVERY_HOSTNAME:-}
+      RU_3OPS_DISCOVERY_LOKI_PUSH_URL: ${RU_3OPS_DISCOVERY_E2E_LOGS_PUSH_URL:?set by the pytest fixture}
+    volumes:
+      - ../../../implementations/vector:/etc/vector:ro
+    tmpfs:
+      - /var/lib/vector
+    networks:
+      - telemetry
+      - docker-socket
+    healthcheck:
+      test: ["CMD", "grep", "-q", ":0947 01 ", "/proc/net/tcp"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      docker-socket-proxy:
+        condition: service_started
+    labels:
+      ru.3ops.discovery.version: "0.2"
+      ru.3ops.discovery.environment: "e2e"
+      ru.3ops.discovery.team: "platform"
+
+  alloy:
+    depends_on:
+      vector:
+        condition: service_healthy
+
+  app-burst:
+    depends_on:
+      vector:
+        condition: service_healthy

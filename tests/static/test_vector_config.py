@@ -708,6 +708,15 @@ def test_vector_pin_matches_registry() -> None:
     assert md.implementation_agent("vector") == f"Vector {version}"
 
 
+def test_e2e_overlay_vector_image_matches_pin() -> None:
+    # vector_check and the e2e overlay must run the same pinned tag.
+    overlay = nx.REPO / "tests/e2e/stack/docker-compose.vector.yml"
+    images = set(
+        re.findall(r"timberio/vector:[\w.-]+", overlay.read_text("utf-8"))
+    )
+    assert images == {nx.VECTOR_IMAGE}
+
+
 def test_registry_lists_vector_for_logs_only() -> None:
     assert md.implementations()["vector"] == {"logs"}
 

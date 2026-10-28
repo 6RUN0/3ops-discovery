@@ -17,6 +17,8 @@ without them -- the fully offline set is ``nox -s lint tests``.
     uv run nox -s e2e_victoria  # the same on VictoriaMetrics + VictoriaLogs
     uv run nox -s e2e_vmagent   # contract subset, metrics domain on vmagent
     uv run nox -s e2e_vmagent_victoria  # the same on the Victoria stores
+    uv run nox -s e2e_vector    # contract subset, logs domain on Vector
+    uv run nox -s e2e_vector_victoria  # the same on the Victoria stores
     uv run nox -s preflight     # everything
 """
 
@@ -360,11 +362,16 @@ def tests(session: nox.Session) -> None:
 
 
 def _run_e2e(
-    session: nox.Session, backend: str, metrics_impl: str, *pytest_args: str
+    session: nox.Session,
+    backend: str,
+    *pytest_args: str,
+    metrics_impl: str = "alloy",
+    logs_impl: str = "alloy",
 ) -> None:
-    """Run tests/e2e with both e2e axes set explicitly, never inherited."""
+    """Run tests/e2e with every e2e axis set explicitly, never inherited."""
     session.env["RU_3OPS_DISCOVERY_E2E_BACKEND"] = backend
     session.env["RU_3OPS_DISCOVERY_E2E_METRICS_IMPL"] = metrics_impl
+    session.env["RU_3OPS_DISCOVERY_E2E_LOGS_IMPL"] = logs_impl
     _uv(
         session,
         "pytest",
@@ -377,7 +384,7 @@ def _run_e2e(
 
 
 #: Checks that read Alloy internals describe the reference, not the
-#: contract: on vmagent the Alloy metrics pipeline they inspect is absent.
+#: contract: on vmagent or Vector the Alloy pipeline they inspect is absent.
 _CONFORMANCE_ONLY = ("-m", "not alloy_internals")
 
 
@@ -390,25 +397,41 @@ def e2e(session: nox.Session) -> None:
     healthchecks, the mini-app image build, and a metrics budget of
     RU_3OPS_DISCOVERY_DOCKER_REFRESH_INTERVAL + 30s scrape + flush.
     """
-    _run_e2e(session, "prometheus-loki", "alloy")
+    _run_e2e(session, "prometheus-loki")
 
 
 @nox.session
 def e2e_victoria(session: nox.Session) -> None:
     """Run the e2e suite against VictoriaMetrics + VictoriaLogs."""
-    _run_e2e(session, "victoria", "alloy")
+    _run_e2e(session, "victoria")
 
 
 @nox.session
 def e2e_vmagent(session: nox.Session) -> None:
     """Run the contract subset with vmagent as the metrics collector."""
-    _run_e2e(session, "prometheus-loki", "vmagent", *_CONFORMANCE_ONLY)
+    _run_e2e(
+        session, "prometheus-loki", *_CONFORMANCE_ONLY, metrics_impl="vmagent"
+    )
 
 
 @nox.session
 def e2e_vmagent_victoria(session: nox.Session) -> None:
     """Run the vmagent contract subset against the Victoria stores."""
-    _run_e2e(session, "victoria", "vmagent", *_CONFORMANCE_ONLY)
+    _run_e2e(session, "victoria", *_CONFORMANCE_ONLY, metrics_impl="vmagent")
+
+
+@nox.session
+def e2e_vector(session: nox.Session) -> None:
+    """Run the contract subset with Vector as the logs collector."""
+    _run_e2e(
+        session, "prometheus-loki", *_CONFORMANCE_ONLY, logs_impl="vector"
+    )
+
+
+@nox.session
+def e2e_vector_victoria(session: nox.Session) -> None:
+    """Run the Vector contract subset against the Victoria stores."""
+    _run_e2e(session, "victoria", *_CONFORMANCE_ONLY, logs_impl="vector")
 
 
 @nox.session
@@ -425,6 +448,8 @@ def preflight(session: nox.Session) -> None:
         "e2e_victoria",
         "e2e_vmagent",
         "e2e_vmagent_victoria",
+        "e2e_vector",
+        "e2e_vector_victoria",
     ):
         session.notify(name)
 
