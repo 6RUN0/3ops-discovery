@@ -809,3 +809,330 @@ def test_profile_branch_needs_exactly_one_consumer() -> None:
     )
     with pytest.raises(vc.VectorConfigError, match="2 consumers"):
         vc.profile_branches(config)
+
+
+# --- Extractors on synthetic configs ---
+
+
+def _loki_sink(**extra: Any) -> dict[str, Any]:
+    return {
+        "type": "loki",
+        "inputs": [],
+        "labels": {"*": "{{ out }}"},
+        "structured_metadata": {"*": "{{ meta }}"},
+        **extra,
+    }
+
+
+def _mini(source: str, **transforms: dict[str, Any]) -> dict[str, Any]:
+    """Return a config whose only label writer runs ``source``."""
+    return {
+        "sinks": {"sink": _loki_sink()},
+        "transforms": {
+            "w": {"type": "remap", "inputs": [], "source": source},
+            **transforms,
+        },
+    }
+
+
+def _renamed_field_config() -> dict[str, Any]:
+    """Return the real config with the labels event field renamed."""
+    config = _config()
+    writer = _writer(config)
+    writer["source"] = writer["source"].replace(
+        ".stream_labels = indexed", ".labels_out = indexed"
+    )
+    config["sinks"][vc.logs_sink(config)[0]]["labels"] = {
+        "*": "{{ labels_out }}"
+    }
+    return config
+
+
+def test_upstream_resolves_inputs_in_the_given_config() -> None:
+    config: dict[str, Any] = {
+        "sources": {"a": {}},
+        "transforms": {"t": {"inputs": ["a"]}, "u": {"inputs": ["t.out"]}},
+    }
+    assert vc.upstream("u", config) == {"t", "a"}
+
+
+def test_an_input_resolves_to_its_first_dotted_segment() -> None:
+    config: dict[str, Any] = {
+        "sources": {"a": {}},
+        "transforms": {"t": {"inputs": ["a"]}, "u": {"inputs": ["t.x.y"]}},
+    }
+    assert vc.upstream("u", config) == {"t", "a"}
+
+
+@pytest.mark.parametrize(
+    ("extractor", "what"),
+    [
+        (vc.sink_label_field, "labels"),
+        (vc.sink_metadata_field, "structured_metadata"),
+    ],
+)
+def test_sink_template_errors_name_the_template(
+    extractor: Any, what: str
+) -> None:
+    config = _config()
+    sink = config["sinks"][vc.logs_sink(config)[0]]
+    sink[what] = {"a": "{{ x }}"}
+    with pytest.raises(
+        vc.VectorConfigError, match=f"^sink {what} is not one '\\*' template$"
+    ):
+        extractor(config)
+
+
+def test_label_writer_follows_the_sink_field_of_the_given_config() -> None:
+    config = _renamed_field_config()
+    assert (
+        vc.stream_labels_writer(config)[0]
+        == (vc.stream_labels_writer(_config())[0])
+    )
+    assert vc.stream_label_problems(config) == []
+
+
+def test_label_keys_come_from_the_given_config() -> None:
+    config = _renamed_field_config()
+    writer = _writer(config)
+    writer["source"] = writer["source"].replace(
+        '"source": "docker"', '"source": "docker", "extra": "x"'
+    )
+    writer["source"] += "indexed.added = 1\n"
+    assert vc.static_stream_labels(config)["extra"] == "x"
+    keys = vc.stream_label_keys(config)
+    assert {"extra", "added"} <= keys
+
+
+def test_static_labels_need_an_initial_literal() -> None:
+    config = _mini("indexed = make()\n.out = indexed\n")
+    with pytest.raises(
+        vc.VectorConfigError, match=r"^indexed has no initial object literal$"
+    ):
+        vc.static_stream_labels(config)
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ({"type": "reduce"}, True),
+        ({"type": "remap", "source": "x = .message"}, True),
+        ({"type": "remap", "source": "x = parse_json!(y)"}, True),
+        ({"type": "remap", "source": "x = 1"}, False),
+        ({"type": "remap", "inputs": ["parse_a"], "source": "x = 1"}, False),
+        ({"type": "remap", "_kind": ".message", "source": "x = 1"}, False),
+    ],
+)
+def test_a_component_reads_the_line_when_it_mentions_it(
+    body: dict[str, Any], expected: bool
+) -> None:
+    assert vc._reads_message(body) is expected
+
+
+def test_label_gate_names_a_writer_that_mentions_a_parser() -> None:
+    config = _config()
+    name = vc.stream_labels_writer(config)[0]
+    _writer(config)["source"] += "unused = parse_json!(y)\n"
+    assert f"{name} reads line content" in vc.stream_label_problems(config)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "indexed.k = indexed",
+        "indexed = {indexed}",
+        "indexed.k = 1; indexed = foo",
+    ],
+)
+def test_label_gate_names_a_label_variable_changed_otherwise(
+    line: str,
+) -> None:
+    config = _config()
+    name = vc.stream_labels_writer(config)[0]
+    source = _writer(config)["source"]
+    _writer(config)["source"] = source.replace(
+        ".stream_labels = indexed", f"{line}\n.stream_labels = indexed"
+    )
+    assert f"{name}: indexed is changed other than key by key" in (
+        vc.stream_label_problems(config)
+    )
+
+
+def test_label_gate_names_a_second_initial_literal() -> None:
+    config = _config()
+    name = vc.stream_labels_writer(config)[0]
+    _writer(config)["source"] = "indexed = {}\n" + _writer(config)["source"]
+    assert f"{name}: indexed needs exactly one initial literal" in (
+        vc.stream_label_problems(config)
+    )
+
+
+def test_label_gate_flags_a_parallel_parser() -> None:
+    config = _config()
+    name = vc.stream_labels_writer(config)[0]
+    writer_input = _writer(config)["inputs"]
+    parser = next(
+        key
+        for key, body in config["transforms"].items()
+        if vc.parser_kind(body) == "json"
+    )
+    config["transforms"][parser]["inputs"] = list(writer_input)
+    assert f"{parser} reads line content without {name} upstream" in (
+        vc.stream_label_problems(config)
+    )
+
+
+def test_label_gate_ignores_a_sink_that_mentions_the_line() -> None:
+    config = _config()
+    sink = config["sinks"][vc.logs_sink(config)[0]]
+    sink["encoding"] = {"message": ".message", "parse": "parse_x"}
+    assert vc.stream_label_problems(config) == []
+
+
+def test_list_assignment_names_the_missing_variable() -> None:
+    config = _mini("indexed = {}\n.out = indexed\n")
+    with pytest.raises(
+        vc.VectorConfigError, match=r"^no list literal assigned to profiles$"
+    ):
+        vc.profile_allowlist(config)
+
+
+def test_unknown_profile_branch_is_required() -> None:
+    config = _mini("indexed = {}\n.out = indexed\n")
+    with pytest.raises(
+        vc.VectorConfigError, match=r"^no unknown-profile branch$"
+    ):
+        vc.unknown_profile_branch(config)
+
+
+def test_profile_route_conditions_must_be_strings() -> None:
+    config = _config()
+    route = vc.profile_route(config)[0]
+    config["transforms"][route]["route"]["raw"] = {"type": "vrl"}
+    with pytest.raises(
+        vc.VectorConfigError, match=f"^{route}: route conditions must be str"
+    ):
+        vc.profile_route(config)
+
+
+def test_parser_kind_ignores_a_body_without_source_or_remap() -> None:
+    assert vc.parser_kind({"type": "remap"}) is None
+    foreign = {
+        "type": "filter",
+        "source": 'parse_json(string(.message) ?? "")',
+    }
+    assert vc.parser_kind(foreign) is None
+
+
+def test_logfmt_grammar_needs_one_remap() -> None:
+    with pytest.raises(vc.VectorConfigError, match=r"^0 logfmt remaps$"):
+        vc.logfmt_grammar({"transforms": {}})
+
+
+_PREFIX_CALL = "p = parse_regex(string(.message) ?? \"\", r'{prefix}')\n"
+_PAIRS_CALL = "q = parse_regex_all(p, r'{pairs}')\n"
+
+
+def test_logfmt_grammar_needs_both_regexes() -> None:
+    config: dict[str, Any] = {
+        "transforms": {
+            "t": {
+                "type": "remap",
+                "source": _PREFIX_CALL.format(prefix="^a"),
+            }
+        }
+    }
+    with pytest.raises(
+        vc.VectorConfigError, match=r"^logfmt remap lacks its two regexes$"
+    ):
+        vc.logfmt_grammar(config)
+
+
+def test_logfmt_grammar_unescapes_both_regexes() -> None:
+    config: dict[str, Any] = {
+        "transforms": {
+            "t": {
+                "type": "remap",
+                "source": _PREFIX_CALL.format(prefix="^a$$")
+                + _PAIRS_CALL.format(pairs="b$$"),
+            }
+        }
+    }
+    assert vc.logfmt_grammar(config) == ("^a$", "b$")
+
+
+def test_profile_branches_read_the_given_config() -> None:
+    config: dict[str, Any] = {
+        "transforms": {
+            "r": {
+                "type": "route",
+                "inputs": [],
+                "route": {
+                    "o": '.stream_labels.log_profile == "p1"',
+                    "n": '.stream_labels.log_profile == "p2"',
+                },
+            },
+            "parse": {
+                "type": "remap",
+                "inputs": ["r.o"],
+                "source": 'fields = ["a", "b"]\n'
+                'x = parse_json(string(.message) ?? "")\n',
+            },
+            "pass": {"type": "filter", "inputs": ["r.n"]},
+        }
+    }
+    assert vc.profile_branches(config) == {
+        "p1": {"o": ("json", {"a", "b"})},
+        "p2": {"n": (None, set())},
+    }
+
+
+def _optout_config(consumer: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "sources": {"src": {"type": "docker_logs"}},
+        "transforms": {"f": {"inputs": ["src"], **consumer}},
+    }
+
+
+def test_optout_condition_reads_the_given_config() -> None:
+    config = _optout_config({"type": "filter", "condition": ".x"})
+    assert vc.optout_condition(config) == ".x"
+
+
+def test_optout_source_must_feed_a_filter() -> None:
+    config = _optout_config({"type": "remap", "condition": ".x"})
+    with pytest.raises(vc.VectorConfigError, match=r"not one filter$"):
+        vc.optout_condition(config)
+
+
+def test_optout_condition_must_be_a_vrl_string() -> None:
+    config = _optout_config({"type": "filter", "condition": {"a": 1}})
+    with pytest.raises(
+        vc.VectorConfigError, match=r"^opt-out condition is not a VRL string$"
+    ):
+        vc.optout_condition(config)
+
+
+def _reduce_config(**body: Any) -> dict[str, Any]:
+    return {"transforms": {"m": {"type": "reduce", **body}}}
+
+
+def test_multiline_without_inputs_has_an_empty_set() -> None:
+    config = _reduce_config(starts_when="match(.message, r'^x')")
+    assert vc.multiline(config)["inputs"] == set()
+
+
+def test_multiline_start_needs_a_raw_regex() -> None:
+    config = _reduce_config(starts_when="starts_with(.message, 'x')")
+    with pytest.raises(
+        vc.VectorConfigError, match=r"^m: starts_when has no raw regex$"
+    ):
+        vc.multiline(config)
+
+
+def test_multiline_start_must_be_a_vrl_condition() -> None:
+    config = _reduce_config(starts_when=5)
+    with pytest.raises(
+        vc.VectorConfigError, match=r"^not a VRL condition: 5$"
+    ):
+        vc.multiline(config)
