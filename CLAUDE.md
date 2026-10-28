@@ -4,8 +4,12 @@ Specification of a labels-driven telemetry discovery contract that any
 collector can implement (`docs/manifest.ru.md`, normative, Russian), its
 series catalog (`docs/series/`), the reference implementation in Grafana
 Alloy (`implementations/alloy/base/*.alloy`,
-`implementations/alloy/optional/*.alloy`) and the quality gates that
-bind them together.
+`implementations/alloy/optional/*.alloy`), two single-domain
+implementations (`implementations/vmagent/` for metrics,
+`implementations/vector/` for logs; registry in manifest 14, their
+differences in `tests/static/asymmetries.py`) and the quality gates that
+bind them together. Open work and the backlog live in `.omc/OPEN.md`
+(local, not in git).
 
 ## Commands
 
@@ -17,8 +21,8 @@ bind them together.
   not installed as a git hook here, so only this session runs it; its
   detect-secrets hook rewrites `.secrets.baseline` line numbers after
   any edit above a recorded finding, so stage the baseline after lint.
-- `uv run nox -s docs_lint` — rumdl + typos + lychee (system binaries).
-- `uv run nox -s alloy_check` — `alloy fmt -t` + `validate` for every
+- `uv run nox -s docs_lint` - rumdl + typos + lychee (system binaries).
+- `uv run nox -s alloy_check` - `alloy fmt -t` + `validate` for every
   config combination, inside the pinned Docker image.
 - `uv run nox -s vmagent_check` - `implementations/vmagent/` through its
   `entrypoint.sh` with `-dryRun` (strict parse) in `noxfile.VMAGENT_IMAGE`,
@@ -34,9 +38,9 @@ bind them together.
   literal text and validate still passes, and a bare `$` before a
   non-word character passes too, so both are caught only by
   `tests/static/test_vector_config.py`.
-- `uv run nox -s tests` — static manifest-vs-config gates + mini-app
+- `uv run nox -s tests` - static manifest-vs-config gates + mini-app
   units (no Docker).
-- `uv run nox -s e2e` — docker compose delivery checks (opt-in, takes
+- `uv run nox -s e2e` - docker compose delivery checks (opt-in, takes
   minutes). Subset: `uv run nox -s e2e -- -k logs_delivery` (a file
   path after `--` does not narrow the run: the session always passes
   the whole `tests/e2e` directory to pytest, so filter with `-k`).
@@ -52,8 +56,12 @@ bind them together.
 - `uv run nox -s e2e_vector` / `uv run nox -s e2e_vector_victoria` - the
   same contract subset with Vector as the logs-domain collector.
   Run e2e sessions one at a time: they share one Docker daemon.
-- `uv run nox -s preflight` — everything.
-- `uv run nox -s release` — build `dist/<name>-<version>.tar.gz` +
+- `uv run nox -s preflight` - every gate except `release` and `demo`:
+  13 sessions, about 24 min with warm images (measured 2026-10-28).
+  `tests/e2e/test_metrics_delivery.py::test_app_counter_grows` can miss
+  its 70s budget under host load; a rerun of that session alone settles
+  whether it is a regression.
+- `uv run nox -s release` - build `dist/<name>-<version>.tar.gz` +
   `SHA256SUMS` (contract + reference config + overlays + deployment
   README). Not a gate, so not in `preflight`; its invariants (version
   from the manifest header only, `.alloy` set == what `alloy_check`
@@ -64,7 +72,7 @@ bind them together.
   catalog probe; raw material for editing `docs/series/`, never copied in
   unreviewed. Run it against `nox -s demo` after every target has been
   scraped once: a cell scraped zero times comes out empty.
-- `uv run nox -s demo` — interactive sandbox: full stack + Grafana
+- `uv run nox -s demo` - interactive sandbox: full stack + Grafana
   (`--profile demo`, anonymous access at `http://127.0.0.1:3000`,
   Prometheus + Loki datasources provisioned). Prints URLs, follows logs;
   Ctrl+C detaches, `uv run nox -s demo -- down` tears it down. Not part of
@@ -72,7 +80,7 @@ bind them together.
 
 ## Architecture
 
-- `docs/manifest.ru.md` — the contract; normative tables/blocks are
+- `docs/manifest.ru.md` - the contract; normative tables/blocks are
   extracted by ANCHORS (section number + position) in
   `tests/static/manifest_doc.py`. Restructuring the manifest breaks
   the gates loudly; deliberate counterexamples in the text are never
@@ -118,10 +126,11 @@ bind them together.
   domain alone; alloy_check validates every combo. The e2e main fixture
   loads `all` (080 reads the journal of `journal-host`, below), the snmp
   fixture `all-snmp`.
-- `tests/static/` — manifest vs config consistency; allowed gaps live
-  in `asymmetries.py` as one explicit table.
-- `tests/e2e/stack/` — compose stack: Alloy reaches the Docker API
-  only through docker-socket-proxy (GET-only, internal network);
+- `tests/static/` - manifest vs config consistency; allowed gaps live
+  in `asymmetries.py`, one explicit table per kind of gap.
+- `tests/e2e/stack/` - compose stack: every collector (Alloy, vmagent,
+  Vector) reaches the Docker API only through docker-socket-proxy
+  (GET-only, internal network);
   alloy/prometheus/loki monitor themselves through the contract
   labels (dogfooding).
 - `tests/e2e/stack/journal-host/` + `docker-compose.journal-host.yml` -
