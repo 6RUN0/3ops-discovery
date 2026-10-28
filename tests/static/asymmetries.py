@@ -123,9 +123,6 @@ NOT_SERIES_PATHS: dict[str, str] = {
     "logs domain attaches provenance to what it builds from them",
     "050_log-profiles.alloy": "parses line content into structured "
     "metadata; the stream labels are attached by 040 upstream",
-    "060_otel.alloy": "the shared OTLP receiver is static and has no "
-    "Docker metadata, so it cannot produce container/host provenance -- "
-    "documented as an explicit exemption by manifest 10.5",
     "090_output-metrics.alloy": "the metrics write path: remote_write "
     "forwards what the domains already labelled",
     "091_output-logs.alloy": "the logs write path: loki.write forwards "
@@ -229,6 +226,29 @@ DISCOVERY_META_LABELS_ABSENT: dict[tuple[str, str, str], str] = {
     )
 }
 
+#: Behaviour a second implementation of the metrics domain adds or lacks
+#: beyond the series it delivers, as (implementation, domain, topic) ->
+#: reason with its source. test_implementation_gaps.py keeps every row
+#: inside its implementation's manifest 14 registry row; the mitigation is
+#: in the implementation's README ("Differences from the reference").
+METRICS_IMPLEMENTATION_GAPS: dict[tuple[str, str, str], str] = {
+    ("vmagent", "metrics", "unauthenticated push ingestion"): (
+        "vmagent accepts pushed samples on its HTTP listen port (8429 by "
+        "default) without authentication: Prometheus remote_write "
+        "(/api/v1/write), /api/v1/import*, InfluxDB line protocol (/write) "
+        "and OTLP (/opentelemetry/v1/metrics), and forwards them to "
+        "-remoteWrite.url. A neighbour on a shared network can therefore "
+        "write series with any container, host and collector label, which "
+        "breaks the manifest 13.5 promise that forged job/team labels still "
+        "carry the sender's honest container and host. The reference has "
+        "no ingestion endpoint outside the opt-in OTLP receiver. "
+        "Mitigation: keep the port off networks shared with untrusted "
+        "containers (or set -httpAuth.*). Source: VictoriaMetrics "
+        'docs/victoriametrics/vmagent.md v1.154.1, "How to push data to '
+        'vmagent".'
+    ),
+}
+
 #: Non-indexed log fields a store adds on its own, per e2e backend:
 #: backend -> field -> reason and source. Anything Alloy adds beyond the
 #: manifest 8.3 table is a reference defect and never goes here.
@@ -259,11 +279,11 @@ LOGS_IMPLEMENTATION_GAPS: dict[tuple[str, str, str], str] = {
         'implementations/vector/README.md, "Unknown profile".'
     ),
     ("vector", "logs", "10.3.4 item 3 warning rate limit"): (
-        "The WARN naming the container and the profile is rate-limited per "
-        "call site (rate_limit_secs: 60), not per container: a second "
-        "container with an unknown profile within the window is collected "
-        "as raw-v1 but not named. Seen on a live run: two misconfigured "
-        "containers produced one WARN and one `is being suppressed` line."
+        "The WARN (constant msg, container and profile as JSON fields) is "
+        "rate-limited per call site (rate_limit_secs: 60), not per "
+        "container: a second container with an unknown profile within the "
+        "window is collected as raw-v1 but not named. An empty profile "
+        "falls back silently (manifest 11)."
     ),
     ("vector", "logs", "own container excluded by hostname"): (
         "docker_logs skips the container whose ID starts with Vector's own "

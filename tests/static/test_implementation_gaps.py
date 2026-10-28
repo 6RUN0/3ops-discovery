@@ -16,6 +16,7 @@ from tests.static import vmagent_config as vc
 from tests.static.asymmetries import (
     DISCOVERY_META_LABELS_ABSENT,
     LOGS_IMPLEMENTATION_GAPS,
+    METRICS_IMPLEMENTATION_GAPS,
     SERIES_PARITY_GAPS,
 )
 
@@ -116,6 +117,7 @@ def test_gap_rows_name_a_domain_of_their_implementation() -> None:
         *SERIES_PARITY_GAPS,
         *DISCOVERY_META_LABELS_ABSENT,
         *LOGS_IMPLEMENTATION_GAPS,
+        *METRICS_IMPLEMENTATION_GAPS,
     ]
     misplaced = [
         row
@@ -126,7 +128,11 @@ def test_gap_rows_name_a_domain_of_their_implementation() -> None:
 
 
 def test_vmagent_gap_rows_name_the_metrics_domain() -> None:
-    rows = [*SERIES_PARITY_GAPS, *DISCOVERY_META_LABELS_ABSENT]
+    rows = [
+        *SERIES_PARITY_GAPS,
+        *DISCOVERY_META_LABELS_ABSENT,
+        *METRICS_IMPLEMENTATION_GAPS,
+    ]
     domains = {row[1] for row in rows if row[0] == "vmagent"}
     assert domains <= {"metrics"}
 
@@ -175,3 +181,10 @@ def test_label_pattern_expands_the_name_placeholder() -> None:
     pattern = _label_pattern("__meta_docker_network_label_<name>")
     assert pattern.search("[__meta_docker_network_label_com_example]")
     assert not pattern.search("[__meta_docker_network_ip]")
+
+
+def test_vmagent_push_ingestion_is_registered() -> None:
+    """Pins: vmagent's unauthenticated push port is a recorded divergence."""
+    row = ("vmagent", "metrics", "unauthenticated push ingestion")
+    assert row in METRICS_IMPLEMENTATION_GAPS
+    assert "METRICS_IMPLEMENTATION_GAPS" in md.section("14", subsections=False)

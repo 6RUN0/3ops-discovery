@@ -80,6 +80,11 @@ def test_scanner_knows_relabel_and_river_vocabulary() -> None:
         "`merge_strategies`",
         "`--dangerously-allow-env-var-interpolation`",
         "`timberio/vector:0.60.0-alpine`",
+        "user `alloy_monitor`",
+        "`tls_config`",
+        "(`tools/snmp_fixtures.py`, `validate_auths`)",
+        "отдельная scrape-пара",
+        "a separate scrape pair",
     ):
         text = f"## 5. X\n\n{token}\n"
         assert md.implementation_mentions(text) == {"5": 1}, token

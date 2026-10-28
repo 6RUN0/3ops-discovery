@@ -136,11 +136,15 @@ differ where Vector differs from Alloy:
   `reduce`, grouped by container, with the 8.3 ISO-8601 anchor,
   `max_events: 128` and `expire_after_ms: 10000`, the reference's
   `max_lines` and `max_wait_time`.
-- Unknown profile. The fallback writes a warning naming the container
-  and the profile to Vector's own log (manifest 10.3.4, item 3), at
-  most one per minute: a second misconfigured container within that
-  minute is collected as `raw-v1` but not named. VRL has no way to
-  increment a metric, so item 4 is not met.
+- Unknown profile. The fallback writes a warning to Vector's own log
+  (manifest 10.3.4, item 3), at most one per minute for all containers
+  together: a JSON object with a constant `msg` and the `container` and
+  `profile` values as escaped fields, so a label value cannot forge
+  lines of Vector's log. A second container with an unknown profile
+  within that minute is collected as `raw-v1` but not named.
+  An empty profile is collected as `raw-v1` without a warning
+  (manifest 11: empty equals absent). VRL has no way to increment a
+  metric, so item 4 is not met.
 - Lines written while Vector is down are lost. `docker_logs` keeps no
   read positions: on start it reads running containers from that moment
   on, so every line a container writes while Vector is stopped or

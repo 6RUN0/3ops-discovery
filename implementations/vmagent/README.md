@@ -44,8 +44,13 @@ so recreating the container loses unsent samples, and a `--read-only`
 container fails at start with `cannot create directory: mkdir
 vmagent-remotewrite-data: read-only file system`.
 
-Arguments after `entrypoint.sh` go to vmagent unchanged, so appending
-`-dryRun` checks the configuration and exits:
+Arguments after `entrypoint.sh` are appended to the flags the entrypoint
+sets, so appending `-dryRun` checks the configuration and exits. The
+remote write address is the exception: the entrypoint always passes
+`-remoteWrite.url` from `RU_3OPS_DISCOVERY_REMOTE_WRITE_URL`, and
+`-remoteWrite.url` is an array flag, so another `-remoteWrite.url`
+argument adds a second destination instead of replacing it. Set the
+address through the variable only.
 
 ```sh
 docker run --rm -v "$PWD/implementations/vmagent:/etc/vmagent:ro" \
@@ -79,6 +84,22 @@ must allow these sections:
 | `NETWORKS=1` | `GET /networks` |
 
 `POST=0` stays off; vmagent writes nothing to the Docker API.
+
+## Push ingestion port
+
+vmagent accepts pushed samples without authentication on its HTTP listen
+port (`-httpListenAddr`, `:8429` by default): Prometheus remote_write
+(`/api/v1/write`), `/api/v1/import*`, InfluxDB line protocol (`/write`)
+and OTLP (`/opentelemetry/v1/metrics`), and forwards them to the remote
+write address. Any container that reaches the port can write series with
+any `container`, `host` and `collector` label, so the manifest 13.5
+guarantee that a forged series still carries its sender's honest
+`container` and `host` does not hold for pushed data. Keep the port off
+networks shared with untrusted containers, or close it with
+`-httpAuth.username`/`-httpAuth.password` (then the scrape of vmagent's
+own `/metrics` needs the same credentials). The divergence is the
+`METRICS_IMPLEMENTATION_GAPS` row of
+[`tests/static/asymmetries.py`](../../tests/static/asymmetries.py).
 
 ## Differences from the reference
 

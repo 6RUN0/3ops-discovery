@@ -16,6 +16,7 @@ from typing import Any
 import noxfile as nx
 import pytest
 
+from tests.static import alloy_config as ac
 from tests.static import manifest_doc as md
 from tests.static import vmagent_config as vc
 
@@ -53,6 +54,52 @@ def test_mandatory_labels_fail_closed() -> None:
             f"__meta_docker_container_label_ru_3ops_discovery_{label}"
         )
     assert vc.has_keep_if_equal("__meta_docker_port_private")
+
+
+#: Labels whose value must pass a keep regex before a target is addressed.
+_VALIDATED_LABELS = (
+    "metrics_enabled",
+    "metrics_type",
+    "metrics_path",
+    "metrics_scheme",
+)
+
+
+def _reference_keep_regex(label_suffix: str) -> str:
+    regexes = [
+        regex
+        for rule in ac._rules(ac.sources()["020_metrics.alloy"])
+        if (regex := ac._keep_regex(rule, label_suffix)) is not None
+    ]
+    assert len(regexes) == 1, f"{label_suffix}: {len(regexes)} keeps in 020"
+    return regexes[0]
+
+
+@pytest.mark.parametrize("label_suffix", _VALIDATED_LABELS)
+def test_label_validation_keeps_match_the_reference(label_suffix: str) -> None:
+    """
+    Pins the 11 fail-closed validation of enabled, type, path and scheme.
+
+    Without these keeps a container with metrics.enabled=false or an
+    unknown metrics.type is scraped, and no e2e container carries such a
+    value, so only this gate sees the rule go missing.
+    """
+    rules = vc.relabel_rules()
+    label = f"__meta_docker_container_label_ru_3ops_discovery_{label_suffix}"
+    keeps = [
+        i
+        for i, rule in enumerate(rules)
+        if rule.get("action") == "keep"
+        and rule.get("source_labels") == [label]
+        and rule.get("regex") == _reference_keep_regex(label_suffix)
+    ]
+    address = next(
+        i
+        for i, rule in enumerate(rules)
+        if rule.get("target_label") == "__address__"
+    )
+    assert keeps, f"no keep on {label_suffix} with the reference regex"
+    assert keeps[0] < address
 
 
 def test_provenance_is_set_after_user_labels() -> None:

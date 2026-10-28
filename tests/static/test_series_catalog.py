@@ -9,6 +9,7 @@ so both failure modes are pinned here rather than left to the e2e run.
 
 from __future__ import annotations
 
+import itertools
 import re
 from pathlib import Path
 from typing import Any
@@ -239,6 +240,67 @@ def test_database_cells_are_catalogued_or_declared_gaps() -> None:
     }
     assert not catalogued & declared, catalogued & declared
     assert catalogued | declared == expected
+
+
+def _db_profile_ladder() -> list[str]:
+    """Database profiles in the 8.4 order, lightest first."""
+    ladder = re.search(r"Нагрузка монотонна: ([\w <=]+)\.", md.section("8.4"))
+    assert ladder, "8.4 states no profile ordering"
+    stems = ladder.group(1).split(" <= ")
+    by_stem = {p.rsplit("-v", 1)[0]: p for p in md.db_profiles()}
+    assert set(stems) == set(by_stem), (stems, sorted(by_stem))
+    return [by_stem[stem] for stem in stems]
+
+
+def _ladder_problems(catalog: dict[tuple[str, str], Cell]) -> list[str]:
+    """Series a heavier database cell lacks from a lighter one of its type."""
+    ladder = _db_profile_ladder()
+    cells: dict[str, dict[int, Cell]] = {}
+    for (domain, name), cell in catalog.items():
+        if domain == "database":
+            db_type, profile = name.split("/")
+            cells.setdefault(db_type, {})[ladder.index(profile)] = cell
+    problems = []
+    for by_rank in cells.values():
+        ranks = sorted(by_rank)
+        for low, high in itertools.pairwise(ranks):
+            missing = by_rank[low].present - by_rank[high].present
+            if missing:
+                problems.append(
+                    f"{by_rank[high].name} lacks {sorted(missing)}"
+                    f" of {by_rank[low].name}"
+                )
+    return problems
+
+
+def test_heavier_database_profile_keeps_lighter_series() -> None:
+    """
+    Pins 8.4 "basic <= standard <= extended" in the catalog cells.
+
+    The catalog is a lower bound for every implementation, so an
+    extended-v1 cell missing a series basic-v1 lists let a second
+    implementation drop it on extended-v1 and still pass series parity.
+    Only catalogued neighbours are compared: a missing middle cell
+    leaves the two outer ones adjacent.
+    """
+    assert _ladder_problems(load_catalog()) == []
+
+
+def test_ladder_gate_catches_a_series_lost_upward() -> None:
+    """The ladder gate fails when a heavier cell drops a lighter series."""
+    catalog = {
+        ("database", "postgres/basic-v1"): _cell(present={"a", "b"}),
+        ("database", "postgres/extended-v1"): Cell(
+            domain="database",
+            name="postgres/extended-v1",
+            identity=frozenset({"job"}),
+            present=frozenset({"a", "c"}),
+            absent=frozenset(),
+        ),
+    }
+    assert _ladder_problems(catalog) == [
+        "postgres/extended-v1 lacks ['b'] of postgres/basic-v1"
+    ]
 
 
 def test_blackbox_cells_cover_shipped_modules() -> None:

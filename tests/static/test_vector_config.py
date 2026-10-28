@@ -86,6 +86,52 @@ def test_unknown_profile_is_logged_by_the_collector() -> None:
     assert "log(" in vc.unknown_profile_branch()
 
 
+def test_unknown_profile_warning_message_is_constant() -> None:
+    """
+    Pins the logging rule on the 10.3.4 item 3 warning: a literal message.
+
+    VRL log() takes one value and no fields, so the values travel as
+    JSON fields next to a literal `msg`: a label value concatenated into
+    the text makes it ungroupable and lets whoever deploys a container
+    write raw bytes into the collector's log.
+    """
+    calls = re.findall(r"(?m)^.*\blog\(.*$", vc.unknown_profile_branch())
+    assert len(calls) == 1, calls
+    assert re.search(
+        r'\blog\(encode_json\(\{"msg": "[^"\\]*", "container": container, '
+        r'"profile": profile\}\), level: "warn"',
+        calls[0],
+    ), calls[0]
+    assert "+" not in calls[0]
+
+
+def test_empty_profile_falls_back_without_a_warning() -> None:
+    """
+    Pins manifest 11 (empty equals absent) on the unknown-profile branch.
+
+    An empty logs.profile is the default, not an unknown value: warning
+    on it spends the per-call-site rate limit and hides the warning for
+    a container with a real typo. The fallback itself stays unconditional.
+    """
+    source = vc.stream_labels_writer()[1]
+    default = re.search(
+        r'(?m)^\s*(\w+) = string\(container_labels\."ru\.3ops\.discovery'
+        r'\.logs\.profile"\) \?\? "([^"]*)"\s*$',
+        source,
+    )
+    assert default, "logs.profile is not read with a literal default"
+    var, missing = default.groups()
+    assert missing == ""
+    body = vc.unknown_profile_branch()
+    guarded = re.search(rf'(?ms)^(\s*)if {var} != "" \{{\n(.*?)^\1\}}', body)
+    assert guarded, "the warning is not guarded against an empty profile"
+    assert "log(" in guarded.group(2)
+    assert "log(" not in body.replace(guarded.group(0), "")
+    assert re.search(
+        rf'(?m)^\s*{var} = "raw-v1"\s*$', body.replace(guarded.group(0), "")
+    )
+
+
 def test_allowlist_gate_catches_a_missing_fallback() -> None:
     """Pins the fallback extractor to the literal the branch assigns."""
     config = _config()

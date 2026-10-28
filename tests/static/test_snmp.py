@@ -71,9 +71,9 @@ def test_module_gap_entries_appear_in_manifest() -> None:
 
 
 def test_auth_version_allowlist_matches_the_validator() -> None:
-    # 10.6.1 names the validator as the repository's single control point
-    # for the auth file, so the two must not drift apart. The exporter
-    # itself accepts 1..3; SNMPv1 stays out by contract.
+    # 10.6.1 states the allowlist and 14.4.4 names this validator as the
+    # repository's single control point, so the two must not drift. The
+    # exporter itself accepts 1..3; SNMPv1 stays out by contract.
     assert md.snmp_auth_versions() == set(snmp_fixtures.SNMP_VERSIONS)
     assert 1 not in snmp_fixtures.SNMP_VERSIONS
 

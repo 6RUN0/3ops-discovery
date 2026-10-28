@@ -60,6 +60,13 @@ JOURNAL_HOST_BOOT_BUDGET = 120.0
 #: One `is-system-running --wait` call; well below the budget, so a hung
 #: call is retried and reported instead of eating the whole budget.
 JOURNAL_HOST_ATTEMPT_TIMEOUT = 30.0
+#: One docker CLI call outside `up` (logs, port, down); seconds on a live
+#: daemon, so a hung daemon fails the call instead of blocking diagnostics
+#: and `down -v` until the pytest per-test timeout.
+DOCKER_CLI_TIMEOUT = 120.0
+#: Compose variable holding app-silent's per-run line marker, unique per
+#: stack so a store-wide search sees only this stack's opt-out lines.
+SILENT_MARKER_ENV = "RU_3OPS_DISCOVERY_E2E_SILENT_MARKER"
 #: Service that runs systemd as PID 1 and owns the journal 080 reads.
 JOURNAL_HOST = "journal-host"
 #: e2e-only overlay adding journal-host (read-write host cgroup mount);
@@ -361,6 +368,7 @@ def _compose_port(
         capture_output=True,
         text=True,
         check=True,
+        timeout=DOCKER_CLI_TIMEOUT,
     ).stdout.strip()
     return f"http://{out}"
 
@@ -368,16 +376,22 @@ def _compose_port(
 def _collect_diagnostics(stack: Stack, out_dir: Path) -> None:
     """Failure artifacts: files, not just stdout."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    logs = subprocess.run(
-        [*stack.compose_cmd, "logs", "--tail=200"],
-        env=stack.env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    (out_dir / "compose-logs.txt").write_text(
-        logs.stdout + logs.stderr, encoding="utf-8"
-    )
+    try:
+        logs = subprocess.run(
+            [*stack.compose_cmd, "logs", "--tail=200"],
+            env=stack.env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=DOCKER_CLI_TIMEOUT,
+        )
+        compose_logs = logs.stdout + logs.stderr
+    except subprocess.TimeoutExpired:
+        # The remaining artifacts, journal-host state included, still help.
+        compose_logs = (
+            f"docker compose logs timed out after {DOCKER_CLI_TIMEOUT}s\n"
+        )
+    (out_dir / "compose-logs.txt").write_text(compose_logs, encoding="utf-8")
     sources = [
         ("alloy-components.json", f"{stack.alloy_url}/api/v0/web/components"),
     ]
@@ -624,6 +638,7 @@ def _bring_up(
         "RU_3OPS_DISCOVERY_E2E_SECRETS_DIR": str(spec.secrets_dir),
         "RU_3OPS_DISCOVERY_E2E_METRICS_WRITE_URL": backend.metrics_write_url,
         "RU_3OPS_DISCOVERY_E2E_LOGS_PUSH_URL": backend.logs_push_url,
+        SILENT_MARKER_ENV: f"optout-{uuid.uuid4().hex}",
         **spec.extra_env,
     }
     compose_files = [
@@ -645,6 +660,7 @@ def _bring_up(
         env=env,
         capture_output=True,
         check=False,
+        timeout=DOCKER_CLI_TIMEOUT,
     )
     up = subprocess.run(
         [*compose_cmd, "up", "--build", "-d", "--wait"],
@@ -654,16 +670,25 @@ def _bring_up(
         check=False,
     )
     if up.returncode != 0:
-        subprocess.run(
-            [*compose_cmd, "logs", "--tail=100"], env=env, check=False
-        )
+        # A hung `compose logs` must not skip `down -v` or lose the up output.
+        logs_note = ""
+        try:
+            subprocess.run(
+                [*compose_cmd, "logs", "--tail=100"],
+                env=env,
+                check=False,
+                timeout=DOCKER_CLI_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            logs_note = f"compose logs timed out after {DOCKER_CLI_TIMEOUT}s\n"
         subprocess.run(
             [*compose_cmd, "down", "-v"],
             env=env,
             capture_output=True,
             check=False,
+            timeout=DOCKER_CLI_TIMEOUT,
         )
-        pytest.fail(f"compose up failed:\n{up.stdout}\n{up.stderr}")
+        pytest.fail(f"compose up failed:\n{logs_note}{up.stdout}\n{up.stderr}")
 
     # From here on the stack runs: any failure, before or after the yield,
     # must still reach `down -v`, or the privileged journal-host leaks.
@@ -721,6 +746,7 @@ def _bring_up(
             env=env,
             capture_output=True,
             check=False,
+            timeout=DOCKER_CLI_TIMEOUT,
         )
 
 

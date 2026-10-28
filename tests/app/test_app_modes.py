@@ -24,6 +24,17 @@ def test_json_line_is_valid_json_with_metadata_fields() -> None:
     assert parsed["request_id"]
 
 
+def test_marker_line_carries_the_marker_verbatim() -> None:
+    """Pins the opt-out probe: a store-wide search finds the marker text."""
+    line = app.marker_line("optout-abc", 4)
+    assert "optout-abc" in line
+    assert json.loads(line) == {
+        "event": "marker",
+        "marker": "optout-abc",
+        "seq": 4,
+    }
+
+
 def test_spoof_line_carries_stream_label_names_as_keys() -> None:
     """Pins the 6.2 probe: line keys named like labels differ from metadata."""
     parsed = json.loads(app.spoof_line(3))

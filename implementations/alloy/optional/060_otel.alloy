@@ -7,9 +7,10 @@
 // Label discipline (manifest 6.2): only allowlisted OTLP resource
 // attributes are promoted to Loki stream labels via the
 // loki.resource.labels hint; a defensive label_drop removes any default
-// label the exporter may add outside the allowlist. Provenance labels
-// (environment/team/container) are NOT produced here: the receiver is
-// static and has no docker metadata (manifest 6.1/10.5 exception).
+// label the exporter may add outside the allowlist. The receiver is
+// static and has no docker metadata, so environment/team/container are
+// NOT produced (manifest 6.1/10.5 exception); host and collector need
+// none and are set last on both paths, overwriting any pushed value.
 //
 // Traces are not accepted: their backend is out of scope for contract 0.2.
 
@@ -32,6 +33,20 @@ otelcol.exporter.prometheus "otel" {
 	// resource_to_telemetry_conversion stays at its default (false):
 	// resource attributes are not blanket-promoted to metric labels, so
 	// metric cardinality stays bounded (manifest 6.2).
+	forward_to = [prometheus.relabel.otel_provenance.receiver]
+}
+
+prometheus.relabel "otel_provenance" {
+	rule {
+		target_label = "collector"
+		replacement  = "alloy"
+	}
+
+	rule {
+		target_label = "host"
+		replacement  = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname)
+	}
+
 	forward_to = [prometheus.remote_write.default.receiver]
 }
 
@@ -64,6 +79,13 @@ loki.process "otel_labels" {
 	// exporter version emits fewer of them.
 	stage.label_drop {
 		values = ["exporter", "job", "instance", "level"]
+	}
+
+	stage.static_labels {
+		values = {
+			host      = coalesce(sys.env("RU_3OPS_DISCOVERY_HOSTNAME"), constants.hostname),
+			collector = "alloy",
+		}
 	}
 
 	forward_to = [loki.write.default.receiver]

@@ -11,10 +11,6 @@ from tests.e2e.conftest import (
 )
 from tools.series_catalog import load_catalog
 
-#: The only series family basic-v1 switches off (manifest 8.4); every other
-#: series a basic-v1 exporter serves must survive on the wider profiles.
-_BASIC_ONLY_DROPS = "pg_settings_"
-
 
 def _up_metric(stack: Stack, family: str) -> bool:
     result = stack.prom_query(f'{family}{{compose_project="{stack.project}"}}')
@@ -145,19 +141,14 @@ def test_basic_profile_shrinks_collection(stack: Stack) -> None:
     )
 
 
-def test_extended_profile_keeps_the_standard_set(stack: Stack) -> None:
+def test_extended_profile_keeps_the_basic_set(stack: Stack) -> None:
     # Profiles are monotonic (manifest 8.4): extended-v1 adds collectors on
     # top of the default set, it must not replace it. Every catalog series
-    # of postgres/basic-v1 except the pg_settings family it drops has to
-    # reach storage from the extended-v1 service too. Polled rather than
-    # checked once: an anchor series of the same scrape being visible does
-    # not make its siblings visible in the same instant query.
-    basic = load_catalog()["database", "postgres/basic-v1"]
-    expected = {
-        name
-        for name in basic.present
-        if not name.startswith(_BASIC_ONLY_DROPS)
-    }
+    # of postgres/basic-v1 has to reach storage from the extended-v1
+    # service too. Polled rather than checked once: an anchor series of the
+    # same scrape being visible does not make its siblings visible in the
+    # same instant query.
+    expected = set(load_catalog()["database", "postgres/basic-v1"].present)
     scope = f'compose_project="{stack.project}",compose_service="postgres"'
     names = "|".join(sorted(expected))
     missing = set(expected)

@@ -26,6 +26,12 @@ import requests
 _LABEL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _DURATION_NUMBER = re.compile(r"[0-9]+(?:\.[0-9]+)?")
 _SCOPE_LABEL = "compose_project"
+#: LogQL selector for "any stream": LogQL rejects `{}`, and Loki 3.x stamps
+#: service_name on every stream it ingests (unknown_service when nothing
+#: names one) unless limits_config.discover_service_name is set to [].
+_LOKI_ANY_STREAM = '{service_name=~".+"}'
+#: LogsQL filter for "any stream": a bare `*` matches every record.
+_LOGSQL_ANY_STREAM = "*"
 #: Storage variants the e2e suite can run against; the first is the default.
 BACKEND_NAMES: tuple[str, ...] = ("prometheus-loki", "victoria")
 _BACKEND_ENV = "RU_3OPS_DISCOVERY_E2E_BACKEND"
@@ -114,7 +120,9 @@ class LogQuery:
     """
     A log selection that both backends can express.
 
-    stream: stream labels that must equal the given values.
+    stream: stream labels that must equal the given values. With
+        `stream_regex` also empty the query selects every stream, which
+        only an unscoped query can do.
     stream_regex: RE2 patterns for stream labels. Loki anchors them fully;
         whether VictoriaLogs does is unverified, so callers use `.*x.*`,
         which matches the same lines either way.
@@ -195,9 +203,15 @@ def _stream_selector(query: LogQuery) -> str:
     return "{" + ",".join(f"{k}{op}{_quote(v)}" for k, op, v in items) + "}"
 
 
+def _has_matchers(query: LogQuery) -> bool:
+    return bool(query.stream or query.stream_regex)
+
+
 def to_logql(query: LogQuery) -> str:
-    """Translate a query to LogQL."""
-    parts = [_stream_selector(query)]
+    """Translate a query to LogQL; no stream matchers means every stream."""
+    parts = [
+        _stream_selector(query) if _has_matchers(query) else _LOKI_ANY_STREAM
+    ]
     if query.contains is not None:
         parts.append(f"|= {_quote(query.contains)}")
     if query.field_present is not None:
@@ -206,8 +220,10 @@ def to_logql(query: LogQuery) -> str:
 
 
 def to_logsql(query: LogQuery) -> str:
-    """Translate a query to LogsQL."""
-    parts = [_stream_selector(query)]
+    """Translate a query to LogsQL; no stream matchers means every stream."""
+    parts = [
+        _stream_selector(query) if _has_matchers(query) else _LOGSQL_ANY_STREAM
+    ]
     if query.contains is not None:
         parts.append(f"_msg:*{_quote(query.contains)}*")
     if query.field_present is not None:

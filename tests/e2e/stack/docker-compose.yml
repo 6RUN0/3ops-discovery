@@ -600,12 +600,14 @@ services:
       ru.3ops.discovery.logs.service: "app-burst"
 
   app-silent:
-    # Explicit opt-out (manifest 10.3.7): stdout keeps flowing, Loki
+    # Explicit opt-out (manifest 10.3.7): stdout keeps flowing, the store
     # must receive nothing; the test proves the container DID write via
-    # docker logs first (positive control).
+    # docker logs first (positive control). The per-run marker lets the
+    # test search the whole store, not only streams labelled app-silent.
     build: ./app
     environment:
       APP_LOG_FORMAT: json
+      APP_LINE_MARKER: ${RU_3OPS_DISCOVERY_E2E_SILENT_MARKER:-}
     networks:
       - telemetry
     labels:

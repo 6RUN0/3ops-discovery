@@ -770,14 +770,20 @@ def db_profile_map_keys() -> list[set[str]]:
 
 def otel_promoted_stream_labels() -> set[str]:
     """
-    Labels 060_otel promotes to Loki streams via the resource-hint.
+    Labels 060_otel promotes to Loki streams.
 
     The loki.resource.labels / loki.attribute.labels hint values name OTLP
     attributes; Alloy sanitizes them to Prometheus label form (dots and
-    dashes -> underscores). Empty if there is no optional otel file.
+    dashes -> underscores). The keys of stage.static_labels (provenance)
+    are stream labels too. Empty if there is no optional otel file.
     """
     labels: set[str] = set()
     text = optional_sources().get("060_otel.alloy", "")
+    for block in re.findall(
+        r"(?ms)stage\.static_labels\s*\{\s*values\s*=\s*\{\n(.*?)^\s*\}",
+        text,
+    ):
+        labels |= set(re.findall(r"^\s*(\w+)\s*=", block, re.MULTILINE))
     for hint in re.findall(
         r'key\s*=\s*"loki\.(?:resource|attribute)\.labels".*?'
         r'value\s*=\s*"([^"]*)"',

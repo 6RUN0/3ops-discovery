@@ -8,7 +8,15 @@ from typing import Any
 import pytest
 import requests
 
-from tests.e2e.conftest import E2E_HOSTNAME, LOGS_BUDGET, Stack, wait_until
+from tests.e2e.conftest import (
+    BACKENDS,
+    DOCKER_CLI_TIMEOUT,
+    E2E_HOSTNAME,
+    LOGS_BUDGET,
+    SILENT_MARKER_ENV,
+    Stack,
+    wait_until,
+)
 from tests.static import asymmetries
 from tests.static import manifest_doc as md
 from tools.backends import LogQuery, LogRecord
@@ -250,12 +258,16 @@ def test_unknown_profile_degrades_to_raw(stack: Stack) -> None:
 
 def test_silent_optout_is_not_delivered(stack: Stack) -> None:
     """
-    Pins: an opted-out container has no stream in storage.
+    Pins 10.3.1/10.3.7: no line of an opted-out container is in storage.
 
-    Two positive controls make the absence meaningful: the container
-    wrote to stdout (docker logs), and a collect-by-default container
-    of this compose project has a stream in the same store.
+    A stream-label lookup alone misses lines shipped without the
+    app-silent labels (an empty or partial stream), so the store is also
+    searched by app-silent's per-run marker across every stream. Two
+    positive controls make the absence meaningful: the container wrote
+    the marker to stdout (docker logs), and a collect-by-default
+    container of this compose project has a stream in the same store.
     """
+    marker = stack.env[SILENT_MARKER_ENV]
     # Positive controls FIRST: otherwise "no data" would prove a crash or
     # a misdirected store, not the opt-out.
     host_logs = subprocess.run(
@@ -269,8 +281,9 @@ def test_silent_optout_is_not_delivered(stack: Stack) -> None:
         capture_output=True,
         text=True,
         check=True,
+        timeout=DOCKER_CLI_TIMEOUT,
     )
-    assert host_logs.stdout.strip(), "app-silent produced no stdout"
+    assert marker in host_logs.stdout, "app-silent wrote no marker line"
     wait_until(
         lambda: stack.log_streams(
             LogQuery(
@@ -291,6 +304,18 @@ def test_silent_optout_is_not_delivered(stack: Stack) -> None:
             }
         )
     ), "opt-out container has a log stream"
+    # The store logs every query string it serves, and its own container
+    # is collected, so after one search the marker sits in the store's
+    # stream. Only a hit labelled as that service is excused.
+    store = BACKENDS[stack.backend].logs_service
+    shipped = [
+        record
+        for record in stack.log_records(
+            LogQuery(stream={}, contains=marker, scoped=False)
+        )
+        if record.stream.get("compose_service") != store
+    ]
+    assert not shipped, f"opt-out lines reached storage: {shipped[:3]}"
 
 
 @pytest.mark.alloy_internals

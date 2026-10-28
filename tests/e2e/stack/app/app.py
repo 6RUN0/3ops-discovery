@@ -14,6 +14,9 @@ One image, behaviour via env (manifest 10.3):
                         values (counters stay monotonic)
     APP_OTLP_ENDPOINT   OTLP/HTTP base URL (e.g. http://alloy:4318):
                         emit metrics and logs via OTLP instead of stdout
+    APP_LINE_MARKER     non-empty: one extra json line carrying this
+                        value per emission, so a check can search the
+                        whole store for this container's lines by content
 
 Emission cadence: one log line and one counter increment at least every
 EMIT_PERIOD seconds, so e2e timeouts are computable.
@@ -66,6 +69,10 @@ def json_line(seq: int) -> str:
             "request_id": f"req-{seq}",
         }
     )
+
+
+def marker_line(marker: str, seq: int) -> str:
+    return json.dumps({"event": "marker", "marker": marker, "seq": seq})
 
 
 def spoof_line(seq: int) -> str:
@@ -333,8 +340,11 @@ def main() -> int:
     if burst:
         run_burst(*parse_burst(burst))
 
+    marker = os.environ.get("APP_LINE_MARKER", "")
     for seq in itertools.count():
         emit(fmt, seq)
+        if marker:
+            print(marker_line(marker, seq), flush=True)
         EVENTS.inc()
         GAUGE.set(seq % 60)
         if fuzz_telemetry:

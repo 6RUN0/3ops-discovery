@@ -1,6 +1,7 @@
 """OTLP receiver delivery (manifest 5.1, 6.2 label discipline)."""
 
 from tests.e2e.conftest import (
+    E2E_HOSTNAME,
     LOGS_BUDGET,
     METRICS_BUDGET,
     Stack,
@@ -9,16 +10,16 @@ from tests.e2e.conftest import (
 from tests.static import manifest_doc as md
 from tools.backends import LogQuery
 
-#: The OTLP path produces no provenance (manifest 10.5), so an OTLP stream
-#: has no compose_project to scope by -- and both stacks run an app-otel
-#: of the same name.
+#: The OTLP path carries no Docker provenance (manifest 10.5), so an OTLP
+#: stream has no compose_project to scope by -- and both stacks run an
+#: app-otel of the same name.
 _OTEL_STREAM = LogQuery(stream={"service_name": "app-otel"}, scoped=False)
 
 
 def test_otlp_metrics_reach_prometheus(stack: Stack) -> None:
     # The counter is created via the OTLP path only; its presence proves
     # otelcol.receiver.otlp -> exporter.prometheus -> remote_write works.
-    wait_until(
+    series = wait_until(
         lambda: (
             stack.prom_query("app_otlp_events_total")
             or stack.prom_query("app_otlp_events")
@@ -26,6 +27,11 @@ def test_otlp_metrics_reach_prometheus(stack: Stack) -> None:
         timeout=METRICS_BUDGET,
         desc="otlp counter present in prometheus",
     )
+    # Manifest 10.5 exempts OTLP from environment/team/container only;
+    # host and collector are attached by the collector itself (6.1).
+    for item in series:
+        assert item["metric"]["host"] == E2E_HOSTNAME, item
+        assert item["metric"]["collector"] == stack.collector("otel"), item
 
 
 def test_otlp_logs_reach_loki_only_via_otlp(stack: Stack) -> None:
@@ -51,3 +57,5 @@ def test_otlp_stream_labels_within_allowlist(stack: Stack) -> None:
         contract = {n for n in labels if not n.startswith("__")}
         extra = contract - allowlist
         assert not extra, f"otel stream carries non-allowlist labels: {extra}"
+        assert labels["host"] == E2E_HOSTNAME, labels
+        assert labels["collector"] == stack.collector("otel"), labels

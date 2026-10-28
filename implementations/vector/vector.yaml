@@ -31,9 +31,11 @@ transforms:
       if value != "" { indexed.team = value }
       value = string(container_labels."ru.3ops.discovery.logs.service") ?? ""
       if value != "" { indexed.service_name = value }
-      profile = string(container_labels."ru.3ops.discovery.logs.profile") ?? "raw-v1"
+      profile = string(container_labels."ru.3ops.discovery.logs.profile") ?? ""
       if !includes(profiles, profile) {
-        log("unknown log profile, falling back to raw-v1: container=" + container + " profile=" + profile, level: "warn", rate_limit_secs: 60)
+        if profile != "" {
+          log(encode_json({"msg": "unknown log profile, falling back to raw-v1", "container": container, "profile": profile}), level: "warn", rate_limit_secs: 60)
+        }
         profile = "raw-v1"
       }
       indexed.log_profile = profile

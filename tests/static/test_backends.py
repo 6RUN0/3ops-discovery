@@ -75,6 +75,25 @@ def test_logsql_stream_regex() -> None:
     assert to_logsql(R) == '{compose_project="p1",container=~".*alloy.*"}'
 
 
+def test_query_without_matchers_selects_every_stream() -> None:
+    """
+    Pins the store-wide content search the opt-out check relies on.
+
+    LogQL rejects `{}`, so the Loki form needs a matcher every stored
+    stream satisfies; a line shipped without the expected labels must
+    still be found by its content on either store.
+    """
+    q = LogQuery(stream={}, contains="m-1", scoped=False)
+    assert to_logql(q) == '{service_name=~".+"} |= "m-1"'
+    assert to_logsql(q) == '* _msg:*"m-1"*'
+
+
+def test_query_without_matchers_must_be_unscoped() -> None:
+    """A store-wide query is never mistaken for a one-stack query."""
+    with pytest.raises(UnscopedQueryError):
+        check_scope(LogQuery(stream={}, contains="m-1"))
+
+
 def test_backslash_and_newline_escaped() -> None:
     q = replace(Q, contains="a\\b\nc")
     assert '"a\\\\b\\nc"' in to_logql(q)
