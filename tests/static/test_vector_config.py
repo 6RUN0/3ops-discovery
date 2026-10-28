@@ -38,6 +38,10 @@ OPTOUT_LABEL = "ru.3ops.discovery.logs.enabled"
 #: Labels every stream carries whatever the container declares.
 ALWAYS_PRESENT = {"collector", "host", "source", "container", "log_profile"}
 INTERPOLATION_FLAG = "--dangerously-allow-env-var-interpolation"
+#: RE2's \s as an explicit ASCII class (Go regexp/syntax: [\t\n\f\r ]).
+RE2_SPACE = "[ \\t\\n\\f\\r]"
+#: Rust regex Perl classes that match beyond ASCII, unlike RE2's.
+UNICODE_CLASSES = ("\\s", "\\S", "\\d", "\\D", "\\w", "\\W", "\\b", "\\B")
 
 
 def _config() -> dict[str, Any]:
@@ -266,11 +270,51 @@ def test_mixed_branches_are_exclusive() -> None:
     # delivered twice unless the logfmt branch excludes JSON-shaped
     # lines (10.3.6).
     _, routes = vc.profile_route()
-    json_anchor = "match(string(.message) ?? \"\", r'^\\s*\\{')"
+    json_anchor = f"match(string(.message) ?? \"\", r'^{RE2_SPACE}*\\{{')"
     assert json_anchor in routes["mixed-v1-json"]
     assert f"!{json_anchor}" in routes["mixed-v1-logfmt"]
     assert f"!{json_anchor}" not in routes["mixed-v1-json"]
-    assert "(^|\\s)(level|msg|status)=" in routes["mixed-v1-logfmt"]
+    assert f"(^|{RE2_SPACE})(level|msg|status)=" in routes["mixed-v1-logfmt"]
+
+
+def _vrl_regexes(node: Any) -> list[str]:
+    """Return every raw regex literal in the config's string values."""
+    if isinstance(node, dict):
+        return [r for value in node.values() for r in _vrl_regexes(value)]
+    if isinstance(node, list):
+        return [r for value in node for r in _vrl_regexes(value)]
+    return re.findall(r"r'([^']*)'", node) if isinstance(node, str) else []
+
+
+def _unicode_classes(config: dict[str, Any]) -> set[str]:
+    """Return the Unicode-aware class escapes in the config's regexes."""
+    return {
+        escape
+        for regex in _vrl_regexes(config)
+        for escape in re.findall(r"\\.", regex)
+        if escape in UNICODE_CLASSES
+    }
+
+
+def test_vrl_regexes_use_ascii_classes() -> None:
+    r"""
+    Pins RE2 semantics: Rust's \s, \d, \w and \b are Unicode-aware.
+
+    The reference's RE2 classes are ASCII, so a Unicode class would let
+    NBSP open a JSON branch or Arabic-Indic digits open a traceback.
+    """
+    assert len(_vrl_regexes(_config())) >= 5
+    assert _unicode_classes(_config()) == set()
+
+
+def test_ascii_class_gate_reads_the_escapes() -> None:
+    r"""Pins the escape scan: \\s is a literal backslash, \s a class."""
+    config = _config()
+    reduce = _transform(config, "reduce")
+    reduce["starts_when"]["source"] = (
+        r"match(.m, r'a\\sb') || match(.m, r'\d')"
+    )
+    assert _unicode_classes(config) == {"\\d"}
 
 
 # --- Stream labels (6.1, 6.2) ---
@@ -467,8 +511,10 @@ def test_multiline_reduce_parameters() -> None:
         if profile in ("python-stacktrace-v1", "java-stacktrace-v1")
     }
     assert params["group_by"] == ["container_id"]
-    # River escapes each backslash; the VRL raw string does not.
-    assert params["anchor"] == reference["firstline"].replace("\\\\", "\\")
+    # River escapes each backslash; the VRL raw string does not, and
+    # spells RE2's ASCII \d as [0-9].
+    firstline = reference["firstline"].replace("\\\\", "\\")
+    assert params["anchor"] == firstline.replace("\\d", "[0-9]")
     assert params["max_events"] == int(reference["max_lines"]) == 128
     assert reference["max_wait_time"] == "10s"
     assert params["expire_after_ms"] == 10000
