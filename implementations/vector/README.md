@@ -36,13 +36,14 @@ docker run -d --name vector \
 The image is the `-alpine` variant because the entrypoint needs
 `/bin/sh`; the `distroless` variants have none.
 
-`vector.yaml` sets `data_dir: /var/lib/vector`, where Vector keeps its
-working state. The volume above only keeps that directory across
-container re-creation; the config stores no read positions there (see
-"Lines written while Vector is down" below), and with `docker run
---read-only` and nothing mounted on it Vector 0.60.0 still starts, so
-the e2e overlay mounts a tmpfs on it. A static gate keeps the overlay's
-tmpfs path equal to `data_dir`.
+`vector.yaml` sets `data_dir: /var/lib/vector`. The volume above only
+keeps that directory across container re-creation; the config stores no
+read positions there (see "Lines written while Vector is down" below).
+Vector 0.60.0 starts under `docker run --read-only` with nothing mounted
+on `/var/lib/vector`. The e2e overlay mounts a tmpfs there, which keeps
+whatever Vector writes to that path in memory rather than in the
+container layer; a static gate keeps the overlay's tmpfs path equal to
+`data_dir`.
 
 Set `RU_3OPS_DISCOVERY_HOSTNAME` to the same value on every collector of
 the host (here the host's own name): left unset, each collector reports
