@@ -84,6 +84,7 @@ def test_metrics_host_falls_back_to_its_collector_hostname(
 def test_logs_host_falls_back_to_its_collector_hostname(
     snmp_stack: Stack,
 ) -> None:
+    """Pins 14.1: an empty hostname falls back to the logs collector's own."""
     # Same empty parameter, logs domain: the fallback is the hostname of
     # whichever collector runs that domain, Vector included.
     expected = _container_hostname(snmp_stack, snmp_stack.collector("logs"))

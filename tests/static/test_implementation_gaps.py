@@ -141,6 +141,7 @@ def test_logs_gap_rows_belong_to_a_non_reference_logs_implementation() -> None:
 
 
 def test_vector_logs_gaps_are_the_registered_ones() -> None:
+    """Pins the Vector gap rows to the recorded topics, one row each."""
     topics = {row[2] for row in LOGS_IMPLEMENTATION_GAPS}
     assert len(topics) == len(LOGS_IMPLEMENTATION_GAPS)
     assert {

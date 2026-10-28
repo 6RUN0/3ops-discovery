@@ -286,16 +286,19 @@ def test_unknown_metrics_implementation_is_loud() -> None:
 
 
 def test_default_logs_implementation() -> None:
+    """Pins the logs axis default: an unset variable runs the reference."""
     assert LOGS_IMPLEMENTATIONS == ("alloy", "vector")
     assert selected_logs_implementation({}) == "alloy"
 
 
 def test_vector_logs_implementation_is_accepted() -> None:
+    """Pins vector as an accepted value of the logs axis."""
     env = {"RU_3OPS_DISCOVERY_E2E_LOGS_IMPL": "vector"}
     assert selected_logs_implementation(env) == "vector"
 
 
 def test_unknown_logs_implementation_is_loud() -> None:
+    """Pins a usage error, naming the choices, for a mistyped logs axis."""
     with pytest.raises(ValueError, match="alloy, vector"):
         selected_logs_implementation(
             {"RU_3OPS_DISCOVERY_E2E_LOGS_IMPL": "vectro"}
@@ -303,6 +306,7 @@ def test_unknown_logs_implementation_is_loud() -> None:
 
 
 def test_axes_are_read_independently() -> None:
+    """Pins the metrics and logs axes as read from separate variables."""
     env = {
         "RU_3OPS_DISCOVERY_E2E_METRICS_IMPL": "vmagent",
         "RU_3OPS_DISCOVERY_E2E_LOGS_IMPL": "vector",
@@ -815,6 +819,7 @@ def test_metrics_impl_domains_equal_the_vmagent_registry_row() -> None:
 
 
 def test_logs_impl_domains_equal_the_vector_registry_row() -> None:
+    """Pins the domains Vector takes over to its 14 registry row."""
     assert md.implementations()["vector"] == set(LOGS_IMPL_DOMAINS)
 
 
@@ -865,6 +870,7 @@ def test_e2e_collector_literal_only_where_no_other_implementation_runs() -> (
 
 
 def test_e2e_file_domains_are_known() -> None:
+    """Pins the e2e file-to-domain map to the reference's domains."""
     known = set(md.implementations()["alloy"])
     unknown = {
         name: sorted(domains - known)

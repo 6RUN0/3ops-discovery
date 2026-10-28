@@ -69,6 +69,7 @@ def _writer(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_profile_allowlist_matches_manifest() -> None:
+    """Pins 10.3.2: the profile allowlist and fallback match the manifest."""
     allowlist = vc.profile_allowlist()
     assert len(allowlist) == len(set(allowlist))
     assert set(allowlist) == set(md.log_profile_fields())
@@ -78,6 +79,7 @@ def test_profile_allowlist_matches_manifest() -> None:
 
 
 def test_unknown_profile_is_logged_by_the_collector() -> None:
+    """Pins 10.3.4 item 3: an unknown profile is a collector warning."""
     # 10.3.4 items 1-3: keep collecting, apply raw-v1, say so in the
     # collector's own log.
     assert 'level: "warn"' in vc.unknown_profile_branch()
@@ -85,6 +87,7 @@ def test_unknown_profile_is_logged_by_the_collector() -> None:
 
 
 def test_allowlist_gate_catches_a_missing_fallback() -> None:
+    """Pins the fallback extractor to the literal the branch assigns."""
     config = _config()
     writer = _writer(config)
     writer["source"] = writer["source"].replace(
@@ -99,6 +102,7 @@ def test_allowlist_gate_catches_a_missing_fallback() -> None:
 
 
 def test_allowlist_gate_reads_the_literal_list() -> None:
+    """Pins the allowlist extractor to the list literal in the writer."""
     config = _config()
     writer = _writer(config)
     writer["source"] = writer["source"].replace(
@@ -108,6 +112,7 @@ def test_allowlist_gate_reads_the_literal_list() -> None:
 
 
 def test_profile_fields_match_manifest_table() -> None:
+    """Pins 8.3: each profile branch extracts the fields of the table."""
     table = md.log_profile_fields()
     branches = vc.profile_branches()
     for profile, outputs in branches.items():
@@ -129,6 +134,7 @@ def test_profile_fields_match_manifest_table() -> None:
 
 
 def test_profile_fields_gate_catches_a_dropped_field() -> None:
+    """Pins the fields gate against a field missing from a parser."""
     config = _config()
     for body in config["transforms"].values():
         if vc.parser_kind(body) == "logfmt":
@@ -139,6 +145,7 @@ def test_profile_fields_gate_catches_a_dropped_field() -> None:
 
 
 def test_profile_fields_gate_catches_a_branch_without_its_parser() -> None:
+    """Pins the fields gate against a route output that skips its parser."""
     config = _config()
     route, _ = vc.profile_route(config)
     for body in config["transforms"].values():
@@ -152,6 +159,7 @@ def test_profile_fields_gate_catches_a_branch_without_its_parser() -> None:
 
 
 def test_parser_kind_rejects_two_parsers_in_one_remap() -> None:
+    """Pins one parser per remap, so a branch has one kind."""
     body = {
         "type": "remap",
         "source": "a = parse_json(string(.message))\n"
@@ -163,6 +171,7 @@ def test_parser_kind_rejects_two_parsers_in_one_remap() -> None:
 
 @pytest.mark.parametrize("call", ["parse_logfmt", "parse_key_value"])
 def test_parser_kind_rejects_the_lossy_logfmt_parsers(call: str) -> None:
+    """Pins logfmt to the go-logfmt grammar, not Vector's parsers."""
     # Both disagree with the reference: `err= level=warn` loses level,
     # a standalone key becomes "true", a duplicate key an array.
     body = {"type": "remap", "source": f"p = {call}(string(.message))\n"}
@@ -171,6 +180,7 @@ def test_parser_kind_rejects_the_lossy_logfmt_parsers(call: str) -> None:
 
 
 def test_logfmt_remap_unquotes_only_quoted_values() -> None:
+    """Pins go-logfmt unquoting: JSON string rules on quoted values only."""
     # The pair regex captures the inside of a quoted value; JSON string
     # rules unescape it, as go-logfmt does (`"a \\"b\\""` -> `a "b"`).
     source = next(
@@ -244,10 +254,12 @@ def _vector_logfmt(line: str) -> dict[str, str]:
 
 @pytest.mark.parametrize("line", sorted(ALLOY_LOGFMT))
 def test_logfmt_grammar_matches_the_reference(line: str) -> None:
+    """Pins logfmt metadata to the reference's measured output per line."""
     assert _vector_logfmt(line) == ALLOY_LOGFMT[line]
 
 
 def test_json_null_gives_no_metadata_entry() -> None:
+    """Pins the reference's json stage: null is skipped, empty kept."""
     # Alloy's json stage skips a null result but keeps "" (measured).
     source = next(
         body["source"]
@@ -258,6 +270,7 @@ def test_json_null_gives_no_metadata_entry() -> None:
 
 
 def test_routed_profiles_rejects_a_condition_on_something_else() -> None:
+    """Pins every route condition to a log_profile comparison."""
     config = _config()
     _transform(config, "route")["route"]["generic-json-v1"] = "true"
     with pytest.raises(vc.VectorConfigError, match="names no profile"):
@@ -265,6 +278,7 @@ def test_routed_profiles_rejects_a_condition_on_something_else() -> None:
 
 
 def test_mixed_branches_are_exclusive() -> None:
+    """Pins 10.3.6: a mixed-v1 line takes one parser branch, never two."""
     # A route sends an event to EVERY output whose condition holds, so a
     # line like {"msg":"raised level=high"} would be parsed twice and
     # delivered twice unless the logfmt branch excludes JSON-shaped
@@ -321,6 +335,7 @@ def test_ascii_class_gate_reads_the_escapes() -> None:
 
 
 def test_stream_labels_within_manifest_allowlist() -> None:
+    """Pins 6.2: every stream label is in the indexed allowlist."""
     keys = vc.stream_label_keys()
     assert keys <= md.loki_label_allowlist()
     assert keys >= ALWAYS_PRESENT
@@ -329,6 +344,7 @@ def test_stream_labels_within_manifest_allowlist() -> None:
 
 
 def test_collector_and_source_are_constants() -> None:
+    """Pins 6.1: collector and source are constants of the writer."""
     assert vc.static_stream_labels() == {
         "source": "docker",
         "collector": "vector",
@@ -337,10 +353,12 @@ def test_collector_and_source_are_constants() -> None:
 
 
 def test_stream_labels_come_from_metadata_only() -> None:
+    """Pins 6.2: no stream label can carry line content."""
     assert vc.stream_label_problems() == []
 
 
 def test_label_origin_gate_catches_a_writer_that_reads_the_line() -> None:
+    """Pins the origin gate against a label read from the line."""
     config = _config()
     writer = _writer(config)
     writer["source"] += 'indexed.level = string(.message) ?? ""\n'
@@ -348,6 +366,7 @@ def test_label_origin_gate_catches_a_writer_that_reads_the_line() -> None:
 
 
 def test_label_origin_gate_catches_a_writer_after_a_parser() -> None:
+    """Pins the origin gate against a writer downstream of a parser."""
     config = _config()
     writer_name = vc.stream_labels_writer(config)[0]
     parser = next(
@@ -378,6 +397,7 @@ def _append_to_parser(config: dict[str, Any], line: str) -> None:
     ],
 )
 def test_label_origin_gate_catches_a_parser_touching_labels(line: str) -> None:
+    """Pins the origin gate against a parser writing the labels field."""
     config = _config()
     _append_to_parser(config, line)
     assert any("touches" in p for p in vc.stream_label_problems(config))
@@ -398,6 +418,7 @@ def test_label_origin_gate_catches_a_parser_touching_labels(line: str) -> None:
 def test_label_origin_gate_catches_a_parser_writing_the_root(
     line: str,
 ) -> None:
+    """Pins the origin gate against a parser merging into the root."""
     # `. |= parse_json!(.message)` is the common VRL idiom; with it a line
     # {"stream_labels": {...}} would set the stream labels.
     config = _config()
@@ -414,6 +435,7 @@ def test_label_origin_gate_catches_a_parser_writing_the_root(
     ],
 )
 def test_label_origin_gate_catches_a_writer_merging_keys(line: str) -> None:
+    """Pins label keys added one by one: merge, |= or del escape the scan."""
     config = _config()
     writer = _writer(config)
     writer["source"] = writer["source"].replace(
@@ -424,6 +446,7 @@ def test_label_origin_gate_catches_a_writer_merging_keys(line: str) -> None:
 
 
 def test_label_origin_gate_catches_a_reduce_merging_labels() -> None:
+    """Pins the origin gate against a reduce merge of the labels field."""
     config = _config()
     _transform(config, "reduce")["merge_strategies"]["stream_labels"] = (
         "concat"
@@ -432,6 +455,7 @@ def test_label_origin_gate_catches_a_reduce_merging_labels() -> None:
 
 
 def test_label_origin_gate_catches_a_second_writer() -> None:
+    """Pins exactly one transform as the stream labels writer."""
     config = _config()
     for body in config["transforms"].values():
         if vc.parser_kind(body) == "json":
@@ -511,6 +535,7 @@ def test_metadata_gate_catches_a_reduce_merging_metadata() -> None:
 
 
 def test_sink_template_gate_rejects_per_label_templates() -> None:
+    """Pins the whole-object label template: absent labels stay silent."""
     # Per-label templates log a WARN on every event whose field is
     # absent; the whole-object template drops absent labels silently.
     config = _config()
@@ -521,6 +546,7 @@ def test_sink_template_gate_rejects_per_label_templates() -> None:
 
 
 def test_absent_labels_are_left_out_not_emptied() -> None:
+    """Pins 6.2: a label without a source value is absent, not empty."""
     # R4: a container without environment/team/logs.service gets no such
     # label at all; each is assigned only behind a non-empty check.
     _, source, var = vc.stream_labels_writer()
@@ -534,6 +560,7 @@ def test_absent_labels_are_left_out_not_emptied() -> None:
 
 
 def test_optout_matches_only_literal_false() -> None:
+    """Pins 10.3.5: only the literal false opts a container out."""
     assert OPTOUT_LABEL in md.domain_labels("10.3.5")
     assert vc.optout_condition() == f'.label."{OPTOUT_LABEL}" != "false"'
 
@@ -547,6 +574,7 @@ def test_optout_matches_only_literal_false() -> None:
     ],
 )
 def test_optout_gate_catches_another_condition(condition: str) -> None:
+    """Pins the opt-out extractor to the exact condition text."""
     config = _config()
     _transform(config, "filter")["condition"] = condition
     assert vc.optout_condition(config) != (
@@ -555,6 +583,7 @@ def test_optout_gate_catches_another_condition(condition: str) -> None:
 
 
 def test_optout_gate_catches_a_bypass() -> None:
+    """Pins 10.3.1: no path from the source skips the opt-out filter."""
     config = _config()
     source = next(iter(config["sources"]))
     config["sinks"][vc.logs_sink(config)[0]]["inputs"].append(source)
@@ -572,6 +601,7 @@ def _reference_multiline() -> dict[str, str]:
 
 
 def test_multiline_reduce_parameters() -> None:
+    """Pins 8.3 multiline: anchor, limits and grouping match the reference."""
     reference = _reference_multiline()
     route, _ = vc.profile_route()
     params = vc.multiline()
@@ -592,6 +622,7 @@ def test_multiline_reduce_parameters() -> None:
 
 
 def test_multiline_gate_accepts_the_string_condition_form() -> None:
+    """Pins the anchor extractor to both VRL condition forms."""
     config = _config()
     reduce = _transform(config, "reduce")
     reduce["starts_when"] = reduce["starts_when"]["source"]
@@ -599,6 +630,7 @@ def test_multiline_gate_accepts_the_string_condition_form() -> None:
 
 
 def test_multiline_gate_catches_an_end_condition() -> None:
+    """Pins block ends to the next anchor only, as the reference does."""
     config = _config()
     _transform(config, "reduce")["ends_when"] = "true"
     with pytest.raises(vc.VectorConfigError, match="ends_when"):
@@ -606,6 +638,7 @@ def test_multiline_gate_catches_an_end_condition() -> None:
 
 
 def test_multiline_gate_catches_a_second_reduce() -> None:
+    """Pins exactly one reduce transform for both stacktrace profiles."""
     config = _config()
     config["transforms"]["extra"] = copy.deepcopy(_transform(config, "reduce"))
     with pytest.raises(vc.VectorConfigError, match="2 reduce transforms"):
@@ -616,6 +649,7 @@ def test_multiline_gate_catches_a_second_reduce() -> None:
 
 
 def test_env_defaults_match_manifest() -> None:
+    """Pins the entrypoint defaults to the 14.1 table."""
     table = md.env_defaults()
     defaults = vc.entrypoint_defaults()
     assert set(defaults) == LOGS_ENV
@@ -627,6 +661,7 @@ def test_env_defaults_match_manifest() -> None:
 
 
 def test_refresh_interval_is_not_read() -> None:
+    """Pins the recorded gap: docker_logs has no refresh interval."""
     # docker_logs follows Docker events, it does not poll, so the 14.1
     # refresh interval has nothing to set.
     for path in (vc.CONFIG, vc.ENTRYPOINT):
@@ -635,6 +670,7 @@ def test_refresh_interval_is_not_read() -> None:
 
 
 def test_hostname_fallback_lives_in_the_entrypoint_only() -> None:
+    """Pins the hostname fallback to one place, the entrypoint."""
     text = vc.CONFIG.read_text(encoding="utf-8")
     assert "get_hostname" not in text
     assert vc.env_reads(text) == {"RU_3OPS_DISCOVERY_HOSTNAME"}
@@ -642,16 +678,19 @@ def test_hostname_fallback_lives_in_the_entrypoint_only() -> None:
 
 
 def test_defaults_live_in_the_entrypoint_only() -> None:
+    """Pins every 14.1 default to the entrypoint, none inline."""
     text = vc.CONFIG.read_text(encoding="utf-8")
     assert vc.defaulted_interpolations(text) == set()
     assert vc.interpolations(text)
 
 
 def test_no_bare_dollar_in_the_config() -> None:
+    """Pins every literal $ as $$: interpolation expands $NAME anywhere."""
     assert vc.bare_dollars(vc.CONFIG.read_text(encoding="utf-8")) == []
 
 
 def test_bare_dollar_gate_flags_an_unescaped_anchor() -> None:
+    """Pins the bare-dollar scan to flag $ and $NAME, not $$ or ${X}."""
     text = "a: '${X}'\nb: match(s, r'^x$')\nc: r'^x$$'\nd: $NAME\n"
     assert vc.bare_dollars(text) == ["b: match(s, r'^x$')", "d: $NAME"]
     assert vc.interpolations(text) == {"X", "NAME"}
@@ -674,6 +713,7 @@ def test_escaped_dollar_inside_braces_is_no_interpolation() -> None:
 
 
 def test_interpolation_gate_sees_inline_defaults() -> None:
+    """Pins the inline-default scan to both ${A:-x} and ${A-x}."""
     assert vc.defaulted_interpolations("a: ${A:-x} b: ${B-y} c: ${C}") == {
         "A",
         "B",
@@ -681,6 +721,7 @@ def test_interpolation_gate_sees_inline_defaults() -> None:
 
 
 def test_entrypoint_defaults_errors_name_the_problem() -> None:
+    """Pins named errors for diverging or missing entrypoint defaults."""
     with pytest.raises(vc.VectorConfigError, match="X has diverging"):
         vc.entrypoint_defaults(
             "${RU_3OPS_DISCOVERY_X:-a} ${RU_3OPS_DISCOVERY_X:-b}"
@@ -738,6 +779,7 @@ def _vector_args(result: subprocess.CompletedProcess[str]) -> list[str]:
 def test_entrypoint_applies_defaults_and_splits_the_push_url(
     tmp_path: Path,
 ) -> None:
+    """Pins 14.1 defaults and the push URL split into endpoint and path."""
     result = _run_entrypoint(_stub_bin(tmp_path), {}, "validate")
     env = _vector_env(result)
     docker_host = env["RU_3OPS_DISCOVERY_DOCKER_HOST"]
@@ -751,6 +793,7 @@ def test_entrypoint_applies_defaults_and_splits_the_push_url(
 
 
 def test_entrypoint_sets_every_interpolated_variable(tmp_path: Path) -> None:
+    """Pins no unset ${NAME} in either vector_check environment."""
     # Vector fails on an unset ${NAME} only when interpolation is on, and
     # the entrypoint must leave none unset in either vector_check run.
     text = vc.CONFIG.read_text(encoding="utf-8")
@@ -761,6 +804,7 @@ def test_entrypoint_sets_every_interpolated_variable(tmp_path: Path) -> None:
 
 
 def test_entrypoint_keeps_given_values(tmp_path: Path) -> None:
+    """Pins given 14.1 values to pass through the entrypoint unchanged."""
     env = _vector_env(
         _run_entrypoint(
             _stub_bin(tmp_path),
@@ -783,6 +827,7 @@ def test_entrypoint_keeps_given_values(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("name", sorted(LOGS_ENV))
 def test_entrypoint_rejects_a_newline(tmp_path: Path, name: str) -> None:
+    """Pins a refusal of a newline that would inject YAML via a value."""
     result = _run_entrypoint(_stub_bin(tmp_path), {name: "a\nb: c"})
     assert result.returncode == 1
     assert name in result.stderr
@@ -806,6 +851,7 @@ def test_entrypoint_rejects_a_newline(tmp_path: Path, name: str) -> None:
 def test_entrypoint_rejects_a_push_url_it_cannot_split(
     tmp_path: Path, url: str, reason: str
 ) -> None:
+    """Pins a refusal of a push URL the sink cannot rebuild."""
     result = _run_entrypoint(
         _stub_bin(tmp_path), {"RU_3OPS_DISCOVERY_LOKI_PUSH_URL": url}
     )
@@ -819,6 +865,7 @@ def test_entrypoint_rejects_a_push_url_it_cannot_split(
 def test_entrypoint_rejects_a_missing_hostname(
     tmp_path: Path, hostname: str
 ) -> None:
+    """Pins a refusal to start with no hostname to report."""
     result = _run_entrypoint(_stub_bin(tmp_path, hostname), {})
     assert result.returncode == 1
     assert "hostname" in result.stderr
@@ -826,6 +873,7 @@ def test_entrypoint_rejects_a_missing_hostname(
 
 
 def test_entrypoint_execs_vector_with_interpolation() -> None:
+    """Pins the interpolation flag, without which ${NAME} stays literal."""
     # Without the flag Vector keeps ${NAME} as literal text and validate
     # still passes, so vector_check alone would not notice its loss.
     text = vc.ENTRYPOINT.read_text(encoding="utf-8")
@@ -836,12 +884,14 @@ def test_entrypoint_execs_vector_with_interpolation() -> None:
 
 
 def test_vector_pin_matches_registry() -> None:
+    """Pins the nox image tag to the version in the 14 registry."""
     version = nx.VECTOR_IMAGE.split(":")[1].removesuffix("-alpine")
     assert f"timberio/vector:{version}-alpine" == nx.VECTOR_IMAGE
     assert md.implementation_agent("vector") == f"Vector {version}"
 
 
 def test_e2e_overlay_vector_image_matches_pin() -> None:
+    """Pins the e2e overlay to the image vector_check validates."""
     # vector_check and the e2e overlay must run the same pinned tag.
     overlay = nx.REPO / "tests/e2e/stack/docker-compose.vector.yml"
     images = set(
@@ -865,10 +915,12 @@ def test_e2e_overlay_tmpfs_is_the_configured_data_dir() -> None:
 
 
 def test_registry_lists_vector_for_logs_only() -> None:
+    """Pins the 14 registry row of vector to the logs domain."""
     assert md.implementations()["vector"] == {"logs"}
 
 
 def test_vector_check_runs_through_the_entrypoint_both_ways() -> None:
+    """Pins vector_check to the 14.1 defaults and the e2e values."""
     # One run proves the 14.1 defaults alone yield a loadable config, the
     # other the e2e values: tcp:// docker host, empty hostname and a push
     # URL with a longer path.
@@ -900,6 +952,7 @@ def test_vector_check_args_are_the_exact_docker_run_command() -> None:
 
 
 def test_vector_check_is_a_default_gate() -> None:
+    """Pins vector_check into the default nox sessions."""
     assert "vector_check" in (nox.options.sessions or [])
 
 
@@ -907,6 +960,7 @@ def test_vector_check_is_a_default_gate() -> None:
 
 
 def test_load_rejects_a_non_mapping(tmp_path: Path) -> None:
+    """Pins a named error for a config that is not a YAML mapping."""
     path = tmp_path / "v.yaml"
     path.write_text("- a\n", encoding="utf-8")
     with pytest.raises(vc.VectorConfigError, match="not a YAML mapping"):
@@ -914,6 +968,7 @@ def test_load_rejects_a_non_mapping(tmp_path: Path) -> None:
 
 
 def test_components_reject_a_reused_id() -> None:
+    """Pins unique component ids across sources, transforms and sinks."""
     config: dict[str, Any] = {"sources": {"a": {}}, "sinks": {"a": {}}}
     with pytest.raises(vc.VectorConfigError, match="a reused"):
         vc.components(config)
@@ -941,12 +996,14 @@ def test_remap_sources_need_a_source() -> None:
 
 
 def test_an_input_naming_no_component_is_an_error() -> None:
+    """Pins a named error for an input that names no component."""
     config: dict[str, Any] = {"transforms": {"t": {"inputs": ["ghost.out"]}}}
     with pytest.raises(vc.VectorConfigError, match=r"ghost\.out names no"):
         vc.upstream("t", config)
 
 
 def test_sink_template_must_be_one_field() -> None:
+    """Pins the sink template to one event field, not a composite."""
     config = _config()
     sink = config["sinks"][vc.logs_sink(config)[0]]
     sink["structured_metadata"] = {"*": "{{ a }}-{{ b }}"}
@@ -955,6 +1012,7 @@ def test_sink_template_must_be_one_field() -> None:
 
 
 def test_profile_branch_needs_exactly_one_consumer() -> None:
+    """Pins one consumer per route output, so its kind is unambiguous."""
     config = _config()
     route, _ = vc.profile_route(config)
     config["sinks"][vc.logs_sink(config)[0]]["inputs"].append(
@@ -1002,6 +1060,7 @@ def _renamed_field_config() -> dict[str, Any]:
 
 
 def test_upstream_resolves_inputs_in_the_given_config() -> None:
+    """Pins upstream() to the config it is given, not the real one."""
     config: dict[str, Any] = {
         "sources": {"a": {}},
         "transforms": {"t": {"inputs": ["a"]}, "u": {"inputs": ["t.out"]}},
@@ -1010,6 +1069,7 @@ def test_upstream_resolves_inputs_in_the_given_config() -> None:
 
 
 def test_an_input_resolves_to_its_first_dotted_segment() -> None:
+    """Pins an id.output input to the component id before the dot."""
     config: dict[str, Any] = {
         "sources": {"a": {}},
         "transforms": {"t": {"inputs": ["a"]}, "u": {"inputs": ["t.x.y"]}},
@@ -1027,6 +1087,7 @@ def test_an_input_resolves_to_its_first_dotted_segment() -> None:
 def test_sink_template_errors_name_the_template(
     extractor: Any, what: str
 ) -> None:
+    """Pins template errors to name the sink option at fault."""
     config = _config()
     sink = config["sinks"][vc.logs_sink(config)[0]]
     sink[what] = {"a": "{{ x }}"}
@@ -1037,6 +1098,7 @@ def test_sink_template_errors_name_the_template(
 
 
 def test_label_writer_follows_the_sink_field_of_the_given_config() -> None:
+    """Pins the writer search to the field the given sink reads."""
     config = _renamed_field_config()
     assert (
         vc.stream_labels_writer(config)[0]
@@ -1046,6 +1108,7 @@ def test_label_writer_follows_the_sink_field_of_the_given_config() -> None:
 
 
 def test_label_keys_come_from_the_given_config() -> None:
+    """Pins label keys to the given config's literal and assignments."""
     config = _renamed_field_config()
     writer = _writer(config)
     writer["source"] = writer["source"].replace(
@@ -1058,6 +1121,7 @@ def test_label_keys_come_from_the_given_config() -> None:
 
 
 def test_static_labels_need_an_initial_literal() -> None:
+    """Pins a named error for a label variable without a literal."""
     config = _mini("indexed = make()\n.out = indexed\n")
     with pytest.raises(
         vc.VectorConfigError, match=r"^indexed has no initial object literal$"
@@ -1079,10 +1143,12 @@ def test_static_labels_need_an_initial_literal() -> None:
 def test_a_component_reads_the_line_when_it_mentions_it(
     body: dict[str, Any], expected: bool
 ) -> None:
+    """Pins the line-read test to the body, not inputs or kind."""
     assert vc._reads_message(body) is expected
 
 
 def test_label_gate_names_a_writer_that_mentions_a_parser() -> None:
+    """Pins a named problem for a parser call in the writer."""
     config = _config()
     name = vc.stream_labels_writer(config)[0]
     _writer(config)["source"] += "unused = parse_json!(y)\n"
@@ -1100,6 +1166,7 @@ def test_label_gate_names_a_writer_that_mentions_a_parser() -> None:
 def test_label_gate_names_a_label_variable_changed_otherwise(
     line: str,
 ) -> None:
+    """Pins a named problem for a label variable changed in bulk."""
     config = _config()
     name = vc.stream_labels_writer(config)[0]
     source = _writer(config)["source"]
@@ -1112,6 +1179,7 @@ def test_label_gate_names_a_label_variable_changed_otherwise(
 
 
 def test_label_gate_names_a_second_initial_literal() -> None:
+    """Pins a named problem for a second label variable literal."""
     config = _config()
     name = vc.stream_labels_writer(config)[0]
     _writer(config)["source"] = "indexed = {}\n" + _writer(config)["source"]
@@ -1121,6 +1189,7 @@ def test_label_gate_names_a_second_initial_literal() -> None:
 
 
 def test_label_gate_flags_a_parallel_parser() -> None:
+    """Pins a named problem for a parser beside, not after, the writer."""
     config = _config()
     name = vc.stream_labels_writer(config)[0]
     writer_input = _writer(config)["inputs"]
@@ -1136,6 +1205,7 @@ def test_label_gate_flags_a_parallel_parser() -> None:
 
 
 def test_label_gate_ignores_a_sink_that_mentions_the_line() -> None:
+    """Pins the line-read check to transforms, not sink encodings."""
     config = _config()
     sink = config["sinks"][vc.logs_sink(config)[0]]
     sink["encoding"] = {"message": ".message", "parse": "parse_x"}
@@ -1143,6 +1213,7 @@ def test_label_gate_ignores_a_sink_that_mentions_the_line() -> None:
 
 
 def test_list_assignment_names_the_missing_variable() -> None:
+    """Pins a named error for a missing profiles list literal."""
     config = _mini("indexed = {}\n.out = indexed\n")
     with pytest.raises(
         vc.VectorConfigError, match=r"^no list literal assigned to profiles$"
@@ -1151,6 +1222,7 @@ def test_list_assignment_names_the_missing_variable() -> None:
 
 
 def test_unknown_profile_branch_is_required() -> None:
+    """Pins 10.3.4: the writer needs an unknown-profile branch."""
     config = _mini("indexed = {}\n.out = indexed\n")
     with pytest.raises(
         vc.VectorConfigError, match=r"^no unknown-profile branch$"
@@ -1159,6 +1231,7 @@ def test_unknown_profile_branch_is_required() -> None:
 
 
 def test_profile_route_conditions_must_be_strings() -> None:
+    """Pins route conditions to VRL strings the gates can read."""
     config = _config()
     route = vc.profile_route(config)[0]
     config["transforms"][route]["route"]["raw"] = {"type": "vrl"}
@@ -1169,6 +1242,7 @@ def test_profile_route_conditions_must_be_strings() -> None:
 
 
 def test_parser_kind_ignores_a_body_without_source_or_remap() -> None:
+    """Pins parser kinds to remap programs only."""
     assert vc.parser_kind({"type": "remap"}) is None
     foreign = {
         "type": "filter",
@@ -1178,6 +1252,7 @@ def test_parser_kind_ignores_a_body_without_source_or_remap() -> None:
 
 
 def test_logfmt_grammar_needs_one_remap() -> None:
+    """Pins a named error when no remap parses logfmt."""
     with pytest.raises(vc.VectorConfigError, match=r"^0 logfmt remaps$"):
         vc.logfmt_grammar({"transforms": {}})
 
@@ -1187,6 +1262,7 @@ _PAIRS_CALL = "q = parse_regex_all(p, r'{pairs}')\n"
 
 
 def test_logfmt_grammar_needs_both_regexes() -> None:
+    """Pins the pair: a prefix regex alone is no logfmt grammar."""
     config: dict[str, Any] = {
         "transforms": {
             "t": {
@@ -1233,6 +1309,7 @@ def test_logfmt_grammar_reads_both_regexes() -> None:
 
 
 def test_logfmt_grammar_unescapes_both_regexes() -> None:
+    """Pins $$ unescaping in both logfmt regexes, as Vector reads them."""
     config: dict[str, Any] = {
         "transforms": {
             "t": {
@@ -1246,6 +1323,7 @@ def test_logfmt_grammar_unescapes_both_regexes() -> None:
 
 
 def test_profile_branches_read_the_given_config() -> None:
+    """Pins profile branches to the given config's route and parsers."""
     config: dict[str, Any] = {
         "transforms": {
             "r": {
@@ -1279,17 +1357,20 @@ def _optout_config(consumer: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_optout_condition_reads_the_given_config() -> None:
+    """Pins the opt-out extractor to the config it is given."""
     config = _optout_config({"type": "filter", "condition": ".x"})
     assert vc.optout_condition(config) == ".x"
 
 
 def test_optout_source_must_feed_a_filter() -> None:
+    """Pins 10.3.1: the docker source feeds the opt-out filter only."""
     config = _optout_config({"type": "remap", "condition": ".x"})
     with pytest.raises(vc.VectorConfigError, match=r"not one filter$"):
         vc.optout_condition(config)
 
 
 def test_optout_condition_must_be_a_vrl_string() -> None:
+    """Pins a named error for an opt-out condition that is not VRL."""
     config = _optout_config({"type": "filter", "condition": {"a": 1}})
     with pytest.raises(
         vc.VectorConfigError, match=r"^opt-out condition is not a VRL string$"
@@ -1302,11 +1383,13 @@ def _reduce_config(**body: Any) -> dict[str, Any]:
 
 
 def test_multiline_without_inputs_has_an_empty_set() -> None:
+    """Pins an empty input set for a reduce without inputs."""
     config = _reduce_config(starts_when="match(.message, r'^x')")
     assert vc.multiline(config)["inputs"] == set()
 
 
 def test_multiline_start_needs_a_raw_regex() -> None:
+    """Pins a named error for a block start without a raw regex."""
     config = _reduce_config(starts_when="starts_with(.message, 'x')")
     with pytest.raises(
         vc.VectorConfigError, match=r"^m: starts_when has no raw regex$"
@@ -1315,6 +1398,7 @@ def test_multiline_start_needs_a_raw_regex() -> None:
 
 
 def test_multiline_start_must_be_a_vrl_condition() -> None:
+    """Pins a named error for a block start that is not VRL."""
     config = _reduce_config(starts_when=5)
     with pytest.raises(
         vc.VectorConfigError, match=r"^not a VRL condition: 5$"

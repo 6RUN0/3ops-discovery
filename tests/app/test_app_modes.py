@@ -25,6 +25,7 @@ def test_json_line_is_valid_json_with_metadata_fields() -> None:
 
 
 def test_spoof_line_carries_stream_label_names_as_keys() -> None:
+    """Pins the 6.2 probe: line keys named like labels differ from metadata."""
     parsed = json.loads(app.spoof_line(3))
     # Every value differs from what Docker metadata or the collector
     # sets, so a stream label taken from the line is visible.
@@ -38,6 +39,7 @@ def test_spoof_line_carries_stream_label_names_as_keys() -> None:
 def test_spoof_format_emits_spoof_lines(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """Pins the spoof mode: the e2e label-origin check needs its lines."""
     app.emit("spoof", 5)
     assert capsys.readouterr().out == app.spoof_line(5) + "\n"
 
