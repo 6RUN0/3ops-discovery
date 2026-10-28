@@ -22,6 +22,7 @@ from typing import Any
 import nox
 import noxfile as nx
 import pytest
+import yaml
 
 from tests.static import alloy_config as ac
 from tests.static import manifest_doc as md
@@ -715,6 +716,20 @@ def test_e2e_overlay_vector_image_matches_pin() -> None:
         re.findall(r"timberio/vector:[\w.-]+", overlay.read_text("utf-8"))
     )
     assert images == {nx.VECTOR_IMAGE}
+
+
+def test_e2e_overlay_tmpfs_is_the_configured_data_dir() -> None:
+    """
+    Pins: the overlay's tmpfs path equals the config's data_dir.
+
+    Otherwise the tmpfs is unused.
+    """
+    overlay = yaml.safe_load(
+        (nx.REPO / "tests/e2e/stack/docker-compose.vector.yml").read_text(
+            "utf-8"
+        )
+    )
+    assert overlay["services"]["vector"]["tmpfs"] == [_config()["data_dir"]]
 
 
 def test_registry_lists_vector_for_logs_only() -> None:

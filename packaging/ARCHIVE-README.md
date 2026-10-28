@@ -21,6 +21,7 @@ the quality gates instead and is not shipped here.
 | `implementations/alloy/optional/` | Opt-in overlay files. The base is valid and complete without them. |
 | `implementations/alloy/README.md` | How the reference configuration is built and how to compose it by domain. |
 | `implementations/vmagent/` | A second implementation of the metrics domain on VictoriaMetrics vmagent, with its own README. |
+| `implementations/vector/` | A second implementation of the logs domain on Vector, with its own README. |
 | `CHANGELOG.md`, `CHANGELOG.ru.md` | What changed between contract versions. |
 | `LICENSE` | MIT. |
 
@@ -81,6 +82,38 @@ The image tag is pinned by the manifest registry (section 14). Appending
 `-dryRun` checks the configuration and exits. The Docker API access, the
 variables and the differences from Alloy are in
 `implementations/vmagent/README.md`.
+
+## Running the logs domain on Vector
+
+The logs domain can run on Vector instead of Alloy (manifest section 14).
+One collector serves a domain on a host, never two, so the Alloy
+directory is the union of the files of the remaining domains (manifest
+sections 14.4 and 14.4.3 list files by domain). For the default set that
+removes `011_discovery-logs.alloy`, `040_logs.alloy` and
+`050_log-profiles.alloy`; `091_output-logs.alloy` stays while Alloy still
+serves the otel or host-logs domain. Start Vector through its entrypoint,
+which applies the section 14.1 defaults and splits the push URL; give the
+container a `--hostname` that is not a prefix of its ID, or Vector does
+not collect its own logs:
+
+```sh
+docker run -d --name vector \
+  --hostname vector-collector \
+  -v "$PWD/implementations/vector:/etc/vector:ro" \
+  -v vector-data:/var/lib/vector \
+  -e RU_3OPS_DISCOVERY_DOCKER_HOST=tcp://docker-socket-proxy:2375 \
+  -e RU_3OPS_DISCOVERY_LOKI_PUSH_URL=http://loki:3100/loki/api/v1/push \
+  --entrypoint /bin/sh \
+  timberio/vector:0.60.0-alpine /etc/vector/entrypoint.sh
+```
+
+The `vector-data` volume holds `data_dir` (`/var/lib/vector`), where
+Vector keeps its working state; it keeps no log read positions, so the
+volume is optional. The image tag is pinned by the manifest registry
+(section 14). Replacing `/etc/vector/entrypoint.sh` with `/etc/vector/entrypoint.sh validate
+--no-environment` checks the configuration and exits. Lines written while
+Vector is down are lost, and the variables and other differences from
+Alloy are in `implementations/vector/README.md`.
 
 ## Adding an overlay
 

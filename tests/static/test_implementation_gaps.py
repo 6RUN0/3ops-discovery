@@ -15,6 +15,7 @@ from tests.static import manifest_doc as md
 from tests.static import vmagent_config as vc
 from tests.static.asymmetries import (
     DISCOVERY_META_LABELS_ABSENT,
+    LOGS_IMPLEMENTATION_GAPS,
     SERIES_PARITY_GAPS,
 )
 
@@ -111,7 +112,11 @@ def test_finder_accepts_the_stack_collector_in_both_forms() -> None:
 
 def test_gap_rows_name_a_domain_of_their_implementation() -> None:
     registry = md.implementations()
-    rows = [*SERIES_PARITY_GAPS, *DISCOVERY_META_LABELS_ABSENT]
+    rows = [
+        *SERIES_PARITY_GAPS,
+        *DISCOVERY_META_LABELS_ABSENT,
+        *LOGS_IMPLEMENTATION_GAPS,
+    ]
     misplaced = [
         row
         for row in rows
@@ -124,6 +129,29 @@ def test_vmagent_gap_rows_name_the_metrics_domain() -> None:
     rows = [*SERIES_PARITY_GAPS, *DISCOVERY_META_LABELS_ABSENT]
     domains = {row[1] for row in rows if row[0] == "vmagent"}
     assert domains <= {"metrics"}
+
+
+def test_logs_gap_rows_belong_to_a_non_reference_logs_implementation() -> None:
+    """Pins: a logs row names `logs`, an implementation other than alloy."""
+    assert LOGS_IMPLEMENTATION_GAPS, "vector rows are the table's reason"
+    rows = list(LOGS_IMPLEMENTATION_GAPS)
+    assert {row[1] for row in rows} == {"logs"}
+    assert {row[0] for row in rows} <= {"vector"}
+    assert all(LOGS_IMPLEMENTATION_GAPS[row].strip() for row in rows)
+
+
+def test_vector_logs_gaps_are_the_registered_ones() -> None:
+    topics = {row[2] for row in LOGS_IMPLEMENTATION_GAPS}
+    assert len(topics) == len(LOGS_IMPLEMENTATION_GAPS)
+    assert {
+        "10.3.4 item 4 error metric",
+        "10.3.4 item 3 warning rate limit",
+        "own container excluded by hostname",
+        "lines lost while Vector is down",
+        "docker refresh interval not read",
+        "logfmt line over 64 KiB",
+        "logfmt lone surrogate escape",
+    } == topics
 
 
 def _label_pattern(label: str) -> re.Pattern[str]:

@@ -175,6 +175,9 @@ bind them together.
   ESTABLISHED; Vector has no HTTP endpoint to probe). A check reading
   lines a service writes at startup needs that service in the overlay's
   `depends_on` list too.
+  The overlay's `tmpfs` path must equal `data_dir` of `vector.yaml`
+  (`tests/static/test_vector_config.py`). Vector's divergences from the
+  reference are rows of `asymmetries.LOGS_IMPLEMENTATION_GAPS`.
 - `@pytest.mark.alloy_internals` marks e2e checks that read Alloy internals
   (UI API, component graph) rather than the contract's output; they run on
   both storage variants, since Alloy is the collector in both, and are

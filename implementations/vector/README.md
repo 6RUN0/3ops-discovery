@@ -25,6 +25,7 @@ every `${NAME}` in `vector.yaml` as literal text.
 docker run -d --name vector \
   --hostname vector-collector \
   -v "$PWD/implementations/vector:/etc/vector:ro" \
+  -v vector-data:/var/lib/vector \
   -e RU_3OPS_DISCOVERY_DOCKER_HOST=tcp://docker-socket-proxy:2375 \
   -e RU_3OPS_DISCOVERY_LOKI_PUSH_URL=http://loki:3100/loki/api/v1/push \
   -e RU_3OPS_DISCOVERY_HOSTNAME="$(hostname)" \
@@ -34,6 +35,14 @@ docker run -d --name vector \
 
 The image is the `-alpine` variant because the entrypoint needs
 `/bin/sh`; the `distroless` variants have none.
+
+`vector.yaml` sets `data_dir: /var/lib/vector`, where Vector keeps its
+working state. The volume above only keeps that directory across
+container re-creation; the config stores no read positions there (see
+"Lines written while Vector is down" below), and with `docker run
+--read-only` and nothing mounted on it Vector 0.60.0 still starts, so
+the e2e overlay mounts a tmpfs on it. A static gate keeps the overlay's
+tmpfs path equal to `data_dir`.
 
 Set `RU_3OPS_DISCOVERY_HOSTNAME` to the same value on every collector of
 the host (here the host's own name): left unset, each collector reports
@@ -137,7 +146,13 @@ differ where Vector differs from Alloy:
   restarting never reaches the store. The reference stores positions and
   resumes. This falls short of the at-least-once delivery of manifest
   14.2, which allows duplicates, not loss; it is a recorded divergence of
-  this implementation.
+  this implementation. A line a container wrote before Vector started
+  is lost the same way, and `docker_logs` reads a container that starts
+  later only from Vector's own start. Under this implementation the
+  secret-redaction e2e check therefore sees only lines written after
+  Vector's start: reduced coverage, not a gap in the check.
+- Own logs. Collecting Vector's own container depends on `--hostname`,
+  see "Running" above.
 - logfmt parsing. VRL's `parse_logfmt` and `parse_key_value` read
   `err= level=warn` as `err="level=warn"`, a standalone `level` as
   `"true"` and a repeated key as an array, where the reference's
