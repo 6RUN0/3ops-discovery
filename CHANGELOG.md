@@ -55,6 +55,7 @@ The contract is no longer tied to one agent: sections 1-13 state requirements an
 - Changed: the Vector unknown-log-profile warning is a JSON object with a constant `msg` and the `container` and `profile` values as escaped fields; a label value pasted into the text was unescaped input to the collector's log. An empty `logs.profile` falls back to `raw-v1` without a warning ([11](docs/manifest.md#11-validation-rules): empty equals absent).
 - Fixed: e2e teardown and diagnostics (`compose logs`, `compose port`, `down -v`) could block on a hung Docker daemon and lose the diagnostics; each such call has a 120 s timeout.
 - e2e: the OTLP checks assert `host` and `collector` on OTLP series and streams.
+- `uv run nox -s ci_local` runs the GitHub workflows locally under act, one job at a time: `ci.yml` by default, the `e2e.yml` matrix with `-- e2e`. Not a gate.
 
 ## 0.2.0 -- Draft
 

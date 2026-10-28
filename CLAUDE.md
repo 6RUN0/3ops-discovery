@@ -66,6 +66,14 @@ bind them together. Open work and the backlog live in `.omc/OPEN.md`
   README). Not a gate, so not in `preflight`; its invariants (version
   from the manifest header only, `.alloy` set == what `alloy_check`
   validates, reproducible bytes) live in `tests/static/test_release.py`.
+- `uv run nox -s ci_local` - `.github/workflows/ci.yml` under act on
+  `noxfile.ACT_RUNNER_IMAGE`, one job at a time (about 21 min, measured
+  2026-10-28; e2e_vector alone about 5 min); `-- e2e` runs the whole
+  e2e.yml matrix, `-- e2e e2e_vector` the named cells. Each job drives
+  the host Docker daemon, so compose mounts must exist on the host:
+  pytest temp dirs go to `noxfile.ACT_SHARED_TMP` (`/tmp/xad-act`,
+  root-owned after a run). Set `GITHUB_TOKEN` for lychee's github.com
+  checks. Not a gate, so not in `preflight`.
 - `uv run python -m tools.series_catalog snapshot --metrics-url
   http://127.0.0.1:<prometheus port> --project xad-demo` - prints, as
   YAML, the series and label names a running stack serves for every

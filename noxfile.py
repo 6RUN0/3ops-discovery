@@ -20,6 +20,7 @@ without them -- the fully offline set is ``nox -s lint tests``.
     uv run nox -s e2e_vector    # contract subset, logs domain on Vector
     uv run nox -s e2e_vector_victoria  # the same on the Victoria stores
     uv run nox -s preflight     # everything
+    uv run nox -s ci_local      # .github/workflows under act (-- e2e)
 """
 
 from __future__ import annotations
@@ -476,6 +477,85 @@ def release(session: nox.Session) -> None:
     session.log(f"spec {spec_version()} ({spec_status()}), built as {version}")
     session.log(f"{archive.name} ({archive.stat().st_size} bytes)")
     session.log(f"checksum in {archive.parent / 'SHA256SUMS'}")
+
+
+#: The image act maps `runs-on: ubuntu-latest` to: catthehacker's act
+#: build of Ubuntu 24.04 (tag act-24.04, pushed 2026-08-15), by digest.
+#: The digest is a public image id, which detect-secrets reads as hex.
+ACT_RUNNER_IMAGE = (
+    "catthehacker/ubuntu:act-24.04@sha256:"
+    "c58e2b364da03b0c804c7d660f2ecbed"  # pragma: allowlist secret
+    "f2f221a382b9baa0b344b0144780ff43"  # pragma: allowlist secret
+)
+WORKFLOWS_DIR = REPO / ".github" / "workflows"
+
+#: The job container talks to the host Docker daemon, so every path a
+#: compose file mounts must exist on the host: pytest's temp dirs (Alloy
+#: config, secrets) go to this directory, mounted at the same path.
+ACT_SHARED_TMP = Path("/tmp/xad-act")
+
+#: ci_local targets: workflow file and the event that triggers it.
+ACT_WORKFLOWS: dict[str, tuple[str, str]] = {
+    "ci": ("ci.yml", "push"),
+    "e2e": ("e2e.yml", "workflow_dispatch"),
+}
+
+
+def act_args(
+    workflow: str, cells: Iterable[str], env: dict[str, str]
+) -> list[str]:
+    """
+    Return the ``act`` arguments that run one workflow, one job at a time.
+
+    Jobs share the host Docker daemon, and e2e stacks of two jobs at once
+    would contend for it. `cells` narrows e2e.yml to those matrix sessions;
+    GITHUB_TOKEN is forwarded by name only, so its value never reaches
+    the command line.
+    """
+    file, event = ACT_WORKFLOWS[workflow]
+    args = [
+        "act",
+        event,
+        "-W",
+        str(WORKFLOWS_DIR / file),
+        "-P",
+        f"ubuntu-latest={ACT_RUNNER_IMAGE}",
+        "--concurrent-jobs",
+        "1",
+        "--container-options",
+        f"-v {ACT_SHARED_TMP}:{ACT_SHARED_TMP}",
+        "--env",
+        f"PYTEST_ADDOPTS=--basetemp={ACT_SHARED_TMP / 'pytest'}",
+    ]
+    for cell in cells:
+        args += ["--matrix", f"session:{cell}"]
+    if env.get("GITHUB_TOKEN"):
+        args += ["-s", "GITHUB_TOKEN"]
+    return args
+
+
+@nox.session
+def ci_local(session: nox.Session) -> None:
+    """
+    Run the GitHub workflows locally under act (opt-in, not a gate).
+
+    ``nox -s ci_local`` runs ci.yml; ``-- e2e`` runs the whole e2e.yml
+    matrix (about 30 min), ``-- e2e e2e_vector`` only the named cells.
+    act copies the working tree into the job container, so a dirty tree
+    is what gets checked. docs_lint checks github.com links anonymously
+    unless GITHUB_TOKEN is set.
+    """
+    if shutil.which("act") is None:
+        session.error("act is required for ci_local")
+    workflow, *cells = session.posargs or ["ci"]
+    if workflow not in ACT_WORKFLOWS:
+        session.error(
+            f"unknown workflow {workflow!r}: {sorted(ACT_WORKFLOWS)}"
+        )
+    if cells and workflow != "e2e":
+        session.error("matrix cells apply to the e2e workflow only")
+    ACT_SHARED_TMP.mkdir(exist_ok=True)
+    session.run(*act_args(workflow, cells, dict(os.environ)), external=True)
 
 
 COMPOSE_FILE = REPO / "tests" / "e2e" / "stack" / "docker-compose.yml"
