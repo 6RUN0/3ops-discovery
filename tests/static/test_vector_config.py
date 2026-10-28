@@ -440,6 +440,76 @@ def test_label_origin_gate_catches_a_second_writer() -> None:
         vc.stream_labels_writer(config)
 
 
+@pytest.mark.parametrize(
+    "line",
+    [
+        '.stream_labels.image = string(.image) ?? ""',
+        '."stream_labels".image = "x"',
+        '. = set!(., ["stream_labels", "image"], "x")',
+        ".stream_labels = container_labels",
+    ],
+)
+def test_label_origin_gate_catches_a_writer_writing_the_field_directly(
+    line: str,
+) -> None:
+    """Pins 6.2: a key written past the vetted variable escapes the keys."""
+    config = _config()
+    name = vc.stream_labels_writer(config)[0]
+    _writer(config)["source"] += line + "\n"
+    assert vc.stream_label_keys(config) <= md.loki_label_allowlist()
+    assert f"{name} writes .stream_labels directly" in (
+        vc.stream_label_problems(config)
+    )
+
+
+def test_label_origin_gate_catches_a_writer_writing_the_root() -> None:
+    """Pins 6.2: a root merge in the writer can replace the labels whole."""
+    config = _config()
+    name = vc.stream_labels_writer(config)[0]
+    _writer(config)["source"] += ". |= container_labels\n"
+    assert f"{name} writes the event root" in vc.stream_label_problems(config)
+
+
+def test_structured_metadata_is_written_whole() -> None:
+    """Pins 8.3: metadata keys come only from the fields-filtered object."""
+    assert vc.metadata_write_problems() == []
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        '.structured_metadata.image = string(.image) ?? ""',
+        '. = set!(., ["structured_metadata", "x"], "y")',
+        ".structured_metadata = merge(.structured_metadata, parsed)",
+    ],
+)
+def test_metadata_gate_catches_a_key_by_key_write(line: str) -> None:
+    """Pins 8.3: a key added past the fields filter leaves the table."""
+    config = _config()
+    _append_to_parser(config, line)
+    parser = next(
+        name
+        for name, body in config["transforms"].items()
+        if vc.parser_kind(body) == "json"
+    )
+    assert vc.metadata_write_problems(config) == [
+        f"{parser} writes .structured_metadata key by key"
+    ]
+
+
+def test_metadata_gate_catches_a_reduce_merging_metadata() -> None:
+    """Pins 8.3: a reduce merge strategy can join metadata of many lines."""
+    config = _config()
+    reduce = _transform(config, "reduce")
+    reduce["merge_strategies"]["structured_metadata"] = "concat"
+    name = next(
+        key for key, body in config["transforms"].items() if body is reduce
+    )
+    assert vc.metadata_write_problems(config) == [
+        f"{name} writes .structured_metadata key by key"
+    ]
+
+
 def test_sink_template_gate_rejects_per_label_templates() -> None:
     # Per-label templates log a WARN on every event whose field is
     # absent; the whole-object template drops absent labels silently.
@@ -585,6 +655,22 @@ def test_bare_dollar_gate_flags_an_unescaped_anchor() -> None:
     text = "a: '${X}'\nb: match(s, r'^x$')\nc: r'^x$$'\nd: $NAME\n"
     assert vc.bare_dollars(text) == ["b: match(s, r'^x$')", "d: $NAME"]
     assert vc.interpolations(text) == {"X", "NAME"}
+
+
+@pytest.mark.parametrize(
+    ("text", "names"),
+    [("$A$$B", {"A"}), ("$$$A", {"A"}), ("$$A", set()), ("${A$$}", set())],
+)
+def test_escaped_dollar_ends_a_name(text: str, names: set[str]) -> None:
+    """Pins Vector's scan: ``$$`` is a literal ``$`` that ends a name."""
+    assert vc.interpolations(text) == names
+
+
+def test_escaped_dollar_inside_braces_is_no_interpolation() -> None:
+    """Pins the gates on ``${...$$...}``: neither a variable nor a default."""
+    text = "a: ${$$}\nb: ${A$$}\n"
+    assert vc.bare_dollars(text) == ["a: ${$$}", "b: ${A$$}"]
+    assert vc.defaulted_interpolations("a: ${A$$:-x}") == set()
 
 
 def test_interpolation_gate_sees_inline_defaults() -> None:
@@ -831,6 +917,27 @@ def test_components_reject_a_reused_id() -> None:
     config: dict[str, Any] = {"sources": {"a": {}}, "sinks": {"a": {}}}
     with pytest.raises(vc.VectorConfigError, match="a reused"):
         vc.components(config)
+
+
+@pytest.mark.parametrize("kind", ["remap", "filter", "route"])
+def test_components_reject_vrl_from_a_file(kind: str) -> None:
+    """Pins the gates' reach: VRL in a file is invisible to every scan."""
+    config: dict[str, Any] = {
+        "transforms": {"t": {"type": kind, "file": "/etc/vector/x.vrl"}}
+    }
+    with pytest.raises(
+        vc.VectorConfigError, match=r"^t: VRL in a file is invisible"
+    ):
+        vc.components(config)
+
+
+def test_remap_sources_need_a_source() -> None:
+    """Pins a named error for a remap without its program."""
+    config: dict[str, Any] = {"transforms": {"t": {"type": "remap"}}}
+    with pytest.raises(
+        vc.VectorConfigError, match=r"^t: remap has no source$"
+    ):
+        vc.remap_sources(config)
 
 
 def test_an_input_naming_no_component_is_an_error() -> None:
@@ -1092,6 +1199,37 @@ def test_logfmt_grammar_needs_both_regexes() -> None:
         vc.VectorConfigError, match=r"^logfmt remap lacks its two regexes$"
     ):
         vc.logfmt_grammar(config)
+
+
+def test_logfmt_grammar_needs_the_prefix_regex() -> None:
+    """Pins the pair: a pair regex alone is no logfmt grammar either."""
+    config: dict[str, Any] = {
+        "transforms": {
+            "t": {
+                "type": "remap",
+                "source": "x = parse_regex(string(.message), r'^a')\n"
+                + _PAIRS_CALL.format(pairs="b"),
+            }
+        }
+    }
+    with pytest.raises(
+        vc.VectorConfigError, match=r"^logfmt remap lacks its two regexes$"
+    ):
+        vc.logfmt_grammar(config)
+
+
+def test_logfmt_grammar_reads_both_regexes() -> None:
+    """Pins which regex is which when both are present."""
+    config: dict[str, Any] = {
+        "transforms": {
+            "t": {
+                "type": "remap",
+                "source": _PREFIX_CALL.format(prefix="^a")
+                + _PAIRS_CALL.format(pairs="b"),
+            }
+        }
+    }
+    assert vc.logfmt_grammar(config) == ("^a", "b")
 
 
 def test_logfmt_grammar_unescapes_both_regexes() -> None:

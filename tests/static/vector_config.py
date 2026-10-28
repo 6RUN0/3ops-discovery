@@ -34,6 +34,11 @@ _DEFAULT_EXPANSION = re.compile(r"\$\{(RU_3OPS_DISCOVERY_\w+):-([^}]*)\}")
 #: Vector's interpolation forms: ${NAME}, ${NAME:-x}, ${NAME-x}, $NAME.
 _INTERPOLATION = re.compile(r"\$\{(\w+)(?::?-[^}]*)?\}|\$(\w+)")
 _ESCAPED_DOLLAR = "$$"
+#: What ``$$`` becomes before a scan for ``$NAME``: a non-word character,
+#: so ``$A$$B`` reads as variable A, as Vector scans it left to right.
+_ESCAPE_SEPARATOR = " "
+#: Component types whose VRL the gates read from the config text.
+_VRL_TYPES = ("remap", "filter", "route")
 _BRACED = re.compile(r"\$\{\w+\}")
 _ENV_READ = re.compile(r'get_env_var!?\("(\w+)"\)')
 _WHOLE_OBJECT = re.compile(r"\{\{\s*(\w+)\s*\}\}")
@@ -81,6 +86,10 @@ def components(config: Config = None) -> dict[str, dict[str, Any]]:
         for name, body in (_config(config).get(kind) or {}).items():
             if name in found:
                 raise VectorConfigError(f"component id {name} reused")
+            if body.get("type") in _VRL_TYPES and "file" in body:
+                raise VectorConfigError(
+                    f"{name}: VRL in a file is invisible to the gates"
+                )
             found[name] = {**body, "_kind": kind}
     return found
 
@@ -161,11 +170,14 @@ def sink_metadata_field(config: Config = None) -> str:
 
 def remap_sources(config: Config = None) -> dict[str, str]:
     """Return remap transform id -> its VRL program."""
-    return {
-        name: body["source"]
-        for name, body in components(config).items()
-        if body.get("type") == "remap"
-    }
+    found = {}
+    for name, body in components(config).items():
+        if body.get("type") != "remap":
+            continue
+        if "source" not in body:
+            raise VectorConfigError(f"{name}: remap has no source")
+        found[name] = body["source"]
+    return found
 
 
 def _writes_field(source: str, field: str) -> re.Match[str] | None:
@@ -229,6 +241,11 @@ def stream_label_problems(config: Config = None) -> list[str]:
     if ".message" in source or "parse_" in source:
         problems.append(f"{name} reads line content")
     problems.extend(_writer_variable_problems(name, source, var, field))
+    # The one whole-field assignment from the vetted variable is the only
+    # write; `.field.key = x` would add a key stream_label_keys misses.
+    rest = re.sub(rf"(?m)^\s*\.{field} = {var}\s*$", "", source, count=1)
+    if re.search(rf'\.{field}\b|"{field}"', rest):
+        problems.append(f"{name} writes .{field} directly")
     known = components(config)
     # Any other mention can write: assignment, merge, |=, field set, del,
     # a quoted path or a set!() path array naming the field.
@@ -245,7 +262,7 @@ def stream_label_problems(config: Config = None) -> list[str]:
     problems.extend(
         f"{other} writes the event root"
         for other, body in sorted(known.items())
-        if other != name and _ROOT_WRITE.search(body.get("source", ""))
+        if _ROOT_WRITE.search(body.get("source", ""))
     )
     before = upstream(name, config)
     problems.extend(
@@ -284,6 +301,27 @@ def _writer_variable_problems(
     if re.search(rf"\b{var}\b", rest):
         problems.append(f"{name}: {var} is changed other than key by key")
     return problems
+
+
+def metadata_write_problems(config: Config = None) -> list[str]:
+    """
+    Return the components that write structured metadata key by key.
+
+    Each parser assigns the field whole from its ``fields``-filtered
+    object; ``.field.key = x`` would add a key outside the 8.3 table.
+    """
+    field = sink_metadata_field(config)
+    mention = re.compile(rf'\.{field}\b|"{field}"')
+    whole = re.compile(rf"^\s*\.{field} = ")
+    return [
+        f"{name} writes .{field} key by key"
+        for name, body in sorted(components(config).items())
+        if any(
+            mention.search(whole.sub("", line, count=1))
+            for line in body.get("source", "").splitlines()
+        )
+        or field in (body.get("merge_strategies") or {})
+    ]
 
 
 def _list_assignment(source: str, var: str) -> list[str]:
@@ -456,7 +494,7 @@ def multiline(config: Config = None) -> dict[str, Any]:
 
 def interpolations(text: str) -> set[str]:
     """Return every environment variable ``text`` interpolates."""
-    unescaped = text.replace(_ESCAPED_DOLLAR, "")
+    unescaped = text.replace(_ESCAPED_DOLLAR, _ESCAPE_SEPARATOR)
     return {a or b for a, b in _INTERPOLATION.findall(unescaped)}
 
 
@@ -470,13 +508,14 @@ def bare_dollars(text: str) -> list[str]:
     return [
         line
         for line in text.splitlines()
-        if "$" in _BRACED.sub("", line.replace(_ESCAPED_DOLLAR, ""))
+        if "$"
+        in _BRACED.sub("", line.replace(_ESCAPED_DOLLAR, _ESCAPE_SEPARATOR))
     ]
 
 
 def defaulted_interpolations(text: str) -> set[str]:
     """Return the variables ``text`` interpolates with an inline default."""
-    unescaped = text.replace(_ESCAPED_DOLLAR, "")
+    unescaped = text.replace(_ESCAPED_DOLLAR, _ESCAPE_SEPARATOR)
     return set(re.findall(r"\$\{(\w+):?-", unescaped))
 
 
