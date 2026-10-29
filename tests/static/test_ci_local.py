@@ -18,13 +18,17 @@ def _option(args: list[str], flag: str) -> list[str]:
 
 def test_runner_image_is_pinned_by_digest() -> None:
     """Pins the version rule: a moving tag would change the runner silently."""
-    assert re.fullmatch(r"[\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}", ACT_RUNNER_IMAGE)
+    assert re.fullmatch(
+        r"[\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}", ACT_RUNNER_IMAGE
+    )
 
 
 def test_every_workflow_target_exists_with_its_event() -> None:
     """Pins the event per workflow: act runs no job whose `on:` lacks it."""
     for file, event in ACT_WORKFLOWS.values():
-        doc = yaml.safe_load((WORKFLOWS_DIR / file).read_text(encoding="utf-8"))
+        doc = yaml.safe_load(
+            (WORKFLOWS_DIR / file).read_text(encoding="utf-8")
+        )
         # PyYAML reads the bare key `on` as the boolean True.
         assert event in doc[True], (file, event)
 
