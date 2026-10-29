@@ -373,6 +373,9 @@ services:
   mongodb:
     image: mongo:8.3.7
     environment:
+      # mongod 8 refuses to start on Linux 6.19-7.0.13 (SERVER-121912); glibc
+      # keeping rseq sends TCMalloc to per-thread caches (test_e2e_stack.py).
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
       MONGO_INITDB_ROOT_USERNAME: ${RU_3OPS_DISCOVERY_E2E_MONGO_USER:?set by the pytest fixture}
       MONGO_INITDB_ROOT_PASSWORD: ${RU_3OPS_DISCOVERY_E2E_MONGO_PASSWORD:?set by the pytest fixture}
     networks:
