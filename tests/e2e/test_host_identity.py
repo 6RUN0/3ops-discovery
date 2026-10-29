@@ -7,7 +7,9 @@ from tests.e2e.conftest import (
     E2E_HOSTNAME,
     LOGS_BUDGET,
     METRICS_BUDGET,
+    PROJECT_DOMAIN_PROBES,
     Stack,
+    project_selector,
     wait_until,
 )
 from tools.backends import LogQuery
@@ -39,14 +41,19 @@ def test_host_comes_from_the_parameter(stack: Stack) -> None:
 
 def test_every_domain_reports_one_host(stack: Stack) -> None:
     """
-    Pins decision 18: one machine is one `host` across all its domains.
+    Pins manifest 14: one machine is one `host` across its collectors.
 
     Each collector of a split deployment reads the same parameter, so
-    metrics, host and container metrics, OTLP, container logs and the
-    journal agree; the per-domain checks only compare each to the value.
+    every domain's series, container logs and the journal agree; the
+    per-domain checks only compare each to the value. A missing label
+    lands in the set as None and fails the comparison.
     """
-    hosts: set[str] = set()
+    hosts: set[str | None] = set()
     for expr in (
+        *(
+            project_selector(stack.project, probe)
+            for probe in PROJECT_DOMAIN_PROBES.values()
+        ),
         f'{{compose_project="{stack.project}"}}',
         "node_uname_info",
         "app_otlp_events_total",
@@ -58,7 +65,7 @@ def test_every_domain_reports_one_host(stack: Stack) -> None:
         series = wait_until(
             series_of, timeout=METRICS_BUDGET, desc=f"{expr} delivered"
         )
-        hosts |= {s["metric"]["host"] for s in series}
+        hosts |= {s["metric"].get("host") for s in series}
     for query in (
         LogQuery(stream={"compose_project": stack.project}),
         LogQuery(stream={"source": "journal"}, scoped=False),
@@ -72,7 +79,7 @@ def test_every_domain_reports_one_host(stack: Stack) -> None:
             timeout=LOGS_BUDGET,
             desc=f"{dict(query.stream)} streams",
         )
-        hosts |= {s["host"] for s in streams}
+        hosts |= {s.get("host") for s in streams}
     assert hosts == {E2E_HOSTNAME}
 
 

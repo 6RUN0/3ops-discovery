@@ -940,6 +940,12 @@ def test_series_of_different_instances_are_not_duplicates() -> None:
 
 
 def test_empty_input_is_an_error_not_a_pass() -> None:
-    """Pins Review Focus 2: a query that found nothing cannot read as clean."""
+    """Pins: an empty query result fails instead of reading as clean."""
     with pytest.raises(ValueError, match="found nothing"):
         duplicate_groups([])
+
+
+def test_ignored_labels_must_not_be_one_string() -> None:
+    """Pins: a bare string would ignore its letters, not the label."""
+    with pytest.raises(TypeError):
+        duplicate_groups([{"collector": "alloy"}], ignored="collector")

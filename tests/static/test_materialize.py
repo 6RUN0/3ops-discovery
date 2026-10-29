@@ -131,7 +131,7 @@ class _AxesRecorder:
 
 
 @pytest.mark.parametrize("session_name", nx.E2E_SESSIONS)
-@pytest.mark.parametrize("base", ["all", "all-snmp"])
+@pytest.mark.parametrize("base", [e2e.MAIN_STACK_COMBO, e2e.SNMP_STACK_COMBO])
 def test_alloy_check_validates_every_e2e_alloy_graph(
     session_name: str, base: str
 ) -> None:

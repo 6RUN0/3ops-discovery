@@ -199,6 +199,8 @@ def duplicate_groups(
     empty input raises ValueError, so a query that found nothing cannot
     pass as "no duplicates".
     """
+    if isinstance(ignored, str):
+        raise TypeError("ignored is a collection of label names, not one")
     skip = set(ignored)
     groups: dict[frozenset[tuple[str, str]], list[dict[str, str]]] = {}
     for labels in label_sets:

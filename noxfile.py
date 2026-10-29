@@ -238,8 +238,8 @@ def alloy_check(session: nox.Session) -> None:
     # output, so an image fetched lazily inside them would fail with the
     # reason hidden; here a registry problem is reported as one.
     session.run("docker", "pull", ALLOY_IMAGE, external=True)
-    # Every combo copies the same files, so fmt each name once: per combo
-    # it would be 128 container runs instead of 14 (19 combos, 2026-10-29).
+    # Every combo copies the same files and fmt output does not depend on
+    # the combo, so each name is checked once, not once per combo.
     fmt_checked: set[str] = set()
     for combo, domains in COMBOS.items():
         # resolve(): create_tmp() hands back a path relative to the repo,
