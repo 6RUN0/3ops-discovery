@@ -35,7 +35,7 @@ def _calls_run_e2e(func: ast.FunctionDef) -> bool:
 
 
 def test_every_e2e_session_is_listed() -> None:
-    """Pins the list: a session running tests/e2e outside it escapes preflight."""
+    """Pins the list: an e2e session outside it escapes preflight."""
     tree = ast.parse(NOXFILE.read_text(encoding="utf-8"))
     sessions = {
         node.name
@@ -48,7 +48,7 @@ def test_every_e2e_session_is_listed() -> None:
 
 
 def test_preflight_queues_every_e2e_session() -> None:
-    """Pins the spec rule: the whole implementation x store matrix is in preflight."""
+    """Pins the spec rule: the whole e2e matrix runs in preflight."""
     recorder = _NotifyRecorder()
     nx.preflight(recorder)
     missing = set(nx.E2E_SESSIONS) - set(recorder.notified)
@@ -56,7 +56,7 @@ def test_preflight_queues_every_e2e_session() -> None:
 
 
 def test_e2e_workflow_matrix_is_the_session_list() -> None:
-    """Pins CI to the list: a cell missing in e2e.yml never runs on a runner."""
+    """Pins CI to the list: a cell missing in e2e.yml never runs."""
     doc = yaml.safe_load(
         (nx.WORKFLOWS_DIR / "e2e.yml").read_text(encoding="utf-8")
     )

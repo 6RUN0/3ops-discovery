@@ -84,8 +84,7 @@ def test_no_target_is_scraped_by_two_collectors(stack: Stack) -> None:
     target = "job, instance, compose_service"
     up = f'up{{compose_project="{stack.project}"}}'
     doubled = stack.prom_query(
-        f"count by ({target}) "
-        f"(count by ({target}, collector) ({up})) > 1"
+        f"count by ({target}) (count by ({target}, collector) ({up})) > 1"
     )
     assert doubled == [], [s["metric"] for s in doubled]
 
