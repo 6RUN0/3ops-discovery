@@ -23,6 +23,7 @@ shipped here.
 | `implementations/alloy/README.md` | How the reference configuration is built and how to compose it by domain. |
 | `implementations/vmagent/` | A second implementation of the metrics domain on VictoriaMetrics vmagent, with its own README. |
 | `implementations/vector/` | A second implementation of the logs domain on Vector, with its own README. |
+| `tests/static/asymmetries.py` | The registry of divergences from the contract that implementations are allowed, each with its reason; the manifest links to it. |
 | `CHANGELOG.md`, `CHANGELOG.ru.md` | What changed between contract versions. |
 | `LICENSE` | MIT. |
 
@@ -65,6 +66,7 @@ defaults:
 
 ```sh
 docker run -d --name vmagent \
+  --network monitoring \
   -v "$PWD/implementations/vmagent:/etc/vmagent:ro" \
   -e RU_3OPS_DISCOVERY_DOCKER_HOST=tcp://docker-socket-proxy:2375 \
   -e RU_3OPS_DISCOVERY_REMOTE_WRITE_URL=http://victoriametrics:8428/api/v1/write \
@@ -74,9 +76,12 @@ docker run -d --name vmagent \
   victoriametrics/vmagent:v1.154.1 /etc/vmagent/entrypoint.sh
 ```
 
-Give `RU_3OPS_DISCOVERY_HOSTNAME` one value on every collector of the
-host, Alloy included (here the host's own name): manifest section 14
-requires it and names what breaks when it is unset.
+`monitoring` stands for the Docker network the store and
+docker-socket-proxy are attached to: on the default bridge network the
+container resolves neither name. Give `RU_3OPS_DISCOVERY_HOSTNAME` one
+value on every collector of the host, Alloy included (here the host's
+own name): manifest section 14 requires it and names what breaks when
+it is unset.
 
 The image tag is pinned by the manifest registry (section 14). Appending
 `-dryRun` checks the configuration and exits. The Docker API access, the
@@ -98,6 +103,7 @@ Vector does not collect its own logs:
 
 ```sh
 docker run -d --name vector \
+  --network monitoring \
   --hostname vector-collector \
   -v "$PWD/implementations/vector:/etc/vector:ro" \
   -v vector-data:/var/lib/vector \
@@ -108,8 +114,9 @@ docker run -d --name vector \
   timberio/vector:0.60.0-alpine /etc/vector/entrypoint.sh
 ```
 
-Give `RU_3OPS_DISCOVERY_HOSTNAME` one value on every collector of the
-host, Alloy and vmagent included (here the host's own name): manifest
+The `--network` value follows the vmagent section above. Give
+`RU_3OPS_DISCOVERY_HOSTNAME` one value on every collector of the host,
+Alloy and vmagent included (here the host's own name): manifest
 section 14 requires it and names what breaks when it is unset.
 
 The `vector-data` volume holds `data_dir` (`/var/lib/vector`). The
@@ -153,9 +160,13 @@ manifest. The ones most deployments set:
 RU_3OPS_DISCOVERY_REMOTE_WRITE_URL=http://prometheus:9090/api/v1/write
 RU_3OPS_DISCOVERY_LOKI_PUSH_URL=http://loki:3100/loki/api/v1/push
 RU_3OPS_DISCOVERY_DOCKER_HOST=unix:///var/run/docker.sock
-RU_3OPS_DISCOVERY_HOSTNAME="$(hostname)"
+RU_3OPS_DISCOVERY_HOSTNAME=host-01
 RU_3OPS_DISCOVERY_SECRETS_DIR=/run/alloy-secrets
 ```
+
+Write the host name itself, not `$(hostname)`: an env file (`docker run
+--env-file`, compose `env_file`) is not run through a shell, so the
+command substitution reaches the collector as literal text.
 
 Scrape intervals and timeouts are deliberately absent: they are part of
 the contract (section 8.2), selected by profile, not by deployment.
