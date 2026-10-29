@@ -105,5 +105,10 @@ def test_no_stream_is_collected_twice(stack: Stack) -> None:
     streams = stack.log_streams(
         LogQuery(stream={"compose_project": stack.project})
     )
-    assert duplicate_groups(streams) == []
+    duplicates = duplicate_groups(streams)
+    assert duplicates == [], "streams collected twice: " + "; ".join(
+        f"{group[0].get('compose_service')} by "
+        f"{sorted({(s.get('collector'), s.get('host')) for s in group})}"
+        for group in duplicates
+    )
     assert {s["collector"] for s in streams} == {stack.collector("logs")}
