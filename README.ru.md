@@ -72,6 +72,8 @@ map-, и в list-форме.
 | `uv run nox -s e2e_vmagent_victoria` | То же подмножество с vmagent на VictoriaMetrics + VictoriaLogs (минуты). | Docker |
 | `uv run nox -s e2e_vector` | Контрактное подмножество с Vector в роли коллектора `logs`, на Prometheus + Loki (минуты). | Docker |
 | `uv run nox -s e2e_vector_victoria` | То же подмножество с Vector на VictoriaMetrics + VictoriaLogs (минуты). | Docker |
+| `uv run nox -s e2e_mixed` | Контрактное подмножество смешанного деплоя: `metrics` обслуживает vmagent, `logs` - Vector, остальные домены - Alloy, на Prometheus + Loki (минуты). | Docker |
+| `uv run nox -s e2e_mixed_victoria` | Тот же смешанный деплой на VictoriaMetrics + VictoriaLogs (минуты). | Docker |
 | `uv run nox -s preflight` | Всё сразу. | да |
 
 Образ Alloy запинен **манифестом** (раздел [14.4](docs/manifest.ru.md#144-эталонная-реализация-alloy)); `noxfile.ALLOY_IMAGE`

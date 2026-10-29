@@ -78,9 +78,10 @@ def test_alloy_check_passes_the_experimental_flag_only_with_database() -> None:
     # without database must validate at the default stability level, so
     # the flag cannot mask an experimental block outside 030.
     flag = "--stability.level=experimental"
-    with_flag = {"base", "all", "all-snmp", "domain-database"}
     for combo, domains in mz.COMBOS.items():
         args = alloy_validate_args(domains)
         assert args[0] == "validate"
         assert args[-1] == "/etc/alloy"
-        assert (flag in args) is (combo in with_flag), combo
+        assert (flag in args) is ("database" in domains), combo
+    # Anchor: the derived rule above must not hide a lost database combo.
+    assert flag in alloy_validate_args(mz.COMBOS["domain-database"])

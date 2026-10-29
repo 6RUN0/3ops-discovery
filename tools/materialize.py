@@ -15,6 +15,8 @@ import shutil
 from collections.abc import Iterable
 from pathlib import Path
 
+from tools.backends import LOGS_IMPL_DOMAINS, METRICS_IMPL_DOMAINS
+
 REPO = Path(__file__).resolve().parents[1]
 BASE_DIR = REPO / "implementations/alloy/base"
 OPTIONAL_DIR = REPO / "implementations/alloy/optional"
@@ -76,15 +78,39 @@ DEFAULT_DOMAINS: tuple[str, ...] = (
 #: without it, so the flag cannot mask an experimental block elsewhere.
 EXPERIMENTAL_FILES: tuple[str, ...] = ("030_database.alloy",)
 
+#: Domains each non-reference e2e implementation takes over from Alloy,
+#: keyed by the name used in the beside-* combos.
+_BESIDE: dict[str, tuple[str, ...]] = {
+    "vmagent": METRICS_IMPL_DOMAINS,
+    "vector": LOGS_IMPL_DOMAINS,
+    "vmagent-vector": METRICS_IMPL_DOMAINS + LOGS_IMPL_DOMAINS,
+}
+
+
+def _without(
+    domains: Iterable[str], dropped: Iterable[str]
+) -> tuple[str, ...]:
+    gone = set(dropped)
+    return tuple(d for d in domains if d not in gone)
+
+
+_ALL = tuple(d for d in DOMAIN_FILES if d != "snmp")
+
 #: Combinations validated by the alloy_check session: the default set,
 #: all domains without and with snmp (the latter is the merged graph the
-#: e2e snmp stack runs), and every domain alone, which proves each
-#: domain's file set references nothing outside itself.
+#: e2e snmp stack runs), every domain alone, which proves each domain's
+#: file set references nothing outside itself, and the beside-* graphs
+#: Alloy loads next to vmagent, Vector or both in the e2e matrix.
 COMBOS: dict[str, tuple[str, ...]] = {
     "base": DEFAULT_DOMAINS,
-    "all": tuple(d for d in DOMAIN_FILES if d != "snmp"),
+    "all": _ALL,
     "all-snmp": tuple(DOMAIN_FILES),
     **{f"domain-{d}": (d,) for d in DOMAIN_FILES},
+    **{f"beside-{n}": _without(_ALL, ds) for n, ds in _BESIDE.items()},
+    **{
+        f"beside-{n}-snmp": _without(DOMAIN_FILES, ds)
+        for n, ds in _BESIDE.items()
+    },
 }
 
 #: Files that are NOT *.alloy but without which an overlay cannot load.
