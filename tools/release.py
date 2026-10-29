@@ -25,7 +25,9 @@ MANIFEST = REPO / "docs" / "manifest.ru.md"
 
 #: Files and directories the archive carries, repo-relative. Directories
 #: ship whole; test_release.py pins the *.alloy set against the files
-#: COMBOS selects, so a new file cannot quietly stay behind.
+#: COMBOS selects, so a new file cannot quietly stay behind, and every
+#: relative manifest link against the members, which is why the gap
+#: registry asymmetries.py ships.
 CONTENTS: tuple[str, ...] = (
     "LICENSE",
     "CHANGELOG.md",
@@ -36,6 +38,7 @@ CONTENTS: tuple[str, ...] = (
     "implementations/alloy",
     "implementations/vmagent",
     "implementations/vector",
+    "tests/static/asymmetries.py",
 )
 
 #: Deployment instructions, renamed into the archive root: the

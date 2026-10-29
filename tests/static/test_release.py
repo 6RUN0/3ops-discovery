@@ -9,8 +9,10 @@ byte the same archive.
 """
 
 import hashlib
+import posixpath
+import re
 import tarfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -128,9 +130,12 @@ def test_archive_carries_nothing_else(built: Path) -> None:
     # Nothing outside the declared contents may ship, secrets and scratch
     # state least of all.
     allowed_roots = {"implementations", "docs"}
+    # The gap registry is the one file from tests/ that ships: the
+    # manifest links to it.
+    lone_files = {"tests/static", "tests/static/asymmetries.py"}
     for name in _members(built):
         head, _, tail = name.partition("/")
-        if tail:
+        if tail and name not in lone_files:
             assert head in allowed_roots, f"unexpected directory: {name}"
         assert not name.startswith("."), f"dotfile shipped: {name}"
         assert not name.endswith((".dsn", ".redispass", ".snmp", ".ipmi")), (
@@ -174,3 +179,31 @@ def test_archive_ships_the_vector_implementation(built: Path) -> None:
         "implementations/vector/entrypoint.sh",
         "implementations/vector/vector.yaml",
     } <= _members(built)
+
+
+_RELATIVE_LINK = re.compile(r"\]\((?!https?:|#)([^)#]+)(?:#[^)]*)?\)")
+
+
+@pytest.mark.parametrize(
+    "manifest", ["docs/manifest.ru.md", "docs/manifest.md"]
+)
+def test_every_relative_manifest_link_resolves_in_the_archive(
+    built: Path, manifest: str
+) -> None:
+    """Pins the archive to carry every file the shipped manifest links to."""
+    # The manifest sends the reader to the gap registry and the reference
+    # files by relative link; a target the archive lacks is a dead link in
+    # the one copy of the contract an operator actually has.
+    members = _members(built)
+    text = (release.REPO / manifest).read_text(encoding="utf-8")
+    base = PurePosixPath(manifest).parent
+    missing = set()
+    for target in _RELATIVE_LINK.findall(text):
+        resolved = posixpath.normpath(str(base / target))
+        if resolved not in members and not any(
+            member.startswith(f"{resolved}/") for member in members
+        ):
+            missing.add(resolved)
+    assert not missing, (
+        f"{manifest} links outside the archive: {sorted(missing)}"
+    )
