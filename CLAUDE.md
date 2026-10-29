@@ -62,7 +62,7 @@ bind them together. Open work and the backlog live in `.omc/OPEN.md`
   (`tests/static/test_e2e_sessions.py`).
   Run e2e sessions one at a time: they share one Docker daemon.
 - `uv run nox -s preflight` - every gate except `release` and `demo`:
-  13 sessions, about 24 min with warm images (measured 2026-10-28).
+  15 sessions, about 34 min with warm images (measured 2026-10-29).
   `tests/e2e/test_metrics_delivery.py::test_app_counter_grows` can miss
   its 70s budget under host load; a rerun of that session alone settles
   whether it is a regression.
