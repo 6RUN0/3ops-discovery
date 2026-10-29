@@ -25,6 +25,7 @@ from tools.backends import (
     VictoriaLogsBackend,
     _stream_selector,
     check_scope,
+    duplicate_groups,
     loki_result_to_records,
     parse_json_lines,
     parse_stream,
@@ -740,6 +741,9 @@ _E2E_FILE_DOMAINS: dict[str, frozenset[str]] = {
     "test_logs_delivery.py": frozenset({"logs"}),
     "test_metrics_delivery.py": frozenset({"metrics"}),
     "test_secret_redaction.py": frozenset({"logs"}),
+    "test_single_collector.py": frozenset(
+        {"metrics", "database", "blackbox", "container-metrics", "logs"}
+    ),
     "test_snmp_delivery.py": frozenset({"snmp"}),
 }
 #: Domains a non-reference implementation of the e2e axes can run.
@@ -897,3 +901,45 @@ def test_e2e_file_domains_are_known() -> None:
         if domains - known
     }
     assert unknown == {}
+
+
+_TARGET = {
+    "job": "app-metrics",
+    "instance": "app:8080",
+    "compose_project": "p",
+    "collector": "alloy",
+    "host": "h",
+}
+
+
+def test_series_differing_only_in_collector_are_duplicates() -> None:
+    up = {"__name__": "up", **_TARGET}
+    twin = {**up, "collector": "vmagent"}
+    assert duplicate_groups([up, twin]) == [[up, twin]]
+
+
+def test_series_differing_only_in_host_are_duplicates() -> None:
+    up = {"__name__": "up", **_TARGET}
+    twin = {**up, "host": "other"}
+    assert duplicate_groups([up, twin]) == [[up, twin]]
+
+
+def test_series_of_one_target_with_different_names_are_not_duplicates() -> (
+    None
+):
+    """Pins the trap: PromQL `count without` drops __name__, merging these."""
+    up = {"__name__": "up", **_TARGET}
+    duration = {"__name__": "scrape_duration_seconds", **_TARGET}
+    assert duplicate_groups([up, duration]) == []
+
+
+def test_series_of_different_instances_are_not_duplicates() -> None:
+    up = {"__name__": "up", **_TARGET}
+    other = {**up, "instance": "app:9090", "collector": "vmagent"}
+    assert duplicate_groups([up, other]) == []
+
+
+def test_empty_input_is_an_error_not_a_pass() -> None:
+    """Pins Review Focus 2: a query that found nothing cannot read as clean."""
+    with pytest.raises(ValueError, match="found nothing"):
+        duplicate_groups([])

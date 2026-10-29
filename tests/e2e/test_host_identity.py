@@ -1,6 +1,7 @@
 """The host label comes from RU_3OPS_DISCOVERY_HOSTNAME (manifest 6.1)."""
 
 import subprocess
+from typing import Any
 
 from tests.e2e.conftest import (
     E2E_HOSTNAME,
@@ -34,6 +35,45 @@ def test_host_comes_from_the_parameter(stack: Stack) -> None:
         desc="app-logs-raw stream",
     )
     assert {s["host"] for s in streams} == {E2E_HOSTNAME}
+
+
+def test_every_domain_reports_one_host(stack: Stack) -> None:
+    """
+    Pins decision 18: one machine is one `host` across all its domains.
+
+    Each collector of a split deployment reads the same parameter, so
+    metrics, host and container metrics, OTLP, container logs and the
+    journal agree; the per-domain checks only compare each to the value.
+    """
+    hosts: set[str] = set()
+    for expr in (
+        f'{{compose_project="{stack.project}"}}',
+        "node_uname_info",
+        "app_otlp_events_total",
+    ):
+
+        def series_of(expr: str = expr) -> list[dict[str, Any]]:
+            return stack.prom_query(expr)
+
+        series = wait_until(
+            series_of, timeout=METRICS_BUDGET, desc=f"{expr} delivered"
+        )
+        hosts |= {s["metric"]["host"] for s in series}
+    for query in (
+        LogQuery(stream={"compose_project": stack.project}),
+        LogQuery(stream={"source": "journal"}, scoped=False),
+    ):
+
+        def streams_of(query: LogQuery = query) -> list[dict[str, str]]:
+            return stack.log_streams(query)
+
+        streams = wait_until(
+            streams_of,
+            timeout=LOGS_BUDGET,
+            desc=f"{dict(query.stream)} streams",
+        )
+        hosts |= {s["host"] for s in streams}
+    assert hosts == {E2E_HOSTNAME}
 
 
 def _container_hostname(stack: Stack, service: str) -> str:
