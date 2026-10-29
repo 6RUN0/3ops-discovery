@@ -2,11 +2,15 @@
 
 import re
 from pathlib import Path
+from typing import Any
 
+import noxfile as nx
 import pytest
 
+from tests.e2e import conftest as e2e
 from tests.static import alloy_config as ac
 from tools import materialize as mz
+from tools.backends import LOGS_IMPL_DOMAINS, METRICS_IMPL_DOMAINS
 
 
 def _alloy_names(dest: Path) -> set[str]:
@@ -96,6 +100,60 @@ def test_named_combos_select_the_documented_domains() -> None:
     assert mz.COMBOS["base"] == mz.DEFAULT_DOMAINS
     assert set(mz.COMBOS["all-snmp"]) == set(mz.DOMAIN_FILES)
     assert set(mz.COMBOS["all"]) == set(mz.DOMAIN_FILES) - {"snmp"}
+
+
+@pytest.mark.parametrize("base", ["all", "all-snmp"])
+@pytest.mark.parametrize(
+    ("suffix", "replaced"),
+    [
+        ("vmagent", METRICS_IMPL_DOMAINS),
+        ("vector", LOGS_IMPL_DOMAINS),
+        ("vmagent-vector", METRICS_IMPL_DOMAINS + LOGS_IMPL_DOMAINS),
+    ],
+)
+def test_beside_combos_drop_the_replaced_domains(
+    base: str, suffix: str, replaced: tuple[str, ...]
+) -> None:
+    """Pins the graphs Alloy loads next to vmagent, Vector or both."""
+    name = f"beside-{suffix}" + ("-snmp" if base == "all-snmp" else "")
+    assert set(mz.COMBOS[name]) == set(mz.COMBOS[base]) - set(replaced)
+
+
+class _AxesRecorder:
+    """Captures the e2e axes a nox session sets, without running pytest."""
+
+    def __init__(self) -> None:
+        self.env: dict[str, str] = {}
+        self.posargs: list[str] = []
+
+    def run(self, *args: Any, external: bool = False) -> None:
+        """Accept the pytest call and drop it."""
+
+
+@pytest.mark.parametrize("session_name", nx.E2E_SESSIONS)
+@pytest.mark.parametrize("base", [e2e.MAIN_STACK_COMBO, e2e.SNMP_STACK_COMBO])
+def test_alloy_check_validates_every_e2e_alloy_graph(
+    session_name: str, base: str
+) -> None:
+    """
+    Pins alloy_check to the e2e matrix: each cell's Alloy graph is validated.
+
+    The main fixture loads `all`, the snmp fixture `all-snmp`, each minus
+    the domains of the cell's other implementations.
+    """
+    recorder = _AxesRecorder()
+    getattr(nx, session_name)(recorder)
+    spec = e2e._StackSpec(
+        project="p",
+        domains=mz.COMBOS[base],
+        secrets_dir=Path("/nonexistent"),
+        extra_env={},
+        backend=recorder.env["RU_3OPS_DISCOVERY_E2E_BACKEND"],
+        metrics_impl=recorder.env["RU_3OPS_DISCOVERY_E2E_METRICS_IMPL"],
+        logs_impl=recorder.env["RU_3OPS_DISCOVERY_E2E_LOGS_IMPL"],
+    )
+    validated = {frozenset(domains) for domains in mz.COMBOS.values()}
+    assert frozenset(spec.alloy_domains()) in validated
 
 
 def test_one_combo_contains_every_file_together() -> None:

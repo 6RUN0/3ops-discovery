@@ -1107,6 +1107,8 @@ An implementation is an agent with its own configuration that fulfils the contra
 
 The domains of one host may be split between implementations, but each domain on a host is served by exactly one collector. Two collectors of one domain (two different implementations or two instances of one) produce duplicate series and lines that the storage cannot tell from real data, so such a deployment is an error. The symptom of the error is series or log streams that differ only in `collector` or `host`, or two running collectors of one domain on a host; the second symptom is needed when the labels of the duplicates match entirely.
 
+When several collectors serve the domains of a host, the deployment must give all of them one value of `RU_3OPS_DISCOVERY_HOSTNAME` (section [14.1](#141-environment-parameters)). Left unset, the parameter gives each domain the hostname of its collector: the data of one machine splits across `host` values, and queries that join the domains of a machine by `host` (section [6.1](#61-labels-added-by-the-implementation)) no longer join them.
+
 For each of its domains an implementation must:
 
 - understand the labels and follow the behaviour of sections 3-11;

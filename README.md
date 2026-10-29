@@ -75,6 +75,8 @@ Everything runs through `uv run nox`.
 | `uv run nox -s e2e_vmagent_victoria` | The same vmagent subset on VictoriaMetrics + VictoriaLogs (minutes). | Docker |
 | `uv run nox -s e2e_vector` | The contract subset with Vector as the `logs` collector, on Prometheus + Loki (minutes). | Docker |
 | `uv run nox -s e2e_vector_victoria` | The same Vector subset on VictoriaMetrics + VictoriaLogs (minutes). | Docker |
+| `uv run nox -s e2e_mixed` | The contract subset of a mixed deployment: vmagent runs `metrics`, Vector runs `logs`, Alloy the other domains, on Prometheus + Loki (minutes). | Docker |
+| `uv run nox -s e2e_mixed_victoria` | The same mixed deployment on VictoriaMetrics + VictoriaLogs (minutes). | Docker |
 | `uv run nox -s preflight` | Everything at once. | yes |
 
 The Alloy image is pinned **by the manifest** (section [14.4](docs/manifest.md#144-reference-implementation-alloy));

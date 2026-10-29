@@ -1,12 +1,15 @@
 """The host label comes from RU_3OPS_DISCOVERY_HOSTNAME (manifest 6.1)."""
 
 import subprocess
+from typing import Any
 
 from tests.e2e.conftest import (
     E2E_HOSTNAME,
     LOGS_BUDGET,
     METRICS_BUDGET,
+    PROJECT_DOMAIN_PROBES,
     Stack,
+    project_selector,
     wait_until,
 )
 from tools.backends import LogQuery
@@ -34,6 +37,50 @@ def test_host_comes_from_the_parameter(stack: Stack) -> None:
         desc="app-logs-raw stream",
     )
     assert {s["host"] for s in streams} == {E2E_HOSTNAME}
+
+
+def test_every_domain_reports_one_host(stack: Stack) -> None:
+    """
+    Pins manifest 14: one machine is one `host` across its collectors.
+
+    Each collector of a split deployment reads the same parameter, so
+    every domain's series, container logs and the journal agree; the
+    per-domain checks only compare each to the value. A missing label
+    lands in the set as None and fails the comparison.
+    """
+    hosts: set[str | None] = set()
+    for expr in (
+        *(
+            project_selector(stack.project, probe)
+            for probe in PROJECT_DOMAIN_PROBES.values()
+        ),
+        f'{{compose_project="{stack.project}"}}',
+        "node_uname_info",
+        "app_otlp_events_total",
+    ):
+
+        def series_of(expr: str = expr) -> list[dict[str, Any]]:
+            return stack.prom_query(expr)
+
+        series = wait_until(
+            series_of, timeout=METRICS_BUDGET, desc=f"{expr} delivered"
+        )
+        hosts |= {s["metric"].get("host") for s in series}
+    for query in (
+        LogQuery(stream={"compose_project": stack.project}),
+        LogQuery(stream={"source": "journal"}, scoped=False),
+    ):
+
+        def streams_of(query: LogQuery = query) -> list[dict[str, str]]:
+            return stack.log_streams(query)
+
+        streams = wait_until(
+            streams_of,
+            timeout=LOGS_BUDGET,
+            desc=f"{dict(query.stream)} streams",
+        )
+        hosts |= {s.get("host") for s in streams}
+    assert hosts == {E2E_HOSTNAME}
 
 
 def _container_hostname(stack: Stack, service: str) -> str:

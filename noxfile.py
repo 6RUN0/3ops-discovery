@@ -19,6 +19,8 @@ without them -- the fully offline set is ``nox -s lint tests``.
     uv run nox -s e2e_vmagent_victoria  # the same on the Victoria stores
     uv run nox -s e2e_vector    # contract subset, logs domain on Vector
     uv run nox -s e2e_vector_victoria  # the same on the Victoria stores
+    uv run nox -s e2e_mixed     # contract subset, vmagent and Vector at once
+    uv run nox -s e2e_mixed_victoria  # the same on the Victoria stores
     uv run nox -s preflight     # everything
     uv run nox -s ci_local      # .github/workflows under act (-- e2e)
 """
@@ -236,6 +238,9 @@ def alloy_check(session: nox.Session) -> None:
     # output, so an image fetched lazily inside them would fail with the
     # reason hidden; here a registry problem is reported as one.
     session.run("docker", "pull", ALLOY_IMAGE, external=True)
+    # Every combo copies the same files and fmt output does not depend on
+    # the combo, so each name is checked once, not once per combo.
+    fmt_checked: set[str] = set()
     for combo, domains in COMBOS.items():
         # resolve(): create_tmp() hands back a path relative to the repo,
         # and docker needs an absolute one to see a host directory.
@@ -255,8 +260,10 @@ def alloy_check(session: nox.Session) -> None:
         unformatted = [
             cfg.name
             for cfg in sorted(config_dir.glob("*.alloy"))
-            if _alloy_fmt_would_change(config_dir, cfg.name)
+            if cfg.name not in fmt_checked
+            and _alloy_fmt_would_change(config_dir, cfg.name)
         ]
+        fmt_checked.update(f.name for f in config_dir.glob("*.alloy"))
         if unformatted:
             session.error(
                 f"[{combo}] alloy fmt would change: " + ", ".join(unformatted)
@@ -436,6 +443,45 @@ def e2e_vector_victoria(session: nox.Session) -> None:
 
 
 @nox.session
+def e2e_mixed(session: nox.Session) -> None:
+    """Run the contract subset with vmagent and Vector beside Alloy."""
+    _run_e2e(
+        session,
+        "prometheus-loki",
+        *_CONFORMANCE_ONLY,
+        metrics_impl="vmagent",
+        logs_impl="vector",
+    )
+
+
+@nox.session
+def e2e_mixed_victoria(session: nox.Session) -> None:
+    """Run the mixed-deployment subset against the Victoria stores."""
+    _run_e2e(
+        session,
+        "victoria",
+        *_CONFORMANCE_ONLY,
+        metrics_impl="vmagent",
+        logs_impl="vector",
+    )
+
+
+#: Every implementation x store cell of the e2e matrix, in the order of
+#: the e2e.yml matrix; preflight queues all of them (tests/static/
+#: test_e2e_sessions.py keeps this list, preflight and e2e.yml equal).
+E2E_SESSIONS: tuple[str, ...] = (
+    "e2e",
+    "e2e_victoria",
+    "e2e_vmagent",
+    "e2e_vmagent_victoria",
+    "e2e_vector",
+    "e2e_vector_victoria",
+    "e2e_mixed",
+    "e2e_mixed_victoria",
+)
+
+
+@nox.session
 def preflight(session: nox.Session) -> None:
     """Queue every gate except interactive ones."""
     for name in (
@@ -445,12 +491,7 @@ def preflight(session: nox.Session) -> None:
         "vmagent_check",
         "vector_check",
         "tests",
-        "e2e",
-        "e2e_victoria",
-        "e2e_vmagent",
-        "e2e_vmagent_victoria",
-        "e2e_vector",
-        "e2e_vector_victoria",
+        *E2E_SESSIONS,
     ):
         session.notify(name)
 

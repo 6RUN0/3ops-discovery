@@ -32,10 +32,10 @@ docker run -d --name vmagent \
   victoriametrics/vmagent:v1.154.1 /etc/vmagent/entrypoint.sh
 ```
 
-Set `RU_3OPS_DISCOVERY_HOSTNAME` to the same value on every collector of
-the host (here the host's own name): left unset, each collector reports
-its own container hostname, and the domains of one machine no longer join
-on `host`.
+Give `RU_3OPS_DISCOVERY_HOSTNAME` one value on every collector of the
+host (here the host's own name): manifest
+[14](../../docs/manifest.md#14-implementations) requires it and names what
+breaks when it is unset.
 
 Put the unsent-data buffer (`-remoteWrite.tmpDataPath`, default
 `vmagent-remotewrite-data` under the image's working directory `/`) on a

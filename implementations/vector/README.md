@@ -45,10 +45,10 @@ whatever Vector writes to that path in memory rather than in the
 container layer; a static gate keeps the overlay's tmpfs path equal to
 `data_dir`.
 
-Set `RU_3OPS_DISCOVERY_HOSTNAME` to the same value on every collector of
-the host (here the host's own name): left unset, each collector reports
-its own container hostname, and the domains of one machine no longer
-join on `host`.
+Give `RU_3OPS_DISCOVERY_HOSTNAME` one value on every collector of the
+host (here the host's own name): manifest
+[14](../../docs/manifest.md#14-implementations) requires it and names what
+breaks when it is unset.
 
 Give the container a `--hostname` (compose: `hostname:`) that is not a
 prefix of its container ID. `docker_logs` skips the container whose ID

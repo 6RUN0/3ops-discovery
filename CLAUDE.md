@@ -55,9 +55,14 @@ bind them together. Open work and the backlog live in `.omc/OPEN.md`
   metrics-domain collector, on Prometheus + Loki / on the Victoria stores.
 - `uv run nox -s e2e_vector` / `uv run nox -s e2e_vector_victoria` - the
   same contract subset with Vector as the logs-domain collector.
+- `uv run nox -s e2e_mixed` / `uv run nox -s e2e_mixed_victoria` - the
+  same subset with both axes at once: vmagent for metrics, Vector for
+  logs, Alloy for the other domains. `noxfile.E2E_SESSIONS` is the one
+  list of e2e cells; preflight and the e2e.yml matrix must equal it
+  (`tests/static/test_e2e_sessions.py`).
   Run e2e sessions one at a time: they share one Docker daemon.
 - `uv run nox -s preflight` - every gate except `release` and `demo`:
-  13 sessions, about 24 min with warm images (measured 2026-10-28).
+  15 sessions, about 34 min with warm images (measured 2026-10-29).
   `tests/e2e/test_metrics_delivery.py::test_app_counter_grows` can miss
   its 70s budget under host load; a rerun of that session alone settles
   whether it is a regression.
@@ -130,10 +135,13 @@ bind them together. Open work and the backlog live in `.omc/OPEN.md`
   domain of the manifest 14 registry to its files in `base/` and
   `optional/` (the `Домены` column of manifest tables 14.4 and 14.4.3,
   `tests/static/test_domain_files.py`). `COMBOS` maps a combo name to
-  domains: `base`, `all` (no snmp), `all-snmp` and `domain-<d>` for each
-  domain alone; alloy_check validates every combo. The e2e main fixture
-  loads `all` (080 reads the journal of `journal-host`, below), the snmp
-  fixture `all-snmp`.
+  domains: `base`, `all` (no snmp), `all-snmp`, `domain-<d>` for each
+  domain alone, and `beside-<impl>[-snmp]`, the graph Alloy loads next to
+  vmagent, Vector or both; alloy_check validates every combo (fmt once
+  per file, validate per combo). The e2e main fixture loads `all` (080
+  reads the journal of `journal-host`, below), the snmp fixture
+  `all-snmp`, each minus the domains of the cell's other implementations
+  (`tests/static/test_materialize.py` keeps every such graph a combo).
 - `tests/static/` - manifest vs config consistency; allowed gaps live
   in `asymmetries.py`, one explicit table per kind of gap.
 - `tests/e2e/stack/` - compose stack: every collector (Alloy, vmagent,
@@ -198,8 +206,8 @@ bind them together. Open work and the backlog live in `.omc/OPEN.md`
 - `@pytest.mark.alloy_internals` marks e2e checks that read Alloy internals
   (UI API, component graph) rather than the contract's output; they run on
   both storage variants, since Alloy is the collector in both, and are
-  deselected in the `e2e_vmagent*` and `e2e_vector*` sessions, where the
-  Alloy pipeline they inspect is absent. Loki drops
+  deselected in the `e2e_vmagent*`, `e2e_vector*` and `e2e_mixed*`
+  sessions, where the Alloy pipeline they inspect is absent. Loki drops
   entries with identical timestamp and line in one stream at ingest, so a
   duplicate tailer is visible in storage only on VictoriaLogs; on Loki the
   `alloy_internals` twin is the pinned check.

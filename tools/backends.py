@@ -182,6 +182,35 @@ def check_scope(query: LogQuery) -> None:
         )
 
 
+#: Labels two collectors of one domain set differently on the same data
+#: (manifest 14: duplicates differ only in collector or host).
+COLLECTOR_IDENTITY_LABELS: tuple[str, ...] = ("collector", "host")
+
+
+def duplicate_groups(
+    label_sets: Iterable[Mapping[str, str]],
+    ignored: Iterable[str] = COLLECTOR_IDENTITY_LABELS,
+) -> list[list[dict[str, str]]]:
+    """
+    Return the label sets that are equal once `ignored` labels are dropped.
+
+    Grouping keeps `__name__`: a PromQL `count without (...)` drops it and
+    would merge `up` with `scrape_duration_seconds` of one target. An
+    empty input raises ValueError, so a query that found nothing cannot
+    pass as "no duplicates".
+    """
+    if isinstance(ignored, str):
+        raise TypeError("ignored is a collection of label names, not one")
+    skip = set(ignored)
+    groups: dict[frozenset[tuple[str, str]], list[dict[str, str]]] = {}
+    for labels in label_sets:
+        key = frozenset((k, v) for k, v in labels.items() if k not in skip)
+        groups.setdefault(key, []).append(dict(labels))
+    if not groups:
+        raise ValueError("no label sets to compare: the query found nothing")
+    return [group for group in groups.values() if len(group) > 1]
+
+
 def _quote(value: str) -> str:
     """Quote a string literal; both languages share the escape rules."""
     out = []

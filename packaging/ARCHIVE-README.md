@@ -74,10 +74,9 @@ docker run -d --name vmagent \
   victoriametrics/vmagent:v1.154.1 /etc/vmagent/entrypoint.sh
 ```
 
-Set `RU_3OPS_DISCOVERY_HOSTNAME` to the same value on every collector of
-the host, Alloy included (here the host's own name): left unset, each
-collector reports its own container hostname, and the domains of one
-machine no longer join on `host`.
+Give `RU_3OPS_DISCOVERY_HOSTNAME` one value on every collector of the
+host, Alloy included (here the host's own name): manifest section 14
+requires it and names what breaks when it is unset.
 
 The image tag is pinned by the manifest registry (section 14). Appending
 `-dryRun` checks the configuration and exits. The Docker API access, the
@@ -109,10 +108,9 @@ docker run -d --name vector \
   timberio/vector:0.60.0-alpine /etc/vector/entrypoint.sh
 ```
 
-Set `RU_3OPS_DISCOVERY_HOSTNAME` to the same value on every collector of
-the host, Alloy and vmagent included (here the host's own name): left
-unset, Vector reports its container hostname, `vector-collector` here,
-and the domains of one machine no longer join on `host`.
+Give `RU_3OPS_DISCOVERY_HOSTNAME` one value on every collector of the
+host, Alloy and vmagent included (here the host's own name): manifest
+section 14 requires it and names what breaks when it is unset.
 
 The `vector-data` volume holds `data_dir` (`/var/lib/vector`). The
 configuration stores no log read positions there, and Vector 0.60.0

@@ -54,6 +54,19 @@ ARTIFACTS_DIR = Path(__file__).parent / "_artifacts"
 METRICS_BUDGET = 120.0
 #: Logs stream continuously; their budget is tens of seconds.
 LOGS_BUDGET = 60.0
+#: `tools.materialize.COMBOS` keys the main and snmp fixtures load, before
+#: the domains of the cell's other implementations are taken out.
+MAIN_STACK_COMBO = "all"
+SNMP_STACK_COMBO = "all-snmp"
+#: One series per domain with targets in the main stack, as a selector
+#: without the compose_project matcher (`project_selector` adds it); ipmi
+#: has no target in the stack.
+PROJECT_DOMAIN_PROBES: dict[str, str] = {
+    "metrics": 'up{job="app-metrics"}',
+    "database": "pg_up",
+    "blackbox": "probe_success",
+    "container-metrics": "container_cpu_usage_seconds_total",
+}
 #: systemd in journal-host reaches `running` in about a second on an idle
 #: host; the rest is headroom for a loaded runner.
 JOURNAL_HOST_BOOT_BUDGET = 120.0
@@ -183,6 +196,14 @@ def _endpoint_ok(url: str) -> bool:
 
 class ReadinessTimeoutError(AssertionError):
     """A readiness or delivery predicate did not hold within budget."""
+
+
+def project_selector(project: str, expr: str) -> str:
+    """Add the compose_project matcher to a selector with or without one."""
+    scope = f'compose_project="{project}"'
+    if expr.endswith("}"):
+        return expr[:-1] + f",{scope}}}"
+    return f"{expr}{{{scope}}}"
 
 
 def wait_until[T](
@@ -761,7 +782,7 @@ def stack(
     secrets_dir = tmp_path_factory.mktemp("alloy-secrets")
     spec = _StackSpec(
         project=f"xad-e2e-{uuid.uuid4().hex[:8]}",
-        domains=COMBOS["all"],
+        domains=COMBOS[MAIN_STACK_COMBO],
         secrets_dir=secrets_dir,
         extra_env={
             "RU_3OPS_DISCOVERY_HOSTNAME": E2E_HOSTNAME,
@@ -832,7 +853,7 @@ def snmp_stack(
     # outside `validate`.
     spec = _StackSpec(
         project=f"xad-snmp-{uuid.uuid4().hex[:8]}",
-        domains=COMBOS["all-snmp"],
+        domains=COMBOS[SNMP_STACK_COMBO],
         secrets_dir=secrets_dir,
         extra_env={
             # Empty overrides an inherited value: this stack pins the

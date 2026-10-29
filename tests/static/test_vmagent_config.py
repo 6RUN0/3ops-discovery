@@ -452,6 +452,8 @@ class _FakeSession:
         ("e2e_vmagent_victoria", "victoria", "vmagent", "alloy", True),
         ("e2e_vector", "prometheus-loki", "alloy", "vector", True),
         ("e2e_vector_victoria", "victoria", "alloy", "vector", True),
+        ("e2e_mixed", "prometheus-loki", "vmagent", "vector", True),
+        ("e2e_mixed_victoria", "victoria", "vmagent", "vector", True),
     ],
 )
 def test_e2e_sessions_set_every_axis_explicitly(
